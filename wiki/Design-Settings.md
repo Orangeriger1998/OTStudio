@@ -4,7 +4,7 @@
 
 <img src="images/panel-settings-1.png" width="260" alt="Settings showing the provider and key cards"> <img src="images/panel-settings-2.png" width="260" alt="Settings showing the save folder and About cards">
 
-Settings holds what changes rarely: the provider address, the default model, the key, and the save folder. Release builds block screenshots and screen recording on this screen, so a key never lands in a capture.
+Settings holds what changes rarely: where chat runs, the provider address, the default model, the key, and the save folder. Release builds block screenshots and screen recording on this screen, so a key never lands in a capture.
 
 ## Top bar
 
@@ -21,6 +21,22 @@ Under the title, one line reminds the user that models and keys stay on this dev
 | Box | What it holds | Why |
 |---|---|---|
 | Chat, Image, Video | A segmented button | Each mode has its own provider, model, and key, so Settings edits one mode at a time |
+
+## Chat runs card
+
+This card appears only under Chat.
+
+| Box | What it holds | Why |
+|---|---|---|
+| On this phone, OpenRouter | A segmented button | Chooses where chat replies come from. The choice applies at once. |
+| Model name and state | The chosen on-device model, and whether it is loaded | Shows what will answer the next message |
+| Engine line | "the faster build for this processor" or "the standard build" | Explains the speed a phone gets. The app chooses the build itself. |
+| Manage models | Opens the [Model Manager](Design-Model-Manager.md) | Downloads, chooses, and deletes on-device models |
+| Context size | 2048, 4096, 8192, or 16384 tokens, default 8192 | A larger context remembers more of the conversation and needs more memory |
+| Processor threads | Automatic, or 2, 4, 6, or 8 | For speed testing on a particular phone. Automatic suits nearly every phone. |
+| Show the model's thinking | A checkbox, off by default | Lets models such as Qwen3.5 and Gemma 4 think before they answer. Answers then take longer. The thinking appears apart from the answer, and the model does not see it again later. |
+
+The model name, Manage models, and the two dropdowns appear only while On this phone is selected. A note under the card says that the OpenRouter settings below stay saved, because Suggest setup in API CALL still uses them.
 
 ## Provider card
 

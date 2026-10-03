@@ -66,6 +66,64 @@ class AndroidFlowTest {
         controller.pause().stop().destroy()
     }
 
+    @Test fun chatSettingsSwitchToThisPhoneAndOpenTheModelManager() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        click(activity, "Settings")
+        click(activity, "On this phone")
+        assertEquals(ChatEngine.LOCAL, LocalModelStore(activity).engine)
+        click(activity, "Manage models")
+        val labels = views(activity.window.decorView).filterIsInstance<Button>().map { it.text.toString() }
+        assertTrue(labels.contains("Download (2.4 GB)"))
+        assertTrue(labels.contains("Add to the list"))
+        // The model manager survives rotation, and Back returns to Settings.
+        controller.recreate()
+        assertTrue(views(controller.get().window.decorView).filterIsInstance<Button>().any { it.text.toString() == "Add to the list" })
+        controller.get().onBackPressedDispatcher.onBackPressed()
+        assertTrue(views(controller.get().window.decorView).filterIsInstance<Button>().any { it.text.toString() == "Save chat settings" })
+        // The main screen's setup card offers Models instead of API CALL for on-device chat.
+        controller.get().onBackPressedDispatcher.onBackPressed()
+        val main = views(controller.get().window.decorView).filterIsInstance<Button>().map { it.text.toString() }
+        assertTrue(main.contains("Models")); assertFalse(main.contains("API CALL"))
+        controller.pause().stop().destroy()
+    }
+
+    @Test fun repliesShowBasicMarkdown() {
+        val styled = Markdown.styled("## Facts\n1. **Bold** and *soft* with `code`\n* item\n2 * 3 = 6") as android.text.Spanned
+        assertEquals("Facts\n1. Bold and soft with code\n• item\n2 * 3 = 6", styled.toString())
+        val styles = styled.getSpans(0, styled.length, android.text.style.StyleSpan::class.java).map { styled.subSequence(styled.getSpanStart(it), styled.getSpanEnd(it)).toString() to it.style }
+        assertTrue(styles.contains("Facts" to android.graphics.Typeface.BOLD))
+        assertTrue(styles.contains("Bold" to android.graphics.Typeface.BOLD))
+        assertTrue(styles.contains("soft" to android.graphics.Typeface.ITALIC))
+    }
+
+    @Test fun aNewInstallAsksWhereChatRuns() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        assertFalse(LocalModelStore(activity).engineChosen)
+        click(activity, "On this phone")
+        assertEquals(ChatEngine.LOCAL, LocalModelStore(activity).engine)
+        assertTrue(views(activity.window.decorView).filterIsInstance<Button>().any { it.text.toString() == "Add to the list" })
+        // Once chosen, the main screen no longer asks.
+        activity.onBackPressedDispatcher.onBackPressed(); activity.onBackPressedDispatcher.onBackPressed()
+        assertFalse(views(activity.window.decorView).filterIsInstance<Button>().any { it.text.toString() == "OpenRouter, with your key" })
+        controller.pause().stop().destroy()
+    }
+
+    @Test fun onDeviceChatWithoutAModelExplainsWhatToDo() {
+        val context = RuntimeEnvironment.getApplication() as StudioApp
+        context.local.engine = ChatEngine.LOCAL
+        try { context.send(Mode.CHAT, "hello"); fail("Expected an explanation") }
+        catch (e: UserError) { assertTrue(e.message!!.contains("Download a model first")) }
+        assertTrue(context.history.list(Mode.CHAT).isEmpty())
+        // Adding a custom link stores it once and refuses duplicates.
+        val m = context.local.addCustom("https://huggingface.co/a/b/resolve/main/c.gguf")
+        assertTrue(context.local.all().any { it.localName == m.localName })
+        assertThrows(UserError::class.java) { context.local.addCustom("https://huggingface.co/a/b/blob/main/c.gguf") }
+        context.local.removeCustom(m)
+        assertEquals(LocalModelCatalog.entries.size, context.local.all().size)
+    }
+
     @Test fun imageTextKeyCheckboxCannotSaveAcrossProviders() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val activity = controller.get()

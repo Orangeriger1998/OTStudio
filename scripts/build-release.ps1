@@ -39,6 +39,9 @@ if (-not (Test-Path -LiteralPath $keystore)) {
     Write-Output "NEW SIGNING KEY created in $SigningDir. Back up this whole folder privately (for example to a USB drive). Losing it means future versions cannot update the installed app."
 }
 
+# Releases carry the faster engine build for recent phones. Without it they would quietly run slower.
+if (-not (Test-Path -LiteralPath (Join-Path $project 'app/src/main/jniLibs/arm64-v8a/libjllama_i8mm.so'))) { throw 'Run scripts\build-engine.ps1 first.' }
+
 Push-Location $project
 try {
     $tasks = if ($SkipChecks) { @('clean', ':app:assembleRelease') } else { @('clean', ':app:testDebugUnitTest', ':app:lintDebug', ':app:assembleRelease') }

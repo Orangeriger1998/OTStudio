@@ -20,3 +20,5 @@ outputs/
 *.aab
 *.idsig
 password.txt
+# The fast llama.cpp engine build is produced by scripts/build-engine.ps1, not stored in git.
+app/src/main/jniLibs/

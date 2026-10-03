@@ -20,6 +20,23 @@ LICENSE-THIRD-PARTY.txt):
 - Material Symbols icons (https://github.com/google/material-design-icons)
 - Gradle wrapper
 
+Third-party components under the Apache License 2.0 that the on-device chat
+engine brings in: Jackson (databind, core, annotations) and JSpecify.
+
+Third-party components under the MIT License (see LICENSE-THIRD-PARTY.txt):
+- llama.cpp and ggml, the on-device model engine (The ggml authors)
+- java-llama.cpp and its Android library net.ladenthin:llama-android
+  (Konstantin Herud, Bernard Ladenthin)
+- nlohmann/json (Niels Lohmann), built into the engine
+- SLF4J API and Checker Framework qualifiers, brought in by java-llama.cpp
+
+The faster engine build (libjllama_i8mm.so) is compiled from unmodified
+java-llama.cpp v5.1.0 with ARM dot-product and int8 instructions switched on.
+scripts/build-engine.ps1 reproduces it.
+
+Chat model files are not part of OT Studio. The user downloads them from
+Hugging Face, and each one carries its own license, shown in the app.
+
 JUnit, org.json, and Robolectric are used only for tests and are not part of
 the app.
 

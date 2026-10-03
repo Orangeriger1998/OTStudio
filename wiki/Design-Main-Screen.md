@@ -36,21 +36,30 @@ Each mode keeps its own model, options, key, history, and unsent prompt. Switchi
 
 The model ID shortens in the middle when it is too long, so both the owner and the model name stay visible.
 
+When Chat runs on the phone, the card changes. The title shows the chosen model's plain name. The summary tells whether that model is loaded, loading, or waiting for the first message. A Models button replaces API CALL and opens the [Model Manager](Design-Model-Manager.md), since an on-device model has no provider inputs to adjust.
+
+## First start
+
+On a new install, the empty Chat screen asks "Where should Chat run?" with two buttons. On this phone opens the [Model Manager](Design-Model-Manager.md), so the user can download a free model. OpenRouter, with your key opens Settings for the key. Each button explains its cost in one line. The question disappears once the user picks one, and Settings can change the choice later.
+
 ## Status area
 
 This area appears only when needed.
 
 | Box | When it shows | Why |
 |---|---|---|
-| Progress bar and "Working..." | While a request, upload, or download runs | Shows that the app is busy, so the send button's grayed state makes sense |
+| Progress bar and "Working..." | While a request, upload, or download runs | Shows that the app is busy, so the send button's grayed state makes sense. For on-device chat it reads "Loading the model..." and then "Writing on this phone...". |
 | Stop waiting | Beside "Working..." | Stops the phone from waiting on a slow connection. It does not cancel a job at the provider. |
+| Stop | Beside the on-device status | Ends an on-device reply at once. The words written so far stay in the chat. |
 | Error card | After a request fails | States the problem in plain words, in the error color, above the feed where it cannot be missed |
 
 ## Feed
 
 The feed lists this mode's history, oldest at the top. It keeps its scroll position while results refresh, and it jumps to the bottom after a new send.
 
-**Chat entries** appear as two bubbles. The user's prompt sits on the right in orange. The model's reply sits on the left in gray. A failed reply turns red. Under each pair, a status label and the model name show what happened, and Use prompt copies the prompt back into the message bar.
+**Chat entries** appear as two bubbles. The user's prompt sits on the right in orange. The model's reply sits on the left in gray. A failed reply turns red. An on-device reply appears word by word as the phone writes it. Replies show simple formatting, such as bold words, headings, and bullet points. Under an on-device reply, a small line reports how long the first word took and how many tokens per second followed.
+
+When Show the model's thinking is on, a model that thinks first shows that thinking in a separate block above its answer. The block uses small gray italic type under the label "Thinking", so it never reads as the answer. It stays open while the model writes. Afterward it folds to one line, "Thinking, tap to show". Under each pair, a status label and the model name show what happened, and Use prompt copies the prompt back into the message bar.
 
 **Image and video entries** appear as cards.
 
@@ -78,6 +87,7 @@ The feed lists this mode's history, oldest at the top. It keeps its scroll posit
 | Failed | Red | The provider refused the request or the job failed |
 | Check dashboard | Red | The app lost contact mid-request and cannot tell whether the job started. Check Replicate before trying again, so you do not pay twice. |
 | Interrupted | Red | The app closed while a chat reply was on its way |
+| Stopped | Gray | The user stopped an on-device reply. The partial reply stays and counts as part of the conversation. |
 | Not tracked | Red | The user chose Stop tracking. The provider job may still run. |
 | Canceled | Gray | The provider confirmed the cancel |
 | Download skipped | Gray | The user skipped the local download |

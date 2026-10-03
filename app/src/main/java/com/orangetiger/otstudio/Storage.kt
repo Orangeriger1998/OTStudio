@@ -123,6 +123,7 @@ class SettingsStore(private val context: Context) {
 }
 
 class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 2) {
+    companion object { const val LOCAL_BASE = "on-device" }
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT, mode TEXT NOT NULL,
@@ -163,9 +164,15 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 2
         } finally { db.endTransaction() }
     }
 
-    @Synchronized fun update(id: Long, state: String, response: String? = null, remoteId: String? = null, outputUrl: String? = null, localFile: String? = null) {
+    /** A chat turn answered by the on-device model. It has no provider address or key. */
+    @Synchronized fun insertLocal(prompt: String, model: String): Long = writableDatabase.insertOrThrow("entries", null, ContentValues().apply {
+        put("mode", Mode.CHAT.name); put("prompt", prompt); put("state", "chatting"); put("model", model); put("base_url", LOCAL_BASE)
+        put("credential_mode", Mode.CHAT.name); put("created", System.currentTimeMillis())
+    })
+
+    @Synchronized fun update(id: Long, state: String, response: String? = null, remoteId: String? = null, outputUrl: String? = null, localFile: String? = null, summary: String? = null) {
         val values = ContentValues().apply {
-            put("state", state)
+            put("state", state); summary?.let { put("request_summary", it) }
             response?.let { put("response", it) }; remoteId?.let { put("remote_id", it) }
             outputUrl?.let { put("output_url", it) }; localFile?.let { put("local_file", it) }
         }
@@ -218,5 +225,7 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 2
         }
     }
 
-    @Synchronized fun turns(): List<Turn> = list(Mode.CHAT).filter { it.state == "succeeded" }.flatMap { listOf(Turn("user", it.prompt), Turn("assistant", it.response)) }
+    @Synchronized fun turns(): List<Turn> = list(Mode.CHAT).filter { it.state == "succeeded" || (it.state == "stopped" && it.response.isNotBlank()) }
+        // A model's earlier thinking never goes back into the conversation.
+        .flatMap { listOf(Turn("user", it.prompt), Turn("assistant", ReplyText.visible(it.response))) }
 }

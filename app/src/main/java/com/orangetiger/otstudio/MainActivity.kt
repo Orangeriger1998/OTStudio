@@ -63,11 +63,17 @@ class MainActivity : AppCompatActivity() {
     private var settingsMode: Mode? = null
     private var helpOpen = false
     private var callPanel: CallPanel? = null
+    private var models: ModelsScreen? = null
+    private var streamId = -1L
+    private var streamView: TextView? = null
+    private var streamThinking: TextView? = null
     private var lastSent = ""
     private val drafts = mutableMapOf<Mode, String>()
     private val handler = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
     private var renderGeneration = 0
+    // A freshly built feed opens at the newest entry; later redraws keep the reader's place.
+    private var scrollToEnd = true
     private val prefs by lazy { getSharedPreferences("ui", MODE_PRIVATE) }
 
     private var pendingPhoto: ((Uri?) -> Unit)? = null
@@ -104,6 +110,7 @@ class MainActivity : AppCompatActivity() {
         Mode.entries.forEach { drafts[it] = savedInstanceState?.getString("draft.${it.name}").orEmpty() }
         val reopen = savedInstanceState?.getString("settings")?.let { Mode.valueOf(it) }
         when {
+            savedInstanceState?.getBoolean("models") == true -> showModels()
             reopen != null -> showSettings(reopen)
             savedInstanceState?.getBoolean("help") == true -> showHelp()
             else -> showChat()
@@ -111,7 +118,7 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null) showSplash()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (settingsOpen || helpOpen) showChat() else { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
+                if (models != null) showSettings(Mode.CHAT) else if (settingsOpen || helpOpen) showChat() else { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
             }
         })
     }
@@ -119,10 +126,17 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         app.listener = { if (!settingsOpen) renderFeed() }
+        app.modelsListener = { models?.render() }
+        app.streamListener = { id, raw -> if (id == streamId) streamView?.let {
+            val thought = ReplyText.thinking(raw)
+            streamThinking?.let { t -> t.text = thought; (t.parent as View).visibility = if (thought.isEmpty()) View.GONE else View.VISIBLE }
+            it.text = Markdown.styled(ReplyText.visible(raw).ifEmpty { if (thought.isEmpty()) "..." else "Thinking..." })
+            if (!scroller.canScrollVertically(1) || scroller.scrollY + scroller.height >= feed.height - dp(240)) scroller.post { scroller.fullScroll(View.FOCUS_DOWN) } } }
+        models?.render()
         handler.post(poll)
         if (!settingsOpen) renderFeed()
     }
-    override fun onPause() { super.onPause(); app.listener = null; handler.removeCallbacks(poll) }
+    override fun onPause() { super.onPause(); app.listener = null; app.modelsListener = null; app.streamListener = null; handler.removeCallbacks(poll) }
     override fun onDestroy() { callPanel?.dismiss(); callPanel = null; io.shutdown(); super.onDestroy() }
     override fun onSaveInstanceState(outState: Bundle) {
         if (!settingsOpen && ::prompt.isInitialized) drafts[mode] = prompt.text.toString()
@@ -131,6 +145,7 @@ class MainActivity : AppCompatActivity() {
         Mode.entries.forEach { outState.putString("draft.${it.name}", drafts[it]) }
         settingsMode?.let { outState.putString("settings", it.name) }
         outState.putBoolean("help", helpOpen)
+        outState.putBoolean("models", models != null)
         super.onSaveInstanceState(outState)
     }
 
@@ -156,7 +171,29 @@ class MainActivity : AppCompatActivity() {
         splash.postDelayed({ splash.animate().alpha(0f).setDuration(350).withEndAction { host.removeView(splash) }.start() }, 900)
     }
 
+    private fun closeModels() { models?.leave(); models = null }
+
+    private fun showModels() {
+        closeModels()
+        settingsOpen = true
+        settingsMode = null
+        helpOpen = false
+        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        models = ModelsScreen(this, ui, app) { showSettings(Mode.CHAT) }.also { it.show(page()) }
+    }
+
+    private fun localChat() = mode == Mode.CHAT && app.local.engine == ChatEngine.LOCAL
+    private fun localStatus(): String {
+        val m = app.local.selected() ?: return "No model on this phone yet. Download one in Manage models."
+        return when (app.localState) {
+            "loading" -> "Loading ${ModelDownloader.gb(app.local.file(m).length())} into memory, ${app.loadPercent}%"
+            "ready" -> "Loaded and ready. Replies stay on this phone."
+            else -> "Loads with your first message. Replies stay on this phone."
+        }
+    }
+
     private fun showChat() {
+        closeModels()
         settingsOpen = false
         settingsMode = null
         helpOpen = false
@@ -179,11 +216,13 @@ class MainActivity : AppCompatActivity() {
         setupSummary = ui.text("", Ui.Type.SMALL, ui.muted).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
         names.addView(setupTitle); names.addView(setupSummary)
         setupRow.addView(names, ui.weight())
-        setupRow.addView(ui.tonal("API CALL", R.drawable.ic_tune) { openCallPanel() }.apply { contentDescription = "API CALL: choose models and generation inputs" })
+        if (localChat()) setupRow.addView(ui.tonal("Models", R.drawable.ic_memory) { drafts[mode] = prompt.text.toString(); showModels() }.apply { contentDescription = "Manage on-device models" })
+        else setupRow.addView(ui.tonal("API CALL", R.drawable.ic_tune) { openCallPanel() }.apply { contentDescription = "API CALL: choose models and generation inputs" })
         setup.addView(setupRow)
         statusArea = ui.column()
         root.addView(statusArea)
         scroller = ScrollView(this).apply { isFillViewport = true }
+        scrollToEnd = true
         feed = ui.column()
         scroller.addView(feed)
         root.addView(scroller, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -217,7 +256,7 @@ class MainActivity : AppCompatActivity() {
     private fun stateLabel(state: String) = when (state) {
         "succeeded" -> "Done"; "processing" -> "Working"; "submitting" -> "Sending"; "chatting" -> "Thinking"; "download" -> "Saving"
         "canceling" -> "Canceling"; "failed" -> "Failed"; "uncertain" -> "Check dashboard"; "interrupted" -> "Interrupted"
-        "untracked" -> "Not tracked"; "canceled" -> "Canceled"; "unavailable" -> "Download skipped"; else -> state
+        "untracked" -> "Not tracked"; "canceled" -> "Canceled"; "unavailable" -> "Download skipped"; "stopped" -> "Stopped"; else -> state
     }
     private fun statePill(state: String) = when (state) {
         "succeeded" -> ui.pill(stateLabel(state), R.color.ot_surface_high, R.color.ot_success)
@@ -235,12 +274,20 @@ class MainActivity : AppCompatActivity() {
         if (!::feed.isInitialized || settingsOpen || isFinishing || isDestroyed) return
         renderGeneration++
         val generation = renderGeneration
+        streamId = -1L; streamView = null; streamThinking = null
         val previousY = scroller.scrollY
+        // A reader already at the end keeps following the conversation when it grows.
+        val atEnd = !scroller.canScrollVertically(1)
         val entries = app.history.list(mode)
         val outputMap = app.history.outputs(entries.map { it.id })
         val s = app.settings.get(mode)
-        setupTitle.text = s.model
-        setupSummary.text = if (app.isBusy()) "Working..." else ModelOptions.summary(s.model, s.options).ifBlank { "Provider defaults" }
+        if (localChat()) {
+            setupTitle.text = app.local.selected()?.title ?: "On this phone"
+            setupSummary.text = localStatus()
+        } else {
+            setupTitle.text = s.model
+            setupSummary.text = if (app.isBusy()) "Working..." else ModelOptions.summary(s.model, s.options).ifBlank { "Provider defaults" }
+        }
         send.isEnabled = !app.isBusy()
         if (!app.isBusy() && lastSent.isNotEmpty() && entries.lastOrNull()?.let { it.prompt == lastSent && it.state in listOf("succeeded", "processing", "download") } == true) {
             if (prompt.text.toString().trim() == lastSent) prompt.setText("")
@@ -249,14 +296,18 @@ class MainActivity : AppCompatActivity() {
         statusArea.removeAllViews()
         if (app.isBusy()) {
             statusArea.addView(ui.progress(), ui.matchWrap(2))
-            val r = ui.row(); r.addView(ui.text("Working...", Ui.Type.SMALL, ui.muted), ui.weight())
-            r.addView(ui.textButton("Stop waiting", R.drawable.ic_stop_circle) { app.stopWaiting() }); statusArea.addView(r)
+            val writing = app.streaming != null
+            val label = when { app.localState == "loading" && localChat() -> "Loading the model..."; writing -> "Writing on this phone..."; else -> "Working..." }
+            val r = ui.row(); r.addView(ui.text(label, Ui.Type.SMALL, ui.muted), ui.weight())
+            r.addView(ui.textButton(if (writing || (localChat() && app.localState == "loading")) "Stop" else "Stop waiting", R.drawable.ic_stop_circle) { app.stopWaiting() }); statusArea.addView(r)
         }
         if (app.lastError.isNotEmpty()) ui.card(statusArea, 12, R.color.ot_error_container, 8).addView(ui.text(app.lastError, Ui.Type.BODY, ui.color(R.color.ot_on_error_container)))
         feed.removeAllViews()
         if (entries.isEmpty()) emptyState()
         entries.forEach { e -> if (e.mode == Mode.CHAT) chatEntry(e) else mediaEntry(e, outputMap[e.id].orEmpty(), entries.takeLast(3).any { it.id == e.id }, generation) }
-        scroller.post { if (lastSent.isNotEmpty()) scroller.fullScroll(View.FOCUS_DOWN) else scroller.scrollTo(0, previousY) }
+        val toEnd = scrollToEnd || lastSent.isNotEmpty() || atEnd
+        scrollToEnd = false
+        scroller.post { if (toEnd) scroller.fullScroll(View.FOCUS_DOWN) else scroller.scrollTo(0, previousY) }
     }
 
     private fun emptyState() {
@@ -266,6 +317,15 @@ class MainActivity : AppCompatActivity() {
         box.addView(ui.text(when (mode) { Mode.CHAT -> "Start with an idea."; Mode.IMAGE -> "Make something worth keeping."; Mode.VIDEO -> "Give your idea a little motion." }, Ui.Type.HEADLINE).apply { gravity = Gravity.CENTER })
         ui.gap(box, 8)
         box.addView(ui.text("Pick a model with API CALL and add its key in Settings. Then write a prompt below.", Ui.Type.BODY, ui.muted).apply { gravity = Gravity.CENTER })
+        if (mode == Mode.CHAT && !app.local.engineChosen) {
+            ui.gap(box, 16)
+            val choice = ui.card(box, 16)
+            ui.sectionTitle(choice, "Where should Chat run?", "You can change this later in Settings.")
+            choice.addView(ui.filled("On this phone", R.drawable.ic_memory) { app.setEngine(ChatEngine.LOCAL); showModels() }, ui.matchWrap(4))
+            choice.addView(ui.text("Free and private. Downloads a 2.4 GB model once, over Wi-Fi. Works best on phones with 8 GB of memory or more.", Ui.Type.SMALL, ui.muted), ui.matchWrap(12))
+            choice.addView(ui.tonal("OpenRouter, with your key", R.drawable.ic_key) { app.setEngine(ChatEngine.OPENROUTER); showSettings(Mode.CHAT) }, ui.matchWrap(4))
+            choice.addView(ui.text("Larger models online. Each message costs a fraction of a cent from your OpenRouter credit.", Ui.Type.SMALL, ui.muted))
+        }
         if (mode != Mode.CHAT) { ui.gap(box, 8); box.addView(ui.text("Each Generate is one request to your provider at its normal price.", Ui.Type.SMALL, ui.muted).apply { gravity = Gravity.CENTER }) }
         if (!app.settings.hasKey(Mode.CHAT) && !app.settings.hasKey(Mode.IMAGE)) { ui.gap(box, 12); box.addView(ui.tonal("How to get started", R.drawable.ic_help) { showHelp() }) }
         feed.addView(box, ui.matchWrap())
@@ -275,7 +335,7 @@ class MainActivity : AppCompatActivity() {
         val holder = LinearLayout(this).apply { gravity = if (mine) Gravity.END else Gravity.START }
         val tone = when { error -> R.color.ot_error_container; mine -> R.color.ot_orange_container; else -> R.color.ot_surface_high }
         val fg = when { error -> R.color.ot_on_error_container; mine -> R.color.ot_on_orange_container; else -> R.color.ot_on_surface }
-        val t = ui.text(text, Ui.Type.BODY_LARGE, ui.color(fg)).apply {
+        val t = ui.text(if (mine) text else Markdown.styled(text), Ui.Type.BODY_LARGE, ui.color(fg)).apply {
             setTextIsSelectable(true); setPadding(dp(14), dp(10), dp(14), dp(10))
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(ui.color(tone)); val r = dp(20).toFloat(); val s = dp(6).toFloat()
@@ -287,14 +347,52 @@ class MainActivity : AppCompatActivity() {
         return holder
     }
 
+    /**
+     * A model's thinking, kept visibly apart from its answer: small muted italic text under a "Thinking" label.
+     * It stays open while the model writes and starts folded once the reply is done.
+     */
+    private fun thinkingBlock(text: String, live: Boolean): View {
+        val box = ui.column().apply {
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(ui.color(R.color.ot_surface_container)); cornerRadius = dp(14).toFloat() }
+        }
+        val label = ui.text(if (live) "Thinking" else "Thinking, tap to show", Ui.Type.CAPTION, ui.muted)
+        val body = ui.text(text, Ui.Type.SMALL, ui.muted).apply {
+            setTypeface(typeface, android.graphics.Typeface.ITALIC); setTextIsSelectable(true); setPadding(0, dp(4), 0, 0)
+            visibility = if (live) View.VISIBLE else View.GONE
+        }
+        box.addView(label); box.addView(body)
+        if (!live) box.setOnClickListener {
+            val open = body.visibility != View.VISIBLE
+            body.visibility = if (open) View.VISIBLE else View.GONE
+            label.text = if (open) "Thinking, tap to hide" else "Thinking, tap to show"
+        }
+        box.contentDescription = "The model's thinking, not its answer"
+        return box
+    }
+
     private fun chatEntry(e: Entry) {
         feed.addView(bubble(e.prompt, mine = true), ui.matchWrap(6))
         val failed = e.state in listOf("failed", "uncertain", "interrupted")
-        if (e.response.isNotEmpty()) feed.addView(bubble(e.response, mine = false, error = failed), ui.matchWrap(4))
+        val thought = ReplyText.thinking(e.response)
+        if (thought.isNotEmpty()) feed.addView(thinkingBlock(thought, live = false), ui.matchWrap(4))
+        val answer = if (thought.isEmpty()) e.response else ReplyText.visible(e.response)
+        if (answer.isNotEmpty()) feed.addView(bubble(answer, mine = false, error = failed), ui.matchWrap(4))
+        val live = app.streaming?.takeIf { it.first == e.id && e.state == "chatting" }
+        if (live != null) {
+            val liveThought = ReplyText.thinking(live.second)
+            val block = thinkingBlock(liveThought, live = true).apply { if (liveThought.isEmpty()) visibility = View.GONE }
+            feed.addView(block, ui.matchWrap(4))
+            val holder = bubble(ReplyText.visible(live.second).ifEmpty { if (liveThought.isEmpty()) "..." else "Thinking..." }, mine = false)
+            streamId = e.id; streamView = (holder as LinearLayout).getChildAt(0) as TextView
+            streamThinking = (block as LinearLayout).getChildAt(1) as TextView
+            feed.addView(holder, ui.matchWrap(4))
+        }
         val meta = ui.row()
         meta.addView(statePill(e.state)); meta.addView(ui.text("  ${e.model}", Ui.Type.CAPTION, ui.muted), ui.weight())
         meta.addView(ui.textButton("Use prompt") { prompt.setText(e.prompt); prompt.requestFocus() })
-        feed.addView(meta, ui.matchWrap(14))
+        feed.addView(meta, ui.matchWrap(if (e.requestSummary.isEmpty()) 14 else 2))
+        if (e.requestSummary.isNotEmpty()) feed.addView(ui.text(e.requestSummary, Ui.Type.CAPTION, ui.muted), ui.matchWrap(14))
     }
 
     private fun mediaEntry(e: Entry, outputs: List<MediaOutput>, recent: Boolean, generation: Int) {
@@ -354,6 +452,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSettings(selected: Mode) {
+        closeModels()
         settingsOpen = true
         settingsMode = selected
         // Release builds block screenshots of Settings so keys cannot be captured; debug builds allow them for documentation.
@@ -370,6 +469,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         content.addView(ui.text("Models and keys stay on this device.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, dp(10)) })
         ui.segmented(content, listOf("Chat" to R.drawable.ic_chat, "Image" to R.drawable.ic_image, "Video" to R.drawable.ic_movie), selected.ordinal) { i -> showSettings(Mode.entries[i]) }
+        if (selected == Mode.CHAT) localChatCard(content)
         val s = app.settings.get(selected)
         val provider = ui.card(content)
         ui.sectionTitle(provider, if (selected == Mode.CHAT) "OpenRouter, Chat Completions" else "Replicate, Predictions", "A new provider must speak this API protocol. Changing a URL alone does not add a different protocol.")
@@ -435,6 +535,29 @@ class MainActivity : AppCompatActivity() {
         about.addView(header)
         ui.gap(about, 12)
         about.addView(ui.text("Free software under the GNU GPL, version 3. It comes with no warranty.\nAndroid 10 or later. No bundled model weights, ads, or analytics.\nHistory and generated media stay in private app storage until you save them.\nProvider generation has normal API costs. Video jobs refresh while the app is open and recover by job ID after reopening.\nPrivate media limit: 512 MB; per-file limit: 128 MB.", Ui.Type.SMALL, ui.muted))
+    }
+
+    private fun localChatCard(content: LinearLayout) {
+        val card = ui.card(content)
+        ui.sectionTitle(card, "Chat runs", "On this phone answers offline at no cost per message. OpenRouter runs larger models online with your key.")
+        val local = app.local.engine == ChatEngine.LOCAL
+        ui.segmented(card, listOf("On this phone" to R.drawable.ic_memory, "OpenRouter" to null), if (local) 0 else 1) { i ->
+            app.setEngine(if (i == 0) ChatEngine.LOCAL else ChatEngine.OPENROUTER); showSettings(Mode.CHAT)
+        }
+        if (!local) { card.addView(ui.text("OpenRouter settings follow below.", Ui.Type.SMALL, ui.muted)); return }
+        card.addView(ui.bold(ui.text(app.local.selected()?.title ?: "No model chosen", Ui.Type.BODY_LARGE)))
+        card.addView(ui.text(localStatus(), Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(2), 0, dp(8)) })
+        card.addView(ui.text(if (NativeEngine.chosen == NativeEngine.FAST) "Engine: the faster build for this processor" else "Engine: the standard build", Ui.Type.CAPTION, ui.muted).apply { setPadding(0, 0, 0, dp(8)) })
+        card.addView(ui.tonal("Manage models", R.drawable.ic_memory) { showModels() }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(12) })
+        val contexts = LocalModelStore.CONTEXT_CHOICES.map { "$it tokens" }
+        ui.dropdown(card, "Context size", contexts, "${app.local.contextTokens} tokens") { app.local.contextTokens = it.substringBefore(' ').toInt() }
+        val threads = LocalModelStore.THREAD_CHOICES.map { if (it == 0) "Automatic" else "$it" }
+        ui.dropdown(card, "Processor threads", threads, if (app.local.threads == 0) "Automatic" else "${app.local.threads}") { app.local.threads = it.toIntOrNull() ?: 0 }
+        val think = ui.checkbox("Show the model's thinking", app.local.showThinking).apply { setOnCheckedChangeListener { _, c -> app.local.showThinking = c } }
+        card.addView(think)
+        card.addView(ui.text("Some models, such as Qwen3.5 and Gemma 4, can think before they answer. Answers then come slower but may be better. The thinking appears in small gray type above the answer, and the model does not see it again later. Qwen3 4B Instruct never thinks.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, dp(8)) })
+        card.addView(ui.text("A larger context remembers more of the conversation and uses more memory. 8192 suits phones with 8 GB or more. Change threads only to test speed. Changes apply to the next message.", Ui.Type.SMALL, ui.muted))
+        content.addView(ui.text("OpenRouter settings below stay saved. Suggest setup in API CALL still uses them.", Ui.Type.SMALL, ui.muted).apply { setPadding(dp(4), 0, dp(4), dp(10)) })
     }
 
     private fun showLoraLibrary() {
@@ -551,6 +674,7 @@ class MainActivity : AppCompatActivity() {
 
     /** In-app help, read from assets/help.txt (the same text as the README quick start). */
     private fun showHelp() {
+        closeModels()
         settingsOpen = true
         settingsMode = null
         helpOpen = true

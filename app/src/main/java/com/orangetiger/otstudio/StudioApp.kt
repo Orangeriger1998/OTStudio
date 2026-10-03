@@ -1,6 +1,9 @@
 package com.orangetiger.otstudio
 
+import android.app.Activity
 import android.app.Application
+import android.content.ComponentCallbacks2
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import java.io.File
@@ -17,6 +20,33 @@ class StudioApp : Application() {
         private set
     lateinit var loras: LoraStore
         private set
+    lateinit var local: LocalModelStore
+        private set
+    /** The on-device chat engine. Loading and replies run on [executor], one at a time, like every other request. */
+    val engine: LocalLlm = LlamaEngine()
+    /** "idle", "loading", or "ready" for the on-device model. */
+    @Volatile var localState = "idle"
+        private set
+    /** Load progress from 0 to 100 while [localState] is "loading". */
+    @Volatile var loadPercent = 0
+        private set
+    @Volatile private var loadedKey: String? = null
+    @Volatile private var stopRequested = false
+    /** The chat entry whose reply is streaming, with the text so far. */
+    @Volatile var streaming: Pair<Long, String>? = null
+        private set
+    var streamListener: ((Long, String) -> Unit)? = null
+    @Volatile private var lastStreamPost = 0L
+    private var startedActivities = 0
+    private val unloadLater = Runnable { unloadLocal() }
+
+    private val downloads = Executors.newSingleThreadExecutor()
+    private val fetcher = HttpFetcher()
+    @Volatile private var downloader: ModelDownloader? = null
+    /** The model download in progress, paused, or failed in this session. */
+    @Volatile var download: DownloadStatus? = null
+        private set
+    var modelsListener: (() -> Unit)? = null
     private val transport = HttpsTransport()
     private val api = ProviderApi(transport)
     private val executor = Executors.newSingleThreadExecutor()
@@ -32,12 +62,35 @@ class StudioApp : Application() {
         settings = SettingsStore(this)
         history = History(this)
         loras = LoraStore(this)
+        local = LocalModelStore(this)
+        try { NativeEngine.prepare(this) } catch (_: Exception) { }
         history.recover()
+        // Free the model's memory when the app stays in the background for five minutes.
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) { startedActivities++; main.removeCallbacks(unloadLater) }
+            override fun onActivityStopped(activity: Activity) { startedActivities--; if (startedActivities <= 0) main.postDelayed(unloadLater, 5 * 60_000L) }
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) { }
+            override fun onActivityResumed(activity: Activity) { }
+            override fun onActivityPaused(activity: Activity) { }
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) { }
+            override fun onActivityDestroyed(activity: Activity) { }
+        })
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND && startedActivities <= 0) unloadLocal()
+    }
+
+    /** Unloads the on-device model after any running reply finishes. */
+    fun unloadLocal() {
+        executor.execute { if (engine.loadedPath != null) { engine.unload(); loadedKey = null; localState = "idle"; changed() } }
     }
 
     fun isBusy() = busy.get()
-    fun stopWaiting() { transport.cancel(); activeDownload?.disconnect() }
+    fun stopWaiting() { stopRequested = true; engine.cancel(); transport.cancel(); activeDownload?.disconnect() }
     private fun changed() { main.post { listener?.invoke() } }
+    private fun modelsChanged() { main.post { modelsListener?.invoke(); listener?.invoke() } }
     private fun friendly(e: Exception): String = (e as? UserError)?.message ?: "Connection or device storage failed. Check the provider dashboard before repeating a paid request."
 
     private fun run(task: () -> Unit) {
@@ -53,6 +106,7 @@ class StudioApp : Application() {
     fun send(mode: Mode, prompt: String): Boolean {
         if (busy.get()) return false
         val p = Rules.prompt(prompt)
+        if (mode == Mode.CHAT && local.engine == ChatEngine.LOCAL) return sendLocal(p)
         val model = settings.resolve(mode)
         ModelOptions.validateForModel(model.settings.model, model.settings.schema ?: throw UserError("Open API CALL and load this model's inputs first."), model.settings.options)
         if (mode != Mode.CHAT && history.list(pendingOnly = true).any { it.mode != Mode.CHAT }) {
@@ -74,6 +128,113 @@ class StudioApp : Application() {
             }
         }
         return true
+    }
+
+    private fun threads(): Int = local.threads.takeIf { it > 0 } ?: (Runtime.getRuntime().availableProcessors() - 2).coerceIn(1, 6)
+
+    private fun sendLocal(p: String): Boolean {
+        val m = local.selected() ?: throw UserError("Download a model first: Settings, Chat, Manage models. Or switch Chat to OpenRouter.")
+        run {
+            val turns = history.turns()
+            val id = history.insertLocal(p, "${m.title} (on this phone)")
+            stopRequested = false
+            changed()
+            NativeEngine.prepare(this)
+            NativeEngine.begin(this)
+            try {
+                val path = local.file(m).path
+                val key = "$path|${local.contextTokens}|${threads()}"
+                if (loadedKey != key || engine.loadedPath != path) {
+                    loadedKey = null; localState = "loading"; loadPercent = 0; changed()
+                    val stateDir = File(cacheDir, "chat-state").apply { mkdirs() }
+                    engine.load(path, local.contextTokens, threads(), stateDir.path) { f ->
+                        val pct = (f * 100).toInt().coerceIn(0, 100)
+                        if (pct >= loadPercent + 5) { loadPercent = pct; changed() }
+                        !stopRequested
+                    }
+                    loadedKey = key
+                    // The saved conversation state only fits the same model, context size, and engine build.
+                    val stateKey = File(stateDir, "key.txt")
+                    val wanted = "$key|${NativeEngine.chosen}|${m.localName}"
+                    val restored = stateKey.isFile && stateKey.readText() == wanted && engine.restoreState()
+                    if (!restored) { File(stateDir, LlamaEngine.STATE_FILE).delete(); stateKey.writeText(wanted) }
+                }
+                localState = "ready"; changed()
+                if (stopRequested) { history.update(id, "canceled", "Stopped before the reply began."); return@run }
+                val messages = ChatWindow.fit("", turns, p, local.contextTokens, LOCAL_REPLY_TOKENS, engine::countTokens)
+                streaming = id to ""
+                val thinking = local.showThinking
+                // Thinking uses tokens before the answer starts, so it gets a larger budget.
+                val raw = engine.chat(messages, if (thinking) LOCAL_REPLY_TOKENS * 3 else LOCAL_REPLY_TOKENS, null, thinking) { postStream(id, it) }.trim()
+                val answer = ReplyText.visible(raw)
+                val text = if (thinking && answer.isNotEmpty()) raw else answer
+                val stats = engine.lastStats?.summary()
+                // Keeps the conversation ready for the next load, so reopening the app does not reread it.
+                if (text.isNotEmpty()) engine.saveState()
+                if (stopRequested) history.update(id, if (text.isEmpty()) "canceled" else "stopped", text.ifEmpty { "Stopped before the reply began." }, summary = stats)
+                else history.update(id, if (text.isEmpty()) "failed" else "succeeded", text.ifEmpty { "The model returned no text. Try again or choose another model." }, summary = stats)
+            } catch (e: Exception) {
+                if (engine.loadedPath == null) localState = "idle"
+                if (stopRequested && engine.loadedPath == null) { history.update(id, "canceled", "Stopped while loading the model."); return@run }
+                history.update(id, "failed", (e as? UserError)?.message ?: "The on-device model stopped with an error. Try again, or choose a smaller model.")
+            } finally { streaming = null; NativeEngine.end(this) }
+        }
+        return true
+    }
+
+    private fun postStream(id: Long, text: String) {
+        streaming = id to text
+        val now = System.nanoTime()
+        if (now - lastStreamPost < 60_000_000L) return
+        lastStreamPost = now
+        main.post { streaming?.let { (sid, t) -> if (sid == id) streamListener?.invoke(sid, t) } }
+    }
+
+    fun selectModel(m: LocalModelInfo) {
+        if (!local.installed(m)) throw UserError("Download this model first.")
+        local.select(m)
+        if (engine.loadedPath != null && engine.loadedPath != local.file(m).path) unloadLocal()
+        modelsChanged()
+    }
+
+    fun setEngine(e: ChatEngine) {
+        local.engine = e
+        if (e == ChatEngine.OPENROUTER) unloadLocal()
+        changed()
+    }
+
+    fun startDownload(m: LocalModelInfo) {
+        if (download?.running == true) throw UserError("Another model is downloading. Pause it first.")
+        if (local.installed(m)) return
+        val d = ModelDownloader(local.folder, fetcher)
+        downloader = d
+        download = DownloadStatus(m, local.part(m).length(), m.bytes, verifying = false, running = true)
+        modelsChanged()
+        downloads.execute {
+            try {
+                d.download(m, local::freeBytes) { p -> download = DownloadStatus(m, p.done, p.total, p.verifying, true); modelsChanged() }
+                download = null
+                if (local.selected() == null) local.select(m)
+            } catch (e: Exception) {
+                val before = download ?: DownloadStatus(m, 0, m.bytes, verifying = false, running = false)
+                val paused = e is DownloadPaused || d.stopping
+                download = before.copy(done = local.part(m).length(), verifying = false, running = false,
+                    error = if (paused) "" else (e as? UserError)?.message ?: "The download stopped. Check the connection, then tap Resume.")
+            } finally { downloader = null; modelsChanged() }
+        }
+    }
+
+    fun pauseDownload() { downloader?.let { it.requestStop(); fetcher.cancel() } }
+
+    fun deleteModel(m: LocalModelInfo) {
+        if (download?.running == true && download?.model?.localName == m.localName) throw UserError("Pause the download before deleting it.")
+        if (busy.get()) throw UserError("Wait for the current reply to finish.")
+        executor.execute {
+            if (engine.loadedPath == local.file(m).path) { engine.unload(); loadedKey = null; localState = "idle" }
+            local.delete(m)
+            if (download?.model?.localName == m.localName) download = null
+            modelsChanged()
+        }
     }
 
     /**
@@ -244,4 +405,8 @@ class StudioApp : Application() {
             }
         } finally { activeDownload = null; connection?.disconnect(); part?.delete() }
     }
+
+    companion object { const val LOCAL_REPLY_TOKENS = 1024 }
 }
+
+data class DownloadStatus(val model: LocalModelInfo, val done: Long, val total: Long, val verifying: Boolean, val running: Boolean, val error: String = "")

@@ -14,6 +14,7 @@
 - [Output Actions](Design-Output-Actions)
 - [API CALL Panel](Design-API-CALL-Panel)
 - [Settings](Design-Settings)
+- [Model Manager](Design-Model-Manager)
 - [Help Screen](Design-Help-Screen)
 - [LoRA Library](Design-LoRA-Library)
 
