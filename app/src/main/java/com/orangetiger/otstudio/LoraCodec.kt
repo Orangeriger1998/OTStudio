@@ -1,0 +1,36 @@
+package com.orangetiger.otstudio
+
+import org.json.JSONObject
+import java.net.URI
+
+data class SavedLora(val name: String, val reference: String, val trigger: String, val scale: Double, val baseModel: String = "flux-dev")
+
+object LoraCodec {
+    const val MAX_BYTES = 16384
+    fun validate(item: SavedLora): SavedLora {
+        if (item.name.isBlank() || item.name.length > 80 || item.name.any { it.isISOControl() }) throw UserError("Give the LoRA a name of up to 80 characters.")
+        if (item.trigger.length > 120 || item.trigger.any { it.isISOControl() }) throw UserError("Keep the trigger word below 120 characters on one line.")
+        if (item.baseModel != "flux-dev") throw UserError("This library accepts FLUX dev LoRAs. WAN LoRAs are not interchangeable.")
+        if (!item.scale.isFinite() || item.scale !in -1.0..3.0) throw UserError("LoRA scale must be between -1 and 3.")
+        val reference = item.reference
+        if (reference.length > 4000) throw UserError("LoRA reference is too long.")
+        if (reference.startsWith("https://")) {
+            val uri = try { URI(reference) } catch (_: Exception) { throw UserError("Invalid LoRA URL.") }
+            if (uri.host.isNullOrBlank() || uri.userInfo != null || uri.fragment != null || uri.port !in listOf(-1, 443)) throw UserError("Use an HTTPS LoRA URL without embedded credentials.")
+        } else if (!Regex("[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+(?:/[a-f0-9]{64})?").matches(reference) || reference.contains("..")) {
+            throw UserError("Use owner/model, owner/model/version, or an HTTPS weights URL.")
+        }
+        return item
+    }
+    fun parse(raw: String): SavedLora {
+        if (raw.toByteArray(Charsets.UTF_8).size > MAX_BYTES) throw UserError("LoRA library file is too large.")
+        try {
+            val root = JSONObject(raw)
+            val expected = setOf("format", "name", "reference", "trigger_word", "scale", "base_model")
+            if (root.keys().asSequence().toSet() != expected || root.get("format") != "otstudio-lora-v1") throw UserError("Select an OT Studio LoRA library JSON file.")
+            if (listOf("name", "reference", "trigger_word", "base_model").any { root.get(it) !is String } || root.get("scale") !is Number) throw UserError("Invalid LoRA library field types.")
+            return validate(SavedLora(root.getString("name"), root.getString("reference"), root.getString("trigger_word"), root.getDouble("scale"), root.getString("base_model")))
+        } catch (e: UserError) { throw e }
+        catch (_: Exception) { throw UserError("Could not read this LoRA library file.") }
+    }
+}

@@ -1,0 +1,32 @@
+name: Android checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Trainer tests
+        run: python -m unittest discover -s scripts -p test_train_lora.py -v
+      - name: Android SDK packages
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;36.0.0' > /dev/null
+      - name: Unit tests, lint, and unsigned release build
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleRelease --no-daemon --console=plain
+      - name: Keep reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          path: |
+            app/build/reports/
+            app/build/outputs/apk/release/

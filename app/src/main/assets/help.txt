@@ -1,0 +1,41 @@
+# Welcome
+
+OT Studio connects your phone to AI models for chat, images, and video. You bring your own keys. Each provider bills you directly for what you use. Your keys stay encrypted on this phone. OT Studio sends each key only to the provider it belongs to.
+
+# Quick start
+
+1. Get an OpenRouter key for chat and a Replicate key for images and video. The next card shows how.
+2. Tap the gear to open Settings. Paste each key under its mode, then tap Save. Video reuses the image key.
+3. Pick Chat, Image, or Video at the top of the main screen. Tap API CALL to choose a model and its options, then tap Apply.
+4. Write a prompt and tap the orange send button.
+5. On a finished image or video, tap Save. The first time, you choose a folder. OT Studio remembers that folder for every later save.
+
+# Get your keys
+
+OpenRouter runs the chat models. Create an account at openrouter.ai, then buy credit on the Credits page. The smallest purchase is $5. Card payments carry a small fee. Open Keys in your account settings and create a key. Copy it right away and paste it into OT Studio.
+
+For images and video you need Replicate. Sign in at replicate.com with a GitHub account. Replicate bills in advance, so add a payment method and buy credit on the Billing page first. Your API token sits on the API tokens page under your account. It starts with r8_.
+
+# What it costs
+
+These are typical prices from October 2026. Providers change their prices, so check their pages before a large project.
+
+A short chat message costs a small fraction of a cent.
+
+Ten matching photos at about 2K start with one LoRA training run, which costs about $1.50 to $2. Each photo then costs about three cents. Upscaling a photo to 2K adds a fifth of a cent. Your first set of ten comes to about $2.20. After that, each new set costs about 35 cents.
+
+One minute of video takes about 12 clips, because video models make clips of 5 to 15 seconds. With WAN 2.7, that minute costs about $6 at 720p or $9 at 1080p. The faster WAN 2.2 model costs about 60 cents at 480p, with lower quality. A LoRA starting frame for each clip adds about 40 cents.
+
+# What OT Studio does not do
+
+OT Studio makes one photo or one clip at a time. It does not join clips into a longer video. Music and titles need another app as well. Use a video editor for that final step. CapCut works on a phone. Any desktop video editor works on a computer.
+
+LoRA training runs on a computer with the script that ships with OT Studio. The phone cannot train a LoRA.
+
+Replicate deletes results made through its API after about an hour. OT Studio downloads each result the moment it finishes. Save anything you want to keep.
+
+OT Studio needs Android 10 or later and an internet connection. It has no cloud backup. Removing the app deletes your history and your saved keys.
+
+# Full guide
+
+The GitHub wiki explains every screen and every setting. It also walks through each workflow step by step, from your first photo to a LoRA video with the same face in every frame.

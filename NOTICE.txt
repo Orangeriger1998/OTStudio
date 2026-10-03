@@ -1,0 +1,28 @@
+OT Studio
+Created by OrangeTiger
+https://github.com/Orangeriger1998/OTStudio
+
+Copyright (C) 2026 OrangeTiger.
+OT Studio is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE file.
+
+OT Studio is an independent project. It is not affiliated with OpenRouter,
+Replicate, Black Forest Labs, Alibaba (WAN), or Google, and it is not a fork
+of any other chat or image client.
+
+Third-party components, all under the Apache License 2.0 (see
+LICENSE-THIRD-PARTY.txt):
+- Kotlin standard library
+- Material Components for Android (com.google.android.material)
+- AndroidX libraries, including core-splashscreen, appcompat, and activity
+- Material Symbols icons (https://github.com/google/material-design-icons)
+- Gradle wrapper
+
+JUnit, org.json, and Robolectric are used only for tests and are not part of
+the app.
+
+The OT Studio name, logo, and tiger artwork in the branding folder belong to
+OrangeTiger. Neither the GPL nor the Apache License covers them. See
+TRADEMARKS.md.

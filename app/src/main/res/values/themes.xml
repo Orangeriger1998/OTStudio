@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material 3 dark theme on a pure black canvas. -->
+    <style name="Theme.OTStudio" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/ot_orange</item>
+        <item name="colorOnPrimary">@color/ot_on_orange</item>
+        <item name="colorPrimaryContainer">@color/ot_orange_container</item>
+        <item name="colorOnPrimaryContainer">@color/ot_on_orange_container</item>
+        <item name="colorSecondary">@color/ot_blue</item>
+        <item name="colorOnSecondary">@color/ot_on_blue</item>
+        <item name="colorSecondaryContainer">@color/ot_blue_container</item>
+        <item name="colorOnSecondaryContainer">@color/ot_on_blue_container</item>
+        <item name="colorTertiary">@color/ot_success</item>
+        <item name="colorError">@color/ot_error</item>
+        <item name="colorOnError">@color/ot_on_error</item>
+        <item name="colorErrorContainer">@color/ot_error_container</item>
+        <item name="colorOnErrorContainer">@color/ot_on_error_container</item>
+        <item name="colorSurface">@color/ot_surface</item>
+        <item name="colorOnSurface">@color/ot_on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/ot_on_surface_variant</item>
+        <item name="colorSurfaceContainerLowest">@color/ot_black</item>
+        <item name="colorSurfaceContainerLow">@color/ot_surface_low</item>
+        <item name="colorSurfaceContainer">@color/ot_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/ot_surface_high</item>
+        <item name="colorSurfaceContainerHighest">@color/ot_surface_highest</item>
+        <item name="colorOutline">@color/ot_outline</item>
+        <item name="colorOutlineVariant">@color/ot_outline_variant</item>
+        <item name="android:colorBackground">@color/ot_black</item>
+        <item name="android:windowBackground">@color/ot_black</item>
+        <item name="android:statusBarColor">@color/ot_black</item>
+        <item name="android:navigationBarColor">@color/ot_black</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <!-- Full-screen API CALL panel. -->
+    <style name="Theme.OTStudio.FullScreenDialog" parent="Theme.OTStudio">
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@color/ot_black</item>
+        <!-- Android 10 reports keyboard insets to an edge-to-edge window only in resize mode. -->
+        <item name="android:windowSoftInputMode">adjustResize</item>
+    </style>
+
+    <!-- System splash (Android 12+ shows the icon only); OT Studio then shows the full logo. -->
+    <style name="Theme.OTStudio.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/ot_black</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.OTStudio</item>
+    </style>
+    <!-- Overlays let code create each Material 3 variant from a plain constructor. -->
+    <style name="ThemeOverlay.OT.FilledButton" parent=""><item name="materialButtonStyle">@style/Widget.Material3.Button</item></style>
+    <style name="ThemeOverlay.OT.TonalButton" parent=""><item name="materialButtonStyle">@style/Widget.Material3.Button.TonalButton</item></style>
+    <style name="ThemeOverlay.OT.OutlinedButton" parent=""><item name="materialButtonStyle">@style/Widget.Material3.Button.OutlinedButton</item></style>
+    <style name="ThemeOverlay.OT.TextButton" parent=""><item name="materialButtonStyle">@style/Widget.Material3.Button.TextButton</item></style>
+    <style name="ThemeOverlay.OT.IconButton" parent=""><item name="materialButtonStyle">@style/Widget.Material3.Button.IconButton</item></style>
+    <style name="ThemeOverlay.OT.FilledIconButton" parent=""><item name="materialButtonStyle">@style/Widget.Material3.Button.IconButton.Filled</item></style>
+    <style name="ThemeOverlay.OT.OutlinedField" parent=""><item name="textInputStyle">@style/Widget.Material3.TextInputLayout.OutlinedBox</item></style>
+    <style name="ThemeOverlay.OT.Dropdown" parent=""><item name="textInputStyle">@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu</item></style>
+    <style name="ThemeOverlay.OT.FilterChip" parent=""><item name="chipStyle">@style/Widget.Material3.Chip.Filter</item></style>
+</resources>

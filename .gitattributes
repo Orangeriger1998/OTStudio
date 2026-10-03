@@ -1,0 +1,8 @@
+* text=auto
+gradlew text eol=lf
+app/src/main/assets/*.txt text eol=lf
+*.bat text eol=crlf
+*.png binary
+*.jpg binary
+*.webp binary
+*.jar binary

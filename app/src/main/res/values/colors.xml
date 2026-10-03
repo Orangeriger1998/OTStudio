@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OT Studio palette: black canvas, tiger orange primary, logo blue secondary. -->
+<resources>
+    <color name="ot_black">#000000</color>
+    <color name="ot_orange">#F7781A</color>
+    <color name="ot_on_orange">#1F0E00</color>
+    <color name="ot_orange_container">#4A2306</color>
+    <color name="ot_on_orange_container">#FFDBC4</color>
+    <color name="ot_blue">#739FC6</color>
+    <color name="ot_on_blue">#0A1E31</color>
+    <color name="ot_blue_container">#1C3550</color>
+    <color name="ot_on_blue_container">#D3E5FA</color>
+    <color name="ot_success">#8CD5A5</color>
+    <color name="ot_surface">#000000</color>
+    <color name="ot_surface_low">#0E0E0E</color>
+    <color name="ot_surface_container">#161616</color>
+    <color name="ot_surface_high">#202020</color>
+    <color name="ot_surface_highest">#2A2A2A</color>
+    <color name="ot_on_surface">#F2F2F2</color>
+    <color name="ot_on_surface_variant">#B8B8B8</color>
+    <color name="ot_outline">#5E5E5E</color>
+    <color name="ot_outline_variant">#333333</color>
+    <color name="ot_error">#FFB4AB</color>
+    <color name="ot_on_error">#690005</color>
+    <color name="ot_error_container">#5C1A14</color>
+    <color name="ot_on_error_container">#FFDAD6</color>
+</resources>
