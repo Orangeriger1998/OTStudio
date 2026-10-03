@@ -38,6 +38,17 @@ This card appears only under Chat.
 
 The model name, Manage models, and the two dropdowns appear only while On this phone is selected. A note under the card says that the OpenRouter settings below stay saved, because Suggest setup in API CALL still uses them.
 
+## Memory and history card
+
+This card also appears only under Chat.
+
+| Box | What it holds | Why |
+|---|---|---|
+| Summary | How many memory instructions are on, such as "2 of 3 memory instructions are on." | Shows at a glance what every chat starts with |
+| Edit memory | Opens [Memory](Design-Memory.md) | Standing instructions change rarely, so they live one screen deeper |
+| Save chat history | A checkbox, on by default | Off keeps new chat messages only until the app closes. Images and videos are saved either way. |
+| Clear chat history | A red button with a confirmation | Deletes every chat message on the phone. Images, videos, and memory stay. |
+
 ## Provider card
 
 | Box | What it holds | Why |

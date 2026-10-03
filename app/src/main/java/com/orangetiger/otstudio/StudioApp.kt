@@ -63,6 +63,7 @@ class StudioApp : Application() {
         history = History(this)
         loras = LoraStore(this)
         local = LocalModelStore(this)
+        history.saveChat = saveChatHistory
         try { NativeEngine.prepare(this) } catch (_: Exception) { }
         history.recover()
         // Free the model's memory when the app stays in the background for five minutes.
@@ -85,6 +86,36 @@ class StudioApp : Application() {
     /** Unloads the on-device model after any running reply finishes. */
     fun unloadLocal() {
         executor.execute { if (engine.loadedPath != null) { engine.unload(); loadedKey = null; localState = "idle"; changed() } }
+    }
+
+    private val chatPrefs by lazy { getSharedPreferences("chat", MODE_PRIVATE) }
+    private fun chatStateDir() = File(cacheDir, "chat-state")
+
+    /**
+     * Save chat history (default on). Off keeps new chat turns in memory only, and the on-device engine stops saving
+     * its conversation state. Image and video entries are saved either way.
+     */
+    var saveChatHistory: Boolean
+        get() = chatPrefs.getBoolean("save", true)
+        set(v) {
+            chatPrefs.edit().putBoolean("save", v).apply()
+            history.dropUnsaved()
+            history.saveChat = v
+            chatStateDir().deleteRecursively()
+            unloadLocal()
+            changed()
+        }
+
+    /** Enabled memory lines, as the start of every chat's system prompt. */
+    fun memoryPrompt(): String = MemoryPrompt.build(history.memory.lines())
+
+    /** Deletes every chat turn, saved or not, and the engine's saved conversation state. */
+    fun clearChat() {
+        if (busy.get()) throw UserError("Wait for the current reply to finish.")
+        history.clearChat()
+        chatStateDir().deleteRecursively()
+        unloadLocal()
+        changed()
     }
 
     fun isBusy() = busy.get()
@@ -113,7 +144,9 @@ class StudioApp : Application() {
             throw UserError("Finish or cancel the pending media job before starting another. You can still use text chat.")
         }
         run {
-            val turns = if (mode == Mode.CHAT) Rules.boundedTurns(history.turns(), p) else emptyList()
+            // Memory goes first. With OpenRouter chat, these lines are sent to OpenRouter with each message.
+            val memory = if (mode == Mode.CHAT) memoryPrompt() else ""
+            val turns = if (mode == Mode.CHAT) (if (memory.isEmpty()) emptyList() else listOf(Turn("system", memory))) + Rules.boundedTurns(history.turns(), p) else emptyList()
             val id = history.insert(mode, p, model)
             changed()
             if (mode == Mode.CHAT) {
@@ -146,7 +179,7 @@ class StudioApp : Application() {
                 val key = "$path|${local.contextTokens}|${threads()}"
                 if (loadedKey != key || engine.loadedPath != path) {
                     loadedKey = null; localState = "loading"; loadPercent = 0; changed()
-                    val stateDir = File(cacheDir, "chat-state").apply { mkdirs() }
+                    val stateDir = chatStateDir().apply { mkdirs() }
                     engine.load(path, local.contextTokens, threads(), stateDir.path) { f ->
                         val pct = (f * 100).toInt().coerceIn(0, 100)
                         if (pct >= loadPercent + 5) { loadPercent = pct; changed() }
@@ -161,7 +194,7 @@ class StudioApp : Application() {
                 }
                 localState = "ready"; changed()
                 if (stopRequested) { history.update(id, "canceled", "Stopped before the reply began."); return@run }
-                val messages = ChatWindow.fit("", turns, p, local.contextTokens, LOCAL_REPLY_TOKENS, engine::countTokens)
+                val messages = ChatWindow.fit(memoryPrompt(), turns, p, local.contextTokens, LOCAL_REPLY_TOKENS, engine::countTokens)
                 streaming = id to ""
                 val thinking = local.showThinking
                 // Thinking uses tokens before the answer starts, so it gets a larger budget.
@@ -170,7 +203,8 @@ class StudioApp : Application() {
                 val text = if (thinking && answer.isNotEmpty()) raw else answer
                 val stats = engine.lastStats?.summary()
                 // Keeps the conversation ready for the next load, so reopening the app does not reread it.
-                if (text.isNotEmpty()) engine.saveState()
+                // Not while chat history is off: then nothing of the conversation may outlive the app.
+                if (text.isNotEmpty() && history.saveChat) engine.saveState()
                 if (stopRequested) history.update(id, if (text.isEmpty()) "canceled" else "stopped", text.ifEmpty { "Stopped before the reply began." }, summary = stats)
                 else history.update(id, if (text.isEmpty()) "failed" else "succeeded", text.ifEmpty { "The model returned no text. Try again or choose another model." }, summary = stats)
             } catch (e: Exception) {

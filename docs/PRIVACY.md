@@ -6,6 +6,14 @@ OT Studio has no server of its own. It shows no ads and collects no analytics. E
 
 A chat message goes to the chat provider together with a limited amount of recent chat history. An image or video prompt goes to the media provider with the inputs you chose in API CALL. A photo you pick with Choose photo, or an image you send with Use as... or Upscale, uploads to your own Replicate account through Replicate's Files API. Suggest setup sends your prompt and the matching models' input lists to your chat provider, and only when you tap it.
 
+## Chat on the phone, memory, and history
+
+With Chat set to On this phone, messages and replies never leave the phone. The model file comes from Hugging Face, and OT Studio sends no key and no message there. The app keeps the model's processed conversation in its private cache, so a restart does not have to read it again.
+
+Memory instructions are stored as plain text in the app's private database. They go first in every chat. With on-device chat they stay on the phone. When Chat uses OpenRouter, the instructions that are on travel to OpenRouter with each message.
+
+Save chat history is on by default. When it is off, new chat messages live only in the app's memory and vanish when the app closes, and the processed conversation is not kept either. Images and videos are still saved. Clear chat history deletes every chat message on the phone.
+
 ## Keys
 
 The app encrypts each key with AES-GCM under a key held in the Android Keystore. Keys never appear in the source code, the APK, the logs, or Android backups. Release builds block screenshots of Settings. Each key is bound to the provider address it was saved with, and the app refuses to send it anywhere else.

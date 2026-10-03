@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.TextView
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -85,6 +86,69 @@ class AndroidFlowTest {
         controller.get().onBackPressedDispatcher.onBackPressed()
         val main = views(controller.get().window.decorView).filterIsInstance<Button>().map { it.text.toString() }
         assertTrue(main.contains("Models")); assertFalse(main.contains("API CALL"))
+        controller.pause().stop().destroy()
+    }
+
+    @Test fun memoryLinesPersistToggleEditAndDelete() {
+        val db = History(RuntimeEnvironment.getApplication())
+        val a = db.memory.add("Call the user Mark.")
+        val b = db.memory.add("  Do not use em dashes in your responses. ")
+        db.memory.setEnabled(a, false)
+        db.memory.edit(b, "Never use em dashes.")
+        db.close()
+        val fresh = History(RuntimeEnvironment.getApplication())
+        assertEquals(listOf("Call the user Mark." to false, "Never use em dashes." to true), fresh.memory.lines().map { it.text to it.enabled })
+        fresh.memory.delete(a)
+        assertEquals(1, fresh.memory.lines().size)
+        assertThrows(UserError::class.java) { fresh.memory.add(" ") }
+        fresh.close()
+    }
+
+    @Test fun chatWithHistoryOffStaysInMemoryAndMediaIsStillSaved() {
+        val app = RuntimeEnvironment.getApplication() as StudioApp
+        val db = app.history
+        val savedId = db.insertLocal("saved question", "test model")
+        db.update(savedId, "succeeded", "saved answer")
+        app.saveChatHistory = false
+        assertTrue(db.list(Mode.CHAT).isEmpty())
+        val tempId = db.insertLocal("private question", "test model")
+        assertTrue(tempId < 0)
+        db.update(tempId, "succeeded", "private answer")
+        assertEquals(listOf("private question"), db.list(Mode.CHAT).map { it.prompt })
+        assertEquals(listOf("private question", "private answer"), db.turns().map { it.content })
+        // Media still goes to the database.
+        val image = db.insert(Mode.IMAGE, "a photo", Rules.resolve(Mode.IMAGE, Rules::defaults) { "synthetic" })
+        assertTrue(image > 0)
+        // A new process (simulated by reopening the database) has no trace of the private turn.
+        val reopened = History(app)
+        assertFalse(reopened.list(Mode.CHAT).any { it.prompt == "private question" })
+        reopened.close()
+        app.saveChatHistory = true
+        assertEquals(listOf("saved question"), db.list(Mode.CHAT).map { it.prompt })
+        app.clearChat()
+        assertTrue(db.list(Mode.CHAT).isEmpty())
+        assertEquals(1, db.list(Mode.IMAGE).size)
+    }
+
+    @Test fun settingsOpenTheMemoryScreenAndAddAnInstruction() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        click(activity, "Settings")
+        click(activity, "Edit memory")
+        assertTrue(views(activity.window.decorView).any { it is TextView && it.text.toString() == "Call the user Mark.\nDo not use em dashes in your responses." })
+        click(activity, "Add instruction")
+        shadowOf(Looper.getMainLooper()).idle()
+        val dialog = ShadowDialog.getLatestDialog() as androidx.appcompat.app.AlertDialog
+        views(dialog.window!!.decorView).filterIsInstance<EditText>().first().setText("Answer in short paragraphs.")
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(views(activity.window.decorView).any { it is TextView && it.text.toString() == "Answer in short paragraphs." })
+        assertEquals("Answer in short paragraphs.", (activity.application as StudioApp).history.memory.lines().single().text)
+        // The memory screen survives rotation, and Back returns to Settings.
+        controller.recreate()
+        assertTrue(views(controller.get().window.decorView).any { it is TextView && it.text.toString() == "Answer in short paragraphs." })
+        controller.get().onBackPressedDispatcher.onBackPressed()
+        assertTrue(views(controller.get().window.decorView).filterIsInstance<Button>().any { it.text.toString() == "Edit memory" })
         controller.pause().stop().destroy()
     }
 

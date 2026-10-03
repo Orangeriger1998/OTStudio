@@ -64,6 +64,7 @@ class MainActivity : AppCompatActivity() {
     private var helpOpen = false
     private var callPanel: CallPanel? = null
     private var models: ModelsScreen? = null
+    private var memoryScreen: MemoryScreen? = null
     private var streamId = -1L
     private var streamView: TextView? = null
     private var streamThinking: TextView? = null
@@ -111,6 +112,7 @@ class MainActivity : AppCompatActivity() {
         val reopen = savedInstanceState?.getString("settings")?.let { Mode.valueOf(it) }
         when {
             savedInstanceState?.getBoolean("models") == true -> showModels()
+            savedInstanceState?.getBoolean("memory") == true -> showMemory()
             reopen != null -> showSettings(reopen)
             savedInstanceState?.getBoolean("help") == true -> showHelp()
             else -> showChat()
@@ -118,7 +120,7 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null) showSplash()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (models != null) showSettings(Mode.CHAT) else if (settingsOpen || helpOpen) showChat() else { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
+                if (models != null || memoryScreen != null) showSettings(Mode.CHAT) else if (settingsOpen || helpOpen) showChat() else { isEnabled = false; onBackPressedDispatcher.onBackPressed() }
             }
         })
     }
@@ -146,6 +148,7 @@ class MainActivity : AppCompatActivity() {
         settingsMode?.let { outState.putString("settings", it.name) }
         outState.putBoolean("help", helpOpen)
         outState.putBoolean("models", models != null)
+        outState.putBoolean("memory", memoryScreen != null)
         super.onSaveInstanceState(outState)
     }
 
@@ -171,7 +174,16 @@ class MainActivity : AppCompatActivity() {
         splash.postDelayed({ splash.animate().alpha(0f).setDuration(350).withEndAction { host.removeView(splash) }.start() }, 900)
     }
 
-    private fun closeModels() { models?.leave(); models = null }
+    private fun closeModels() { models?.leave(); models = null; memoryScreen = null }
+
+    private fun showMemory() {
+        closeModels()
+        settingsOpen = true
+        settingsMode = null
+        helpOpen = false
+        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        memoryScreen = MemoryScreen(this, ui, app) { showSettings(Mode.CHAT) }.also { it.show(page()) }
+    }
 
     private fun showModels() {
         closeModels()
@@ -264,6 +276,8 @@ class MainActivity : AppCompatActivity() {
         "failed", "uncertain", "interrupted", "untracked" -> ui.pill(stateLabel(state), R.color.ot_error_container, R.color.ot_on_error_container)
         else -> ui.pill(stateLabel(state), R.color.ot_surface_high, R.color.ot_on_surface_variant)
     }
+    /** A sideways-scrolling row of buttons, for screens built outside this activity. */
+    fun actions(vararg buttons: View?): View = actionRow(*buttons)
     private fun actionRow(vararg buttons: View?): View {
         val row = ui.row()
         buttons.filterNotNull().forEach { row.addView(it) }
@@ -469,7 +483,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         content.addView(ui.text("Models and keys stay on this device.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, dp(10)) })
         ui.segmented(content, listOf("Chat" to R.drawable.ic_chat, "Image" to R.drawable.ic_image, "Video" to R.drawable.ic_movie), selected.ordinal) { i -> showSettings(Mode.entries[i]) }
-        if (selected == Mode.CHAT) localChatCard(content)
+        if (selected == Mode.CHAT) { localChatCard(content); memoryCard(content) }
         val s = app.settings.get(selected)
         val provider = ui.card(content)
         ui.sectionTitle(provider, if (selected == Mode.CHAT) "OpenRouter, Chat Completions" else "Replicate, Predictions", "A new provider must speak this API protocol. Changing a URL alone does not add a different protocol.")
@@ -558,6 +572,22 @@ class MainActivity : AppCompatActivity() {
         card.addView(ui.text("Some models, such as Qwen3.5 and Gemma 4, can think before they answer. Answers then come slower but may be better. The thinking appears in small gray type above the answer, and the model does not see it again later. Qwen3 4B Instruct never thinks.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, dp(8)) })
         card.addView(ui.text("A larger context remembers more of the conversation and uses more memory. 8192 suits phones with 8 GB or more. Change threads only to test speed. Changes apply to the next message.", Ui.Type.SMALL, ui.muted))
         content.addView(ui.text("OpenRouter settings below stay saved. Suggest setup in API CALL still uses them.", Ui.Type.SMALL, ui.muted).apply { setPadding(dp(4), 0, dp(4), dp(10)) })
+    }
+
+    private fun memoryCard(content: LinearLayout) {
+        val card = ui.card(content)
+        val lines = app.history.memory.lines()
+        ui.sectionTitle(card, "Memory and history", if (lines.isEmpty()) "No memory instructions yet." else "${lines.count { it.enabled }} of ${lines.size} memory instructions are on.")
+        card.addView(ui.tonal("Edit memory", R.drawable.ic_auto_awesome) { showMemory() }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(8) })
+        val save = ui.checkbox("Save chat history", app.saveChatHistory)
+        card.addView(save)
+        card.addView(ui.text("When this is off, new chat messages stay only until the app closes. Images and videos are still saved, so their files can be kept. Turning it back on hides the unsaved chat and shows the saved one again.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, dp(8)) })
+        save.setOnCheckedChangeListener { _, on -> try { app.saveChatHistory = on } catch (e: UserError) { showError(e.message.orEmpty()) } }
+        card.addView(ui.danger("Clear chat history", R.drawable.ic_delete) {
+            MaterialAlertDialogBuilder(this).setTitle("Clear chat history?").setMessage("This deletes every chat message on this phone, saved or not. Images, videos, and memory stay.")
+                .setPositiveButton("Clear") { _, _ -> try { app.clearChat(); snack("Chat history cleared.") } catch (e: UserError) { showError(e.message.orEmpty()) } }
+                .setNegativeButton("Keep", null).show()
+        }, LinearLayout.LayoutParams(-2, -2))
     }
 
     private fun showLoraLibrary() {

@@ -10,6 +10,16 @@ OT Studio connects your phone to AI models for chat, images, and video. You brin
 4. Write a prompt and tap the orange send button.
 5. On a finished image or video, tap Save. The first time, you choose a folder. OT Studio remembers that folder for every later save.
 
+# Chat on this phone
+
+Chat can run on the phone itself, with no key and no cost per message. Open Settings, choose Chat, and pick On this phone. Then tap Manage models and download the suggested model. It is about 2.4 GB, so use Wi-Fi. Once it is ready, your messages and the replies never leave the phone. Phones with 8 GB of memory or more work best.
+
+# Memory and chat history
+
+Memory holds standing instructions, such as a name to call you or a writing rule. Every chat starts with the ones that are switched on. Open it from Settings under Chat, with Edit memory. When Chat uses OpenRouter, the instructions that are on go to OpenRouter with each message.
+
+Save chat history is on at first. Switch it off for a chat that leaves no trace: its messages last only until the app closes. Images and videos are still saved either way, so their files can be kept. Clear chat history deletes every chat message on the phone.
+
 # Get your keys
 
 OpenRouter runs the chat models. Create an account at openrouter.ai, then buy credit on the Credits page. The smallest purchase is $5. Card payments carry a small fee. Open Keys in your account settings and create a key. Copy it right away and paste it into OT Studio.

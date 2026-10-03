@@ -122,8 +122,15 @@ class SettingsStore(private val context: Context) {
     }
 }
 
-class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 2) {
+class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 3) {
     companion object { const val LOCAL_BASE = "on-device" }
+    /**
+     * When false, new chat turns live only in this list and vanish when the app process ends.
+     * Image and video entries always go to the database, so their files can be kept.
+     */
+    @Volatile var saveChat = true
+    private val unsaved = ArrayList<Entry>()
+    private var nextUnsavedId = -1L
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT, mode TEXT NOT NULL,
@@ -133,6 +140,10 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 2
             local_file TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, request_summary TEXT NOT NULL DEFAULT '')""")
         db.execSQL("CREATE INDEX entries_mode_id ON entries(mode,id)")
         createDetails(db)
+        createMemory(db)
+    }
+    private fun createMemory(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE memory (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, position INTEGER NOT NULL)")
     }
     private fun createDetails(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE request_inputs (entry_id INTEGER NOT NULL REFERENCES entries(id), name TEXT NOT NULL, kind TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(entry_id,name))")
@@ -140,14 +151,23 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 2
     }
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion == 1 && newVersion == 2) {
+        if (oldVersion < 1 || newVersion != 3) error("Unsupported history schema upgrade.")
+        if (oldVersion < 2) {
             db.execSQL("ALTER TABLE entries ADD COLUMN request_summary TEXT NOT NULL DEFAULT ''")
             createDetails(db)
             db.execSQL("INSERT INTO media_outputs(entry_id,position,url,local_file) SELECT id,0,output_url,local_file FROM entries WHERE output_url != ''")
-        } else error("Unsupported history schema upgrade.")
+        }
+        if (oldVersion < 3) createMemory(db)
+    }
+
+    private fun unsavedChat(prompt: String, model: String, baseUrl: String): Long {
+        val id = nextUnsavedId--
+        unsaved.add(Entry(id, Mode.CHAT, prompt, "", "chatting", model, baseUrl, Mode.CHAT, "", "", "", System.currentTimeMillis()))
+        return id
     }
 
     @Synchronized fun insert(mode: Mode, prompt: String, model: ResolvedModel): Long {
+        if (mode == Mode.CHAT && !saveChat) return unsavedChat(prompt, model.settings.model, model.settings.baseUrl)
         val values = ContentValues().apply {
             put("mode", mode.name); put("prompt", prompt); put("state", if (mode == Mode.CHAT) "chatting" else "submitting")
             put("model", model.settings.model); put("base_url", model.settings.baseUrl)
@@ -165,7 +185,7 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 2
     }
 
     /** A chat turn answered by the on-device model. It has no provider address or key. */
-    @Synchronized fun insertLocal(prompt: String, model: String): Long = writableDatabase.insertOrThrow("entries", null, ContentValues().apply {
+    @Synchronized fun insertLocal(prompt: String, model: String): Long = if (!saveChat) unsavedChat(prompt, model, LOCAL_BASE) else writableDatabase.insertOrThrow("entries", null, ContentValues().apply {
         put("mode", Mode.CHAT.name); put("prompt", prompt); put("state", "chatting"); put("model", model); put("base_url", LOCAL_BASE)
         put("credential_mode", Mode.CHAT.name); put("created", System.currentTimeMillis())
     })
@@ -176,10 +196,21 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 2
             response?.let { put("response", it) }; remoteId?.let { put("remote_id", it) }
             outputUrl?.let { put("output_url", it) }; localFile?.let { put("local_file", it) }
         }
+        if (id < 0) {
+            val i = unsaved.indexOfFirst { it.id == id }
+            if (i >= 0) unsaved[i] = unsaved[i].copy(state = state, response = response ?: unsaved[i].response, requestSummary = summary ?: unsaved[i].requestSummary)
+            return
+        }
         if (writableDatabase.update("entries", values, "id = ?", arrayOf(id.toString())) != 1) throw UserError("Could not persist the request result.")
     }
 
     @Synchronized fun list(mode: Mode? = null, pendingOnly: Boolean = false): List<Entry> {
+        if (mode == Mode.CHAT && !pendingOnly && !saveChat) return unsaved.toList()
+        val stored = listStored(mode, pendingOnly)
+        return if (pendingOnly) stored + unsaved.filter { it.state == "chatting" } else stored
+    }
+
+    private fun listStored(mode: Mode?, pendingOnly: Boolean): List<Entry> {
         val selection = if (pendingOnly) "state IN ('submitting','chatting','processing','canceling','download')" else mode?.let { "mode = ?" }
         val args = mode?.let { arrayOf(it.name) }
         val columns = arrayOf("id", "mode", "prompt", "response", "state", "model", "base_url", "credential_mode", "remote_id", "output_url", "local_file", "created", "request_summary")
@@ -222,6 +253,41 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 2
         list(pendingOnly = true).forEach { e ->
             val next = Rules.afterProcessRestart(e.state, e.remoteId)
             if (next != e.state) update(e.id, next, if (next == "uncertain") "The app stopped before a job ID was saved. Check your provider dashboard before submitting again." else null)
+        }
+    }
+
+    /** Forgets the unsaved chat, as if the app had closed. */
+    @Synchronized fun dropUnsaved() { unsaved.clear() }
+
+    /** Deletes every saved and unsaved chat turn. Image and video entries stay. */
+    @Synchronized fun clearChat() {
+        unsaved.clear()
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL("DELETE FROM request_inputs WHERE entry_id IN (SELECT id FROM entries WHERE mode = 'CHAT')")
+            db.delete("entries", "mode = ?", arrayOf(Mode.CHAT.name))
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    /** Standing instructions, kept in this database as plain text. They are not secrets. */
+    val memory: MemoryStore = object : MemoryStore {
+        override fun lines(): List<MemoryLine> = synchronized(this@History) {
+            readableDatabase.query("memory", arrayOf("id", "text", "enabled"), null, null, null, null, "position, id").use { c ->
+                buildList { while (c.moveToNext()) add(MemoryLine(c.getLong(0), c.getString(1), c.getInt(2) != 0)) }
+            }
+        }
+        override fun add(text: String): Long = synchronized(this@History) {
+            if (lines().size >= MemoryPrompt.MAX_LINES) throw UserError("Memory holds up to ${MemoryPrompt.MAX_LINES} instructions. Delete one first.")
+            val position = readableDatabase.rawQuery("SELECT COALESCE(MAX(position), 0) + 1 FROM memory", null).use { c -> c.moveToFirst(); c.getInt(0) }
+            writableDatabase.insertOrThrow("memory", null, ContentValues().apply { put("text", MemoryPrompt.clean(text)); put("enabled", 1); put("position", position) })
+        }
+        override fun edit(id: Long, text: String) { change(id, ContentValues().apply { put("text", MemoryPrompt.clean(text)) }) }
+        override fun setEnabled(id: Long, enabled: Boolean) { change(id, ContentValues().apply { put("enabled", if (enabled) 1 else 0) }) }
+        override fun delete(id: Long) { synchronized(this@History) { writableDatabase.delete("memory", "id = ?", arrayOf(id.toString())) } }
+        private fun change(id: Long, values: ContentValues) = synchronized(this@History) {
+            if (writableDatabase.update("memory", values, "id = ?", arrayOf(id.toString())) != 1) throw UserError("Could not save the memory change.")
         }
     }
 
