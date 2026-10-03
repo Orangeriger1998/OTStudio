@@ -6,6 +6,36 @@ This page lists the changes under consideration after the 1.0.0 beta. Nothing he
 
 ## Under consideration for 1.1.0
 
+### Chat-led creation
+
+In 1.0.0, Chat, Image, and Video work apart. Chat only talks. A prompt typed in Image or Video goes straight to that model. The chat model links to the media models in one place only: Suggest setup in API CALL.
+
+Chat-led creation would make the chat the main way to work. The user describes what they want in plain words. The chat model turns that into a job plan: the full image or video prompt, the model, its settings, and any reference image or frames. The plan appears in the chat as a job card that shows the model, the exact prompt, and the likely cost. The user taps Generate, and the result lands in the same conversation. The next request can build on it. For example, "now a five-second clip where she stands up" would use the last image as the starting frame.
+
+Image and video models keep no memory between requests. Each one reads a single, complete description. The chat model fills that gap. It rewrites each chat request as a complete description. The user never needs to learn how media prompts work.
+
+#### Edit by conversation
+
+A request such as "change the orange border to black" refers to an earlier image. The app keeps every image it makes, both the file on the phone and its provider link. It would send that image, together with the instruction, to an editing model. An editing model changes only what the instruction names and keeps the rest. FLUX.1 Kontext [pro] on Replicate is one candidate. Its price and inputs still need checking. The FLUX dev Reference in 1.0.0 differs, because it repaints the whole image loosely.
+
+"That image" means the last image in the chat. The user can tap a card to point at a different one.
+
+#### Design rules
+
+1. **The chat model helps, but it never decides.** Each job card shows the exact prompt the media model will receive. The user can edit it before tapping Generate.
+2. **The user's own words always remain an option.** Sometimes the chat model declines a request or returns no usable plan. The app then says so plainly and offers to send the user's text exactly as typed. A missing plan never becomes a dead end or a silent failure.
+3. **The app keeps track of references.** It decides which image "that" means, carries frames forward, and attaches references itself. These steps never depend on how the chat model reads the request.
+4. **Each paid job needs one tap from the user.** The chat model never starts a job on its own. It also stops a runaway loop from using up credit.
+5. **The chat model is chosen by testing.** Models differ in how reliably they return a clean plan and in how faithfully they keep the user's request. Before the build, a fixed set of sample requests would measure several OpenRouter chat models on both counts. The 1.0.0 default, MythoMax, has no tool calling but can return structured replies, which is how Suggest setup already works.
+
+The media model applies its own settings and its provider's usage rules. Those are separate from the chat model and stay unchanged.
+
+The chat model reads text only, so it knows what it asked for but not what came back. A model that can read images could compare a result with earlier ones. That would cost more per message and stays optional.
+
+The three modes would stay as the manual path for exact control. Job cards and setup cards would also show plain summaries, such as "Square image" or "5-second clip from your photo," in place of raw setting names like `aspect_ratio=1:1`.
+
+The work reuses Suggest setup, Use as, the frame inputs, and the feed. It is larger than the provider switch below.
+
 ### OpenRouter as a second provider for images and video
 
 Images and video come only from Replicate in 1.0.0. OpenRouter now runs its own image and video services, with 57 image models and 30 video models in October 2026. A switch in Settings and at the top of API CALL would choose Replicate or OpenRouter for each mode. Each provider would keep its own key, its own model list, and the last model used. The OpenRouter key that already serves Chat would work here too, because it belongs to the same site.
