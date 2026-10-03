@@ -6,7 +6,7 @@ This log lists the main changes from one version to the next. It records what a 
 
 ## 1.0.0 (October 2026)
 
-The first public release, and the first under the OT Studio name.
+The first release under the OT Studio name. It is a beta, shared with a small group of testers. The [Roadmap](Roadmap.md) lists what may come next.
 
 **New look.** Every screen moved to Google's Material 3 components on a black canvas, in the tiger orange and logo blue of the OT Studio brand. Chat replies appear as bubbles. Image and video results appear as cards with colored status labels.
 

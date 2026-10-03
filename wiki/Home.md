@@ -40,7 +40,7 @@ Each procedure walks through one workflow, tap by tap.
 
 ## Releases
 
-The [Revision Log](Revision-Log.md) lists the main changes in each version. Signed APK files live on the repository's [Releases](https://github.com/Orangeriger1998/OTStudio/releases) page.
+The [Revision Log](Revision-Log.md) lists the main changes in each version. The [Roadmap](Roadmap.md) lists the changes under consideration for later versions. Signed APK files live on the repository's [Releases](https://github.com/Orangeriger1998/OTStudio/releases) page.
 
 ## License
 
