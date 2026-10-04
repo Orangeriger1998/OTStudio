@@ -7,7 +7,9 @@ data class InputValue(val name: String, val kind: InputKind, val value: String)
 data class InputDefinition(
     val name: String, val kind: InputKind, val defaultValue: String? = null,
     val choices: List<String> = emptyList(), val minimum: Double? = null, val maximum: Double? = null,
-    val required: Boolean = false, val description: String = "", val uri: Boolean = false
+    val required: Boolean = false, val description: String = "", val uri: Boolean = false,
+    /** The provider takes a list of URLs here. The app fills one entry and sends it as a one-item array. */
+    val list: Boolean = false
 )
 data class InputSchema(val fields: List<InputDefinition>, val unsupported: List<String> = emptyList(), val unsupportedRequired: List<String> = emptyList())
 data class ModelPreset(val mode: Mode, val model: String, val schema: InputSchema, val fixedResolution: String? = null)
@@ -16,7 +18,7 @@ data class SetupSuggestion(val model: String, val options: List<InputValue>, val
 object ModelOptions {
     private val fieldName = Regex("[A-Za-z][A-Za-z0-9_]{0,79}")
     private val reserved = setOf("prompt", "model", "messages", "stream", "tools", "tool_choice", "api_key", "authorization", "webhook", "webhook_events_filter")
-    val featureNames = listOf("Starting frame", "Ending frame", "Frame rate", "Fast generation", "LoRA", "Image guidance", "Audio input", "Negative prompt", "Seed", "Safety controls")
+    val featureNames = listOf("Editing", "Starting frame", "Ending frame", "Frame rate", "Fast generation", "LoRA", "Image guidance", "Audio input", "Negative prompt", "Seed", "Safety controls")
     fun credentialField(name: String): Boolean = Regex("(^|_)(token|password|secret|api_key|authorization|credential)(_|$)").containsMatchIn(name.lowercase())
     fun editableName(name: String): Boolean = fieldName.matches(name) && name.lowercase() !in reserved && !credentialField(name)
 
@@ -37,6 +39,8 @@ object ModelOptions {
             if (has("last_frame") && !has("first_frame")) throw UserError("An ending frame requires a starting frame.")
         }
         if (model == "wan-video/wan-2.2-i2v-fast" && !has("image")) throw UserError("WAN 2.2 I2V needs a starting image URL.")
+        ModelCatalog.edit(model)?.let { e -> if (!has(e.imageField)) throw UserError("This editing model needs the image to edit. Use Edit on an image card, or Choose photo in API CALL.") }
+        if (model == "bytedance/seedream-4.5" && values.any { it.name == "size" && it.value == "custom" } && (!has("width") || !has("height"))) throw UserError("A custom size needs a width and a height.")
     }
 
     fun value(def: InputDefinition, raw: String): InputValue {
@@ -77,7 +81,8 @@ object ModelOptions {
 
     fun initial(mode: Mode, model: String, schema: InputSchema?): List<InputValue> {
         if (schema == null) return emptyList()
-        val included = if (mode == Mode.CHAT) setOf("max_tokens") else setOf("aspect_ratio", "resolution", "duration", "num_outputs")
+        // Editing models start with the safety checker off (owner decision) and the input image's shape.
+        val included = if (mode == Mode.CHAT) setOf("max_tokens") else setOf("aspect_ratio", "resolution", "duration", "num_outputs") + if (ModelCatalog.edit(model) != null) setOf("disable_safety_checker") else emptySet()
         return schema.fields.filter { it.name in included && it.defaultValue != null }.map {
             value(it, if (model.startsWith("wan-video/wan-2.7-") && it.name == "resolution") "720p" else it.defaultValue.orEmpty())
         }
@@ -88,12 +93,13 @@ object ModelOptions {
         if (preset.schema.unsupportedRequired.isNotEmpty()) return false
         if (resolution != null && preset.fixedResolution != resolution && preset.schema.fields.none { it.name == "resolution" && resolution in it.choices }) return false
         return features.all { feature -> when (feature) {
+            "Editing" -> ModelCatalog.edit(preset.model) != null
             "Starting frame" -> preset.mode == Mode.VIDEO && names.any { it in setOf("image", "first_frame", "start_image", "first_frame_image") }
             "Ending frame" -> preset.mode == Mode.VIDEO && names.any { it in setOf("last_image", "last_frame", "end_image") }
             "Frame rate" -> names.any { it in setOf("frames_per_second", "frame_per_second", "fps") }
             "Fast generation" -> "fast_mode" in names || "go_fast" in names
             "LoRA" -> names.any { it.startsWith("lora_weights") }
-            "Image guidance" -> names.any { it in setOf("image", "image_prompt", "start_image", "first_frame_image", "first_frame") }
+            "Image guidance" -> names.any { it in setOf("image", "image_prompt", "start_image", "first_frame_image", "first_frame", "input_image", "input_images", "images", "image_input") }
             "Audio input" -> names.any { it in setOf("audio", "audio_url") }
             "Negative prompt" -> "negative_prompt" in names
             "Seed" -> "seed" in names
@@ -165,7 +171,59 @@ object ModelCatalog {
         number("seed", min = 0.0, max = 2147483647.0), text("negative_prompt", ""), bool("enable_prompt_expansion", true),
         text("audio", note = "HTTPS WAV/MP3, 3-30 seconds, up to 15 MB. Otherwise audio is generated.", uri = true)
     ))
-    val presets: List<ModelPreset> = listOf(
+    private val dsc = bool("disable_safety_checker", true, "Turns off the provider's safety checker. Replicate's usage policy still applies.")
+    private fun image(name: String, list: Boolean, required: Boolean) = text(name, note = "The image to edit. Edit on an image card fills it.", uri = true).copy(required = required, list = list)
+    private fun aspects(values: List<String>) = choice("aspect_ratio", values, "match_input_image")
+    private val kontextAspects = listOf("match_input_image", "1:1", "16:9", "21:9", "3:2", "2:3", "4:5", "5:4", "3:4", "4:3", "9:16", "9:21")
+    private val qwenAspects = listOf("match_input_image", "1:1", "16:9", "9:16", "4:3", "3:4")
+    private fun qwenEdit(list: Boolean) = InputSchema(listOf(image("image", list, true), aspects(qwenAspects), bool("go_fast", true), number("seed"),
+        choice("output_format", listOf("webp", "jpg", "png"), "webp"), number("output_quality", "95", 0.0, 100.0), dsc))
+    private fun klein() = InputSchema(listOf(image("images", true, false),
+        aspects(listOf("match_input_image", "1:1", "16:9", "9:16", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "21:9", "9:21")),
+        choice("output_megapixels", listOf("0.25", "0.5", "1", "2", "4"), "1"), number("seed"), bool("go_fast", false),
+        choice("output_format", listOf("webp", "jpg", "png"), "jpg"), number("output_quality", "95", 0.0, 100.0), dsc))
+
+    /**
+     * Editing models (Replicate list A, schemas checked 2026-10-03): each exposes disable_safety_checker, which OT Studio
+     * turns on by default. LoRA versions (flux-kontext-dev-lora, qwen-image-edit-plus-lora) wait until LoRA compatibility
+     * is tested, and Qwen 2511 is listed without its LoRA inputs.
+     */
+    val edits: List<EditModel> = listOf(
+        EditModel("black-forest-labs/flux-kontext-dev", "FLUX Kontext dev", "input_image", "about 2.5 cents"),
+        EditModel("qwen/qwen-image-edit-plus", "Qwen Image Edit Plus", "image", "about 3 cents"),
+        EditModel("qwen/qwen-image-edit", "Qwen Image Edit", "image", "about 3 cents"),
+        EditModel("qwen/qwen-image-edit-2511", "Qwen Image Edit 2511", "image", "about 3 cents"),
+        EditModel("black-forest-labs/flux-2-dev", "FLUX.2 dev", "input_images", "about 3 cents at 1 megapixel"),
+        EditModel("black-forest-labs/flux-2-klein-9b", "FLUX.2 klein 9B", "images", "about 1.5 cents at 1 megapixel"),
+        EditModel("black-forest-labs/flux-2-klein-4b", "FLUX.2 klein 4B", "images", "a fraction of a cent"),
+        EditModel("bytedance/seedream-4.5", "Seedream 4.5", "image_input", "about 4 cents"),
+        EditModel("prunaai/p-image-edit", "P-Image Edit", "images", "about 1 cent")
+    )
+    fun edit(model: String): EditModel? = edits.firstOrNull { it.model == model }
+    val defaultEdit get() = edits.first()
+
+    private val editPresets = listOf(
+        ModelPreset(Mode.IMAGE, "black-forest-labs/flux-kontext-dev", InputSchema(listOf(image("input_image", false, true), aspects(kontextAspects),
+            number("num_inference_steps", "28", 4.0, 50.0), number("guidance", "2.5", 0.0, 10.0, false), number("seed"),
+            choice("output_format", listOf("webp", "jpg", "png"), "webp"), number("output_quality", "80", 0.0, 100.0), dsc, bool("go_fast", true)))),
+        ModelPreset(Mode.IMAGE, "qwen/qwen-image-edit-plus", qwenEdit(true)),
+        ModelPreset(Mode.IMAGE, "qwen/qwen-image-edit", qwenEdit(false)),
+        ModelPreset(Mode.IMAGE, "qwen/qwen-image-edit-2511", qwenEdit(true)),
+        ModelPreset(Mode.IMAGE, "black-forest-labs/flux-2-dev", InputSchema(listOf(image("input_images", true, false), bool("go_fast", true),
+            choice("aspect_ratio", listOf("match_input_image", "custom", "1:1", "16:9", "3:2", "2:3", "4:5", "5:4", "9:16", "3:4", "4:3"), "match_input_image"),
+            number("width", min = 256.0, max = 1440.0, note = "Use with custom aspect ratio."), number("height", min = 256.0, max = 1440.0, note = "Use with custom aspect ratio."),
+            number("seed"), choice("output_format", listOf("webp", "jpg", "png"), "webp"), number("output_quality", "80", 0.0, 100.0), dsc))),
+        ModelPreset(Mode.IMAGE, "black-forest-labs/flux-2-klein-9b", klein()),
+        ModelPreset(Mode.IMAGE, "black-forest-labs/flux-2-klein-4b", klein()),
+        ModelPreset(Mode.IMAGE, "bytedance/seedream-4.5", InputSchema(listOf(image("image_input", true, false), choice("size", listOf("2K", "4K", "custom"), "2K"),
+            aspects(listOf("match_input_image", "1:1", "4:3", "3:4", "4:5", "5:4", "16:9", "9:16", "3:2", "2:3", "21:9", "9:21")),
+            number("width", min = 1024.0, max = 4096.0, note = "Use with custom size."), number("height", min = 1024.0, max = 4096.0, note = "Use with custom size."),
+            choice("sequential_image_generation", listOf("disabled", "auto"), "disabled"), number("max_images", "1", 1.0, 15.0), dsc))),
+        ModelPreset(Mode.IMAGE, "prunaai/p-image-edit", InputSchema(listOf(image("images", true, false), bool("turbo", true),
+            aspects(listOf("match_input_image", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3")), number("seed"), dsc)))
+    )
+
+    private val basePresets: List<ModelPreset> = listOf(
         ModelPreset(Mode.CHAT, "gryphe/mythomax-l2-13b", chatSchema), ModelPreset(Mode.CHAT, "qwen/qwen3-8b", chatSchema),
         ModelPreset(Mode.IMAGE, "black-forest-labs/flux-schnell", flux(false)), ModelPreset(Mode.IMAGE, "black-forest-labs/flux-dev", flux(true)),
         ModelPreset(Mode.IMAGE, "black-forest-labs/flux-dev-lora", loraSchema),
@@ -197,6 +255,7 @@ object ModelCatalog {
             number("lora_scale_transformer", "1", integer = false), number("lora_scale_transformer_2", "1", integer = false)
         )))
     )
+    val presets: List<ModelPreset> = basePresets + editPresets
     fun find(mode: Mode, model: String): ModelPreset? = presets.firstOrNull { it.mode == mode && it.model == model } ?: upscaler.takeIf { mode == it.mode && model == it.model }
 
     /** Real-ESRGAN upscaler, used only by the Upscale action (it takes an image, not a prompt), so it is not in the model lists. */
@@ -207,9 +266,12 @@ object ModelCatalog {
     )))
 }
 
+/** An editing model: [imageField] receives the image to edit, and [price] is a plain estimate per edit. */
+data class EditModel(val model: String, val title: String, val imageField: String, val price: String)
+
 /** Where a photo can be used: the target mode, the model inputs that accept it, and a model to switch to if needed. */
 enum class MediaRole(val title: String, val mode: Mode, val fields: List<String>, val fallbackModel: String) {
-    REFERENCE("Reference for the next image", Mode.IMAGE, listOf("image", "image_prompt"), "black-forest-labs/flux-dev"),
+    REFERENCE("Reference for the next image", Mode.IMAGE, listOf("image", "image_prompt", "input_image", "input_images", "images", "image_input"), "black-forest-labs/flux-dev"),
     START_FRAME("Starting frame for a video", Mode.VIDEO, listOf("first_frame", "image", "start_image", "first_frame_image"), "wan-video/wan-2.7-i2v"),
     END_FRAME("Ending frame for a video", Mode.VIDEO, listOf("last_frame", "last_image", "end_image"), "wan-video/wan-2.7-i2v");
 

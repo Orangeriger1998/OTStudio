@@ -20,6 +20,10 @@ Memory holds standing instructions, such as a name to call you or a writing rule
 
 Save chat history is on at first. Switch it off for a chat that leaves no trace: its messages last only until the app closes. Images and videos are still saved either way, so their files can be kept. Clear chat history deletes every chat message on the phone.
 
+# Edit an image
+
+Tap Edit on a finished image and write what should change, such as "change the orange border to black." The edit keeps the rest of the picture. Each edit is one request to Replicate and costs about 1 to 4 cents, depending on the model. The edited image appears as a new card. For a face that must stay the same, edit the original image again rather than an edit of an edit.
+
 # Get your keys
 
 OpenRouter runs the chat models. Create an account at openrouter.ai, then buy credit on the Credits page. The smallest purchase is $5. Card payments carry a small fee. Open Keys in your account settings and create a key. Copy it right away and paste it into OT Studio.

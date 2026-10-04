@@ -12,6 +12,7 @@ Every image and video card carries two rows of buttons. The first row acts on th
 | Play (videos) | Plays the clip in a dialog with play controls | Checks a clip without leaving the app |
 | Save | Copies the file into the remembered save folder | The first Save asks for a folder. Later saves go straight there, so nobody browses from the top of storage each time. A snackbar confirms the folder and offers Change. |
 | Share | Opens Android's share sheet with the file | Sends a result to another app, such as email or a chat app, without saving a copy first |
+| Edit... (images) | Asks what should change, then sends the image and that instruction to an editing model | Changes one thing, such as a color or an object, and keeps the rest. The result appears as a new card that names the image it came from. |
 | Use as... (images) | Uploads the image and places it in a model input of your choice | Chains work together. One image can become the reference for the next image, or a starting or ending frame for a video. |
 | Upscale 2x (images) | Doubles the width and height with Real-ESRGAN | FLUX images come out at about 1024 by 1024. Upscaling reaches about 2048 by 2048 for a fifth of a cent. The result appears as a new card. |
 
@@ -24,6 +25,19 @@ Every image and video card carries two rows of buttons. The first row acts on th
 - **Ending frame for a video** fills `last_frame`, or `last_image` on WAN 2.2, and uses the same model switch.
 
 The upload goes to the user's own Replicate account through Replicate's Files API. A snackbar names the model that received the photo and offers to open that mode.
+
+### The Edit dialog
+
+| Box | What it holds | Why |
+|---|---|---|
+| What should change? | A text field for a plain instruction, with an example under it | Editing models follow short, direct instructions best, such as "change the orange border to black" |
+| Editing model | A dropdown of nine Replicate editing models, set to the last one used | FLUX Kontext dev comes first. It made the most exact change in testing. |
+| Cost line | The model's price per edit, and a reminder that Replicate's usage policy still applies | Each Edit is one paid request, so the price shows before the tap |
+| Edit | Uploads the image and starts the edit | The tap is the confirmation. OT Studio never retries an edit on its own. |
+
+Every editing model in the list exposes Replicate's `disable_safety_checker` input. OT Studio turns that checker off and sets the output to the shape of the input image. Both settings, and every other input, can change in API CALL. Replicate's usage policy still applies, whatever the switch says.
+
+The edited image's card starts with "Edit of:" and the prompt of the image it came from. Repeated edits can drift a face away from the original. To keep a face true, edit the LoRA image again rather than an edit of an edit.
 
 ## Job actions
 

@@ -318,7 +318,8 @@ class MainActivity : AppCompatActivity() {
         if (app.lastError.isNotEmpty()) ui.card(statusArea, 12, R.color.ot_error_container, 8).addView(ui.text(app.lastError, Ui.Type.BODY, ui.color(R.color.ot_on_error_container)))
         feed.removeAllViews()
         if (entries.isEmpty()) emptyState()
-        entries.forEach { e -> if (e.mode == Mode.CHAT) chatEntry(e) else mediaEntry(e, outputMap[e.id].orEmpty(), entries.takeLast(3).any { it.id == e.id }, generation) }
+        val prompts = entries.associate { it.id to it.prompt }
+        entries.forEach { e -> if (e.mode == Mode.CHAT) chatEntry(e) else mediaEntry(e, outputMap[e.id].orEmpty(), entries.takeLast(3).any { it.id == e.id }, generation, prompts[e.parentId]) }
         val toEnd = scrollToEnd || lastSent.isNotEmpty() || atEnd
         scrollToEnd = false
         scroller.post { if (toEnd) scroller.fullScroll(View.FOCUS_DOWN) else scroller.scrollTo(0, previousY) }
@@ -409,8 +410,9 @@ class MainActivity : AppCompatActivity() {
         if (e.requestSummary.isNotEmpty()) feed.addView(ui.text(e.requestSummary, Ui.Type.CAPTION, ui.muted), ui.matchWrap(14))
     }
 
-    private fun mediaEntry(e: Entry, outputs: List<MediaOutput>, recent: Boolean, generation: Int) {
+    private fun mediaEntry(e: Entry, outputs: List<MediaOutput>, recent: Boolean, generation: Int, parentPrompt: String? = null) {
         val card = ui.card(feed, padding = 14)
+        if (e.parentId > 0) card.addView(ui.text("Edit of: ${parentPrompt?.let { if (it.length > 70) it.take(67) + "..." else it } ?: "an earlier image"}", Ui.Type.CAPTION, ui.muted).apply { setPadding(0, 0, 0, dp(4)) })
         card.addView(ui.text(e.prompt, Ui.Type.BODY_LARGE).apply { setTextIsSelectable(true) })
         ui.gap(card, 6)
         val meta = ui.row(); meta.addView(statePill(e.state)); meta.addView(ui.text("  ${e.model}", Ui.Type.CAPTION, ui.muted).apply { maxLines = 1 }, ui.weight())
@@ -444,6 +446,7 @@ class MainActivity : AppCompatActivity() {
                 if (e.mode == Mode.IMAGE) ui.textButton("View", R.drawable.ic_visibility) { previewImage(file) } else ui.textButton("Play", R.drawable.ic_play_arrow) { previewVideo(file) },
                 ui.textButton("Save", R.drawable.ic_download) { saveMedia(mediaEntry) },
                 ui.textButton("Share", R.drawable.ic_share) { shareMedia(mediaEntry) },
+                if (e.mode == Mode.IMAGE) ui.textButton("Edit...", R.drawable.ic_edit) { editImage(e, file) } else null,
                 if (e.mode == Mode.IMAGE) ui.textButton("Use as...", R.drawable.ic_auto_awesome) { useAs(file) } else null,
                 if (e.mode == Mode.IMAGE) ui.textButton("Upscale 2x", R.drawable.ic_zoom_in) { upscale(e, file) } else null
             ))
@@ -688,6 +691,31 @@ class MainActivity : AppCompatActivity() {
                 } catch (e: UserError) { showError(e.message.orEmpty()) }
             }
         }.setNegativeButton("Cancel", null).show()
+    }
+
+    /** Asks for a plain instruction and an editing model, then edits this image. The Edit tap starts one paid request. */
+    private fun editImage(e: Entry, file: File) {
+        if (!file.exists()) { showError("The private media file is missing."); return }
+        val content = ui.column(20)
+        val instruction = ui.field(content, "What should change?", "", multiline = true, helper = "For example: change the orange border to black.")
+        val models = ModelCatalog.edits
+        var chosen = models.firstOrNull { it.model == app.settings.editModel } ?: ModelCatalog.defaultEdit
+        val cost = ui.text("", Ui.Type.SMALL, ui.muted)
+        fun showCost() { cost.text = "One edit with ${chosen.title} costs ${chosen.price} at Replicate. The edited image appears as a new card. Replicate's usage policy still applies, whatever the safety setting says." }
+        ui.dropdown(content, "Editing model", models.map { it.title }, chosen.title) { title -> chosen = models.first { it.title == title }; showCost() }
+        showCost()
+        content.addView(cost)
+        val dialog = MaterialAlertDialogBuilder(this).setTitle("Edit this image").setView(ScrollView(this).apply { addView(content) })
+            .setPositiveButton("Edit", null).setNegativeButton("Cancel", null).create()
+        dialog.setOnShowListener { dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val mime = when (file.extension) { "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"; else -> "image/webp" }
+            try {
+                if (app.edit(e, instruction.text.toString(), chosen.model) { Triple(file.inputStream().use { readLimited(it) }, mime, file.name) }) {
+                    dialog.dismiss(); snack("Editing with ${chosen.title}. The result appears as a new card."); renderFeed()
+                } else ui.layoutOf(instruction)?.error = "Wait for the current operation to finish."
+            } catch (ex: UserError) { ui.layoutOf(instruction)?.error = ex.message }
+        } }
+        dialog.show()
     }
 
     private fun upscale(e: Entry, file: File) {

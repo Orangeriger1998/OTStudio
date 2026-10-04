@@ -25,16 +25,19 @@ object SchemaCodec {
             val raw = properties.optJSONObject(name) ?: throw UserError("Malformed model field.")
             val all = raw.optJSONArray("allOf")
             val p = resolve(if (all?.length() == 1) all.optJSONObject(0) ?: raw else raw, document)
-            val kind = when (p.optString("type")) { "boolean" -> InputKind.BOOLEAN; "integer" -> InputKind.INTEGER; "number" -> InputKind.NUMBER; "string" -> InputKind.TEXT; else -> null }
+            // A list of URLs (such as several reference images) becomes one URL field sent as a one-item array.
+            val items = p.optJSONObject("items")
+            val list = p.optString("type") == "array" && items?.optString("type") == "string" && items.optString("format") == "uri"
+            val kind = when (p.optString("type")) { "boolean" -> InputKind.BOOLEAN; "integer" -> InputKind.INTEGER; "number" -> InputKind.NUMBER; "string" -> InputKind.TEXT; "array" -> if (list) InputKind.TEXT else null; else -> null }
             if (kind == null || p.has("oneOf") || p.has("anyOf") || p.has("allOf") || !ModelOptions.editableName(name) || p.optString("format") == "password" || raw.optString("format") == "password" || raw.optBoolean("writeOnly") || p.optBoolean("writeOnly")) {
                 unsupported.add(name.take(80)); if (name in required) unsupportedRequired.add(name.take(80)); return@forEach
             }
             val choicesJson = p.optJSONArray("enum")
             val choices = if (choicesJson == null) emptyList() else (0 until choicesJson.length()).map { choicesJson.get(it).toString() }
-            val default = if (raw.has("default") && !raw.isNull("default")) raw.get("default").toString() else if (p.has("default") && !p.isNull("default")) p.get("default").toString() else null
+            val default = if (list) null else if (raw.has("default") && !raw.isNull("default")) raw.get("default").toString() else if (p.has("default") && !p.isNull("default")) p.get("default").toString() else null
             fields.add(InputDefinition(name, kind, default, choices,
                 if (p.has("minimum")) p.getDouble("minimum") else null, if (p.has("maximum")) p.getDouble("maximum") else null,
-                name in required, raw.optString("description", p.optString("description")).take(600).replace('\u2014', '-'), p.optString("format") == "uri"))
+                name in required, raw.optString("description", p.optString("description")).take(600).replace('\u2014', '-'), list || p.optString("format") == "uri", list))
         }
         return InputSchema(fields, unsupported, unsupportedRequired).also(ModelOptions::validateSchema)
     }
@@ -46,7 +49,7 @@ object SchemaCodec {
             InputKind.BOOLEAN -> v.value.toBooleanStrict()
             InputKind.INTEGER -> v.value.toLong()
             InputKind.NUMBER -> v.value.toDouble()
-            InputKind.TEXT -> v.value
+            InputKind.TEXT -> if (schema.fields.first { it.name == v.name }.list) JSONArray().put(v.value) else v.value
         }) }
     }
 

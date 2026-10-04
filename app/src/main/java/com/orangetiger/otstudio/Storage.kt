@@ -116,13 +116,18 @@ class SettingsStore(private val context: Context) {
 
     fun resolve(mode: Mode): ResolvedModel = Rules.resolve(mode, ::get, ::key)
 
+    /** The editing model chosen last in the Edit dialog. */
+    var editModel: String
+        get() = prefs.getString("edit.model", null)?.takeIf { ModelCatalog.edit(it) != null } ?: ModelCatalog.defaultEdit.model
+        set(v) { require(ModelCatalog.edit(v) != null); prefs.edit().putString("edit.model", v).apply() }
+
     fun keyForEntry(entry: Entry): String {
         if (Rules.origin(entry.baseUrl) != Rules.origin(get(entry.credentialMode).baseUrl)) throw UserError("This job used a different provider. Restore that provider's API URL and key before refreshing it.")
         return key(entry.credentialMode).takeIf { it.isNotBlank() } ?: throw UserError("Restore the ${entry.credentialMode.title.lowercase()} API key to refresh this job.")
     }
 }
 
-class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 3) {
+class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 4) {
     companion object { const val LOCAL_BASE = "on-device" }
     /**
      * When false, new chat turns live only in this list and vanish when the app process ends.
@@ -137,7 +142,8 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 3
             prompt TEXT NOT NULL, response TEXT NOT NULL DEFAULT '', state TEXT NOT NULL,
             model TEXT NOT NULL, base_url TEXT NOT NULL, credential_mode TEXT NOT NULL,
             remote_id TEXT NOT NULL DEFAULT '', output_url TEXT NOT NULL DEFAULT '',
-            local_file TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, request_summary TEXT NOT NULL DEFAULT '')""")
+            local_file TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, request_summary TEXT NOT NULL DEFAULT '',
+            parent_id INTEGER NOT NULL DEFAULT 0)""")
         db.execSQL("CREATE INDEX entries_mode_id ON entries(mode,id)")
         createDetails(db)
         createMemory(db)
@@ -151,13 +157,14 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 3
     }
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 1 || newVersion != 3) error("Unsupported history schema upgrade.")
+        if (oldVersion < 1 || newVersion != 4) error("Unsupported history schema upgrade.")
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE entries ADD COLUMN request_summary TEXT NOT NULL DEFAULT ''")
             createDetails(db)
             db.execSQL("INSERT INTO media_outputs(entry_id,position,url,local_file) SELECT id,0,output_url,local_file FROM entries WHERE output_url != ''")
         }
         if (oldVersion < 3) createMemory(db)
+        if (oldVersion < 4) db.execSQL("ALTER TABLE entries ADD COLUMN parent_id INTEGER NOT NULL DEFAULT 0")
     }
 
     private fun unsavedChat(prompt: String, model: String, baseUrl: String): Long {
@@ -166,13 +173,13 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 3
         return id
     }
 
-    @Synchronized fun insert(mode: Mode, prompt: String, model: ResolvedModel): Long {
+    @Synchronized fun insert(mode: Mode, prompt: String, model: ResolvedModel, parentId: Long = 0): Long {
         if (mode == Mode.CHAT && !saveChat) return unsavedChat(prompt, model.settings.model, model.settings.baseUrl)
         val values = ContentValues().apply {
             put("mode", mode.name); put("prompt", prompt); put("state", if (mode == Mode.CHAT) "chatting" else "submitting")
             put("model", model.settings.model); put("base_url", model.settings.baseUrl)
             put("credential_mode", model.credentialMode.name); put("created", System.currentTimeMillis())
-            put("request_summary", ModelOptions.summary(model.settings.model, model.settings.options))
+            put("request_summary", ModelOptions.summary(model.settings.model, model.settings.options)); put("parent_id", parentId)
         }
         val db = writableDatabase
         db.beginTransaction()
@@ -213,9 +220,9 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 3
     private fun listStored(mode: Mode?, pendingOnly: Boolean): List<Entry> {
         val selection = if (pendingOnly) "state IN ('submitting','chatting','processing','canceling','download')" else mode?.let { "mode = ?" }
         val args = mode?.let { arrayOf(it.name) }
-        val columns = arrayOf("id", "mode", "prompt", "response", "state", "model", "base_url", "credential_mode", "remote_id", "output_url", "local_file", "created", "request_summary")
+        val columns = arrayOf("id", "mode", "prompt", "response", "state", "model", "base_url", "credential_mode", "remote_id", "output_url", "local_file", "created", "request_summary", "parent_id")
         return readableDatabase.query("entries", columns, selection, if (pendingOnly) null else args, null, null, "id DESC", if (pendingOnly) null else "100").use { c ->
-            buildList { while (c.moveToNext()) add(Entry(c.getLong(0), Mode.valueOf(c.getString(1)), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), Mode.valueOf(c.getString(7)), c.getString(8), c.getString(9), c.getString(10), c.getLong(11), c.getString(12))) }.reversed()
+            buildList { while (c.moveToNext()) add(Entry(c.getLong(0), Mode.valueOf(c.getString(1)), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), Mode.valueOf(c.getString(7)), c.getString(8), c.getString(9), c.getString(10), c.getLong(11), c.getString(12), c.getLong(13))) }.reversed()
         }
     }
 

@@ -272,6 +272,34 @@ class StudioApp : Application() {
     }
 
     /**
+     * Edits a saved image by instruction: uploads it with the Image mode's Replicate key, then starts one prediction
+     * on [editModel] with the image in that model's image input. The result appears as a new Image entry linked to [source].
+     * The user's tap on Edit in the dialog is the confirmation for this paid request. No automatic retry.
+     */
+    fun edit(source: Entry, instruction: String, editModel: String, read: () -> Triple<ByteArray, String, String>): Boolean {
+        if (busy.get()) return false
+        val text = Rules.prompt(instruction)
+        val preset = ModelCatalog.edit(editModel) ?: throw UserError("Choose an editing model.")
+        if (history.list(pendingOnly = true).any { it.mode != Mode.CHAT }) throw UserError("Finish or cancel the pending media job before starting another.")
+        val image = settings.resolve(Mode.IMAGE)
+        // Checked before the upload, so a settings problem never leaves an orphan file at the provider.
+        val chosen = settings.forModel(image.settings, preset.model)
+        ModelOptions.validateForModel(preset.model, chosen.schema ?: throw UserError("This editing model has no input list."), chosen.options + InputValue(preset.imageField, InputKind.TEXT, "https://api.replicate.com/v1/files/check"))
+        settings.editModel = preset.model
+        run {
+            val (bytes, mime, name) = read()
+            val url = api.uploadFile(image.settings.baseUrl, image.key, name, mime, bytes)
+            val model = image.copy(settings = chosen.copy(options = chosen.options.filter { it.name != preset.imageField } + InputValue(preset.imageField, InputKind.TEXT, url)))
+            val id = history.insert(Mode.IMAGE, text, model, parentId = source.id)
+            changed()
+            try { applyPrediction(id, Mode.IMAGE, api.create(model, text)) }
+            catch (e: ProviderRejected) { history.update(id, "failed", "${e.message} No job was created.") }
+            catch (e: Exception) { history.update(id, "uncertain", "${friendly(e)} No job ID was saved. The provider may have accepted the request; inspect its dashboard before retrying.") }
+        }
+        return true
+    }
+
+    /**
      * Upscales a saved image 2x with Real-ESRGAN: uploads it, then starts one prediction that appears as a new Image entry.
      * Uses the Image mode's Replicate key. Returns false if another operation is running.
      */

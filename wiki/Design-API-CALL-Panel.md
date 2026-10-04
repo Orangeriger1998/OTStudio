@@ -32,7 +32,7 @@ The panel fills the screen, because a model can have dozens of inputs. It rememb
 | Base URL | The provider address under the card title, such as `https://api.replicate.com/v1` | Confirms which provider and which key the request will use |
 | Find a model by features | A button that opens two rows of filter chips (Image and Video only) | Answers "which model can do this?" without reading every model page |
 | Resolution chips | Any, 480p, 720p, 1080p | Video price and quality depend on resolution, so it is the first filter |
-| Feature chips | Starting frame, Ending frame, Frame rate, Fast generation, LoRA, Image guidance, Audio input, Negative prompt, Seed, Safety controls | Each chip keeps only models whose real inputs support that feature |
+| Feature chips | Editing, Starting frame, Ending frame, Frame rate, Fast generation, LoRA, Image guidance, Audio input, Negative prompt, Seed, Safety controls | Each chip keeps only models whose real inputs support that feature. Editing keeps the nine editing models, for manual control of an edit. |
 | Saved models | A dropdown of the preloaded models plus any the user added. It becomes "Matching models (n)" while filters are on. | One list for every model on this provider |
 | Mismatch warning | A red line when the current model fails a selected filter | Stops a user from applying a model that cannot do what they asked for |
 | Add a model | A field for any `owner/model` ID, with an Add button | Any Replicate model with a compatible input schema can join the list. The app remembers it. |

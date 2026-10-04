@@ -58,6 +58,28 @@ Sources: [HTTP reference](https://replicate.com/docs/reference/http), [output fi
 
 Version 1.0 was tested live with the owner's own keys: chat, model metadata, FLUX images, downloads, and WAN 2.7 video. Provider restrictions, availability, and normal prices apply. See [LoRA training](LORA-TRAINING.md) for the separate photo-training helper.
 
+## Editing models
+
+Edit on an image card uploads the image through the Files API, then starts one prediction on the chosen editing model with the instruction as `prompt`. Schemas were checked on 2026-10-03 at each model's `/api/schema` page. Every model listed exposes `disable_safety_checker` (provider default false). OT Studio sends it as true and sends `aspect_ratio` as `match_input_image`. Replicate's usage policy still applies.
+
+| Model | Image input | Price (October 2026) |
+|---|---|---|
+| [black-forest-labs/flux-kontext-dev](https://replicate.com/black-forest-labs/flux-kontext-dev/api/schema) (default) | `input_image`, one URL, required | $0.025 per image |
+| [qwen/qwen-image-edit-plus](https://replicate.com/qwen/qwen-image-edit-plus/api/schema) | `image`, list, required | $0.03 per image |
+| [qwen/qwen-image-edit](https://replicate.com/qwen/qwen-image-edit/api/schema) | `image`, one URL, required | $0.03 per image |
+| [qwen/qwen-image-edit-2511](https://replicate.com/qwen/qwen-image-edit-2511/api/schema) | `image`, list, required | $0.03 per image |
+| [black-forest-labs/flux-2-dev](https://replicate.com/black-forest-labs/flux-2-dev/api/schema) | `input_images`, list | $0.012 to $0.014 per megapixel in and out |
+| [black-forest-labs/flux-2-klein-9b](https://replicate.com/black-forest-labs/flux-2-klein-9b/api/schema) | `images`, list | $0.015 per output megapixel |
+| [black-forest-labs/flux-2-klein-4b](https://replicate.com/black-forest-labs/flux-2-klein-4b/api/schema) | `images`, list | $1 per 1,000 megapixels in and out |
+| [bytedance/seedream-4.5](https://replicate.com/bytedance/seedream-4.5/api/schema) | `image_input`, list | $0.04 per image |
+| [prunaai/p-image-edit](https://replicate.com/prunaai/p-image-edit/api/schema) | `images`, list | $0.01 per image |
+
+A list input receives a one-item JSON array. The schema loader now reads arrays of URL strings as one URL field sent that way. Arrays of other types stay unsupported. The LoRA versions of Kontext and Qwen wait until a test shows whether FLUX dev LoRAs work on Kontext. Qwen 2511 is listed without its LoRA inputs.
+
+Excluded because they lack `disable_safety_checker`: FLUX Kontext pro and max, FLUX.2 pro, max, and flex, the nano-banana family, gpt-image, Seedream 4 and 5 lite, WAN 2.7 image, Grok Imagine image, and Bria FIBO edit.
+
+Live test on 2026-10-03 (owner-approved, about $0.07): one watercolor image, one instruction ("Change the white window frame to dark green. Keep everything else the same."). All four tested models succeeded. Kontext dev changed only the frame. Qwen Image Edit Plus and P-Image Edit also darkened the sill below it. FLUX.2 klein 4B also turned part of a wall shadow green.
+
 ## Photo uploads and upscaling
 
 Choose photo, Use as..., and Upscale 2x upload an image to POST `/v1/files` as multipart form data. The app accepts only a reply whose `urls.get` equals `https://api.replicate.com/v1/files/{id}` for the returned ID, then passes that URL as the model input. File IDs may contain letters, digits, dots, hyphens, and underscores. Replicate began issuing dotted IDs of about 53 characters in October 2026. An ID that starts with a dot, ends with a dot, or contains two dots in a row is refused, so it can never act as a path step. Uploads require the Replicate origin, a JPG, PNG, or WebP image, and at most 20 MB.

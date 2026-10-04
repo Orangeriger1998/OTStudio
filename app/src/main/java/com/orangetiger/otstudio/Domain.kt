@@ -23,7 +23,9 @@ data class Entry(
     val id: Long, val mode: Mode, val prompt: String, val response: String,
     val state: String, val model: String, val baseUrl: String, val credentialMode: Mode,
     val remoteId: String, val outputUrl: String, val localFile: String, val created: Long,
-    val requestSummary: String = ""
+    val requestSummary: String = "",
+    /** For an edit, the entry it was made from. 0 when the entry has no source. */
+    val parentId: Long = 0
 )
 data class MediaOutput(val position: Int, val url: String, val localFile: String)
 
