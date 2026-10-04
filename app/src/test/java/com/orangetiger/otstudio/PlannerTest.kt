@@ -24,8 +24,20 @@ class PlannerTest {
         assertEquals("image", ok("Sure! {\"action\":\"image\",\"reply\":\"ok\",\"prompt\":\"a fox\",\"reference\":\"none\",\"shape\":\"default\",\"seconds\":5} Enjoy").action)
     }
 
+    @Test fun aPlansReplyStaysOneShortLine() {
+        val long = "A red fox stands in snow. The background is a dense forest with golden light and falling flakes everywhere."
+        assertEquals("A red fox stands in snow.", ok("{\"action\":\"image\",\"reply\":\"$long\",\"prompt\":\"fox\",\"reference\":\"none\",\"shape\":\"default\",\"seconds\":5}").reply)
+        val noStop = "x".repeat(300)
+        assertEquals(200, ok("{\"action\":\"image\",\"reply\":\"$noStop\",\"prompt\":\"fox\",\"reference\":\"none\",\"shape\":\"default\",\"seconds\":5}").reply.length)
+        // Answers keep their full text.
+        assertEquals(long, ok("{\"action\":\"answer\",\"reply\":\"$long\",\"prompt\":\"\",\"reference\":\"none\",\"shape\":\"default\",\"seconds\":5}").reply)
+    }
+
     @Test fun badPlansAreNeverGuessed() {
         assertEquals("", invalid("not json at all { broken").reply)
+        // An answer cut off by the length limit keeps its text.
+        assertEquals(JobPlan("answer", "Sunsets are best when..."), ok("{\"action\":\"answer\",\"reply\":\"Sunsets are best when"))
+        assertEquals("A fox", invalid("{\"action\":\"image\",\"reply\":\"A fox").reply)
         assertEquals(JobPlan("answer", "plain words"), ok("plain words"))
         invalid("""{"action":"launch","reply":"x"}""")
         invalid("""{"action":"image","reply":"x","prompt":"","reference":"none"}""")

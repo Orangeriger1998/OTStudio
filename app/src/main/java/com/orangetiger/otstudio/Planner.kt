@@ -96,7 +96,12 @@ Answer every message with one JSON object and nothing else.
         // A model that ignores the format and writes plain prose has still answered; Use my words remains under it.
         // A broken object is no plan, and only the reply text it holds is shown.
         if ('{' !in raw) return if (raw.isBlank()) PlanResult.Invalid("The model returned no text.", "") else PlanResult.Ok(JobPlan("answer", raw.trim().take(4000)))
-        val text = SchemaCodec.firstJsonObject(raw) ?: return PlanResult.Invalid("The model did not return a plan.", streamingReply(raw).trim().take(4000))
+        val text = SchemaCodec.firstJsonObject(raw) ?: run {
+            // A long answer can reach the length limit before its JSON closes. Its text so far is still the answer.
+            val partial = streamingReply(raw).trim()
+            return if (Regex("\"action\"\\s*:\\s*\"answer\"").containsMatchIn(raw) && partial.isNotEmpty()) PlanResult.Ok(JobPlan("answer", partial.take(4000) + "..."))
+            else PlanResult.Invalid("The model did not return a plan.", partial.take(4000))
+        }
         val o = try { JSONObject(text) } catch (_: Exception) { return PlanResult.Invalid("The model returned a broken plan.", "") }
         val action = o.optString("action")
         val reply = o.optString("reply").trim().take(4000)
@@ -121,7 +126,9 @@ Answer every message with one JSON object and nothing else.
         if (action == "edit" && reference == null) return PlanResult.Invalid("An edit needs a picture to work on, and none was found.", reply)
         val shape = o.optString("shape", "default").takeIf { it in SHAPES } ?: "default"
         val seconds = if (action == "video") o.optInt("seconds", 5).takeIf { it in 2..15 } ?: 5 else null
-        return PlanResult.Ok(JobPlan(action, reply.ifEmpty { "Here is a plan." }, prompt, if (action == "image") null else reference, shape, seconds))
+        // A plan's reply is one line above the card; small models sometimes repeat the whole prompt there.
+        val short = Regex("^.{1,200}?[.!?](\\s|$)").find(reply)?.value?.trim() ?: if (reply.length > 200) reply.take(197).trimEnd() + "..." else reply
+        return PlanResult.Ok(JobPlan(action, short.ifEmpty { "Here is a plan." }, prompt, if (action == "image") null else reference, shape, seconds))
     }
 
     /** The reply text so far, read out of a JSON object that is still streaming. */
