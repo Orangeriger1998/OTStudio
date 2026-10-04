@@ -56,6 +56,18 @@ object Rules {
         Mode.VIDEO -> ModelSettings(mode, Protocol.REPLICATE, "https://api.replicate.com/v1", "wan-video/wan-2.7-t2v", KeySource.IMAGE)
     }
 
+    /** True when the first bytes of a file are those of a [ext] file (png, jpg, webp, or mp4). */
+    fun mediaMatches(ext: String, head: ByteArray): Boolean {
+        fun at(i: Int, vararg b: Int) = head.size >= i + b.size && b.indices.all { head[i + it] == b[it].toByte() }
+        return when (ext) {
+            "png" -> at(0, 0x89, 0x50, 0x4E, 0x47)
+            "jpg" -> at(0, 0xFF, 0xD8, 0xFF)
+            "webp" -> at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)
+            "mp4" -> at(4, 0x66, 0x74, 0x79, 0x70)
+            else -> false
+        }
+    }
+
     fun origin(raw: String): String {
         val uri = try { URI(raw.trim()) } catch (_: Exception) { throw UserError("Enter a valid HTTPS API URL.") }
         if (uri.scheme != "https" || uri.host.isNullOrBlank() || uri.userInfo != null || uri.rawQuery != null || uri.fragment != null || uri.port == 0 || uri.port > 65535) {

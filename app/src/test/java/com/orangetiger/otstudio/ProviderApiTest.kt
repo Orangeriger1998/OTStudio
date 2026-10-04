@@ -104,6 +104,29 @@ class ProviderApiTest {
         val p = api.status("https://api.replicate.com/v1", "test", "job123")
         assertEquals("failed", p.state); assertEquals("NSFW content detected. Try a different prompt.", p.problem)
     }
+    @Test fun aPrivateTrainedLoraRunsItsOwnModelVersion() {
+        val version = "e".repeat(64)
+        val calls = ArrayList<Triple<String, String, String?>>()
+        val versionSchema = """{"id":"$version","openapi_schema":{"components":{"schemas":{"Input":{"type":"object","properties":{
+            "prompt":{"type":"string"},"aspect_ratio":{"type":"string","enum":["1:1","9:16"],"default":"1:1"},"lora_scale":{"type":"number","default":1},
+            "guidance_scale":{"type":"number","default":3},"disable_safety_checker":{"type":"boolean","default":false}}}}}}}"""
+        val api = ProviderApi { method, url, _, body ->
+            calls.add(Triple(method, url, body))
+            if (method == "GET") HttpReply(200, versionSchema) else HttpReply(201, """{"id":"job9","status":"starting","output":null}""")
+        }
+        val lora = ModelSettings(Mode.IMAGE, Protocol.REPLICATE, "https://api.replicate.com/v1", LoraCodec.MODEL)
+        val withLora = lora.copy(options = listOf(InputValue("aspect_ratio", InputKind.TEXT, "9:16"), InputValue("lora_weights", InputKind.TEXT, "me/lora-sam/$version"),
+            InputValue("lora_scale", InputKind.NUMBER, "1.0"), InputValue("guidance", InputKind.NUMBER, "3.5"), InputValue("disable_safety_checker", InputKind.BOOLEAN, "true")))
+        assertEquals("job9", api.create(ResolvedModel(withLora, Mode.IMAGE, "test"), "SAM at the beach").id)
+        assertEquals("https://api.replicate.com/v1/models/me/lora-sam/versions/$version", calls[0].second)
+        assertEquals("https://api.replicate.com/v1/predictions", calls[1].second)
+        val sent = JSONObject(calls[1].third!!)
+        assertEquals(version, sent.getString("version"))
+        val input = sent.getJSONObject("input")
+        assertEquals("SAM at the beach", input.getString("prompt")); assertEquals("9:16", input.getString("aspect_ratio"))
+        assertEquals(3.5, input.getDouble("guidance_scale"), 0.0); assertTrue(input.getBoolean("disable_safety_checker"))
+        assertFalse(input.has("lora_weights")); assertFalse(input.has("guidance"))
+    }
     @Test fun nonTextChatOutputIsNotPresentedAsSuccess() {
         for (body in listOf("{}", """{"choices":[{"message":{"content":null}}]}""", """{"choices":[{"message":{"content":[]}}]}""")) {
             val api = ProviderApi { _, _, _, _ -> HttpReply(200, body) }

@@ -760,11 +760,16 @@ class StudioApp : Application() {
                 }
                 if (code != 200) throw UserError("The media download is unavailable (HTTP $code). The provider link may have expired.")
                 val type = c.contentType.orEmpty().substringBefore(';').lowercase()
+                // Some file servers label every file as generic data; then the file name says what it is, and the bytes are checked after download.
+                val generic = type.isEmpty() || type in listOf("application/octet-stream", "binary/octet-stream")
+                val named = URL(url).path.substringAfterLast('.', "").lowercase().let { if (it == "jpeg") "jpg" else it }
                 val ext = when {
                     mode == Mode.VIDEO && type == "video/mp4" -> "mp4"
                     mode == Mode.IMAGE && type == "image/png" -> "png"
                     mode == Mode.IMAGE && type in listOf("image/jpeg", "image/jpg") -> "jpg"
                     mode == Mode.IMAGE && type == "image/webp" -> "webp"
+                    generic && mode == Mode.IMAGE && named in listOf("png", "jpg", "webp") -> named
+                    generic && mode == Mode.VIDEO && named == "mp4" -> named
                     else -> throw UserError("The media server returned an unsupported content type.")
                 }
                 val existingBytes = folder.listFiles().orEmpty().sumOf { it.length() }
@@ -787,6 +792,7 @@ class StudioApp : Application() {
                     }
                 } }
                 if (total == 0L || (c.contentLengthLong >= 0 && total != c.contentLengthLong)) throw UserError("The media download was incomplete.")
+                if (generic && !Rules.mediaMatches(ext, temp.inputStream().use { input -> ByteArray(16).let { b -> b.copyOf(maxOf(0, input.read(b))) } })) throw UserError("The media server sent a file that is not the expected picture or video.")
                 if (!temp.renameTo(file)) throw UserError("The generated file could not be saved.")
                 try { history.savedOutput(id, position, file.name) }
                 catch (e: Exception) { file.delete(); throw e }

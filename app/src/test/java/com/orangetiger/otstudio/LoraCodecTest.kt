@@ -8,8 +8,9 @@ class LoraCodecTest {
     private val raw = """{"format":"otstudio-lora-v1","name":"Test style","reference":"owner/model/${"a".repeat(64)}","trigger_word":"TOK","scale":1.0,"base_model":"flux-dev"}"""
     private fun rejects(block: () -> Unit) { try { block(); fail("Expected UserError") } catch (_: UserError) { } }
     @Test fun importedLoraProducesNativeInferenceInputs() {
-        val lora = LoraCodec.parse(raw)
-        assertEquals("TOK", lora.trigger)
+        assertEquals("TOK", LoraCodec.parse(raw).trigger)
+        // A LoRA kept at a web address goes to FLUX dev LoRA; one kept as a Replicate model version runs that version (ProviderApiTest).
+        val lora = LoraCodec.parse(raw).copy(reference = "https://example.com/lora.safetensors")
         val s = ModelSettings(Mode.IMAGE, Protocol.REPLICATE, "https://api.replicate.com/v1", "black-forest-labs/flux-dev-lora").let { it.copy(options = it.options + listOf(InputValue("lora_weights", InputKind.TEXT, lora.reference), InputValue("lora_scale", InputKind.NUMBER, lora.scale.toString()))) }
         ProviderApi { _, url, _, body ->
             assertTrue(url.endsWith("/black-forest-labs/flux-dev-lora/predictions"))

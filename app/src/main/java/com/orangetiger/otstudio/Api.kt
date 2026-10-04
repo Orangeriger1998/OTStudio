@@ -59,6 +59,8 @@ class HttpsTransport : Transport, BinaryTransport {
 }
 
 class ProviderApi(private val transport: Transport) {
+    /** A LoRA kept as a Replicate model version: owner/model/version. */
+    private val OWN_LORA = Regex("([A-Za-z0-9][A-Za-z0-9_.-]{0,99})/([A-Za-z0-9][A-Za-z0-9_.-]{0,99})/([a-f0-9]{64})")
     private var binary: BinaryTransport? = transport as? BinaryTransport
     /** For tests and alternative transports: a separate sender for photo uploads. */
     constructor(transport: Transport, binary: BinaryTransport) : this(transport) { this.binary = binary }
@@ -134,6 +136,10 @@ class ProviderApi(private val transport: Transport) {
     fun create(model: ResolvedModel, prompt: String?): Prediction {
         val s = model.settings
         Rules.validate(s)
+        // A LoRA trained into the user's own (private) Replicate model cannot be downloaded by the public FLUX dev LoRA
+        // model, so that model's own version runs instead. It already carries the LoRA.
+        val reference = s.options.firstOrNull { it.name == "lora_weights" }?.value?.let { OWN_LORA.matchEntire(it) }
+        if (s.model == LoraCodec.MODEL && reference != null) return createOnVersion(model, prompt, reference.groupValues[1], reference.groupValues[2], reference.groupValues[3])
         val input = JSONObject()
         if (prompt != null) input.put("prompt", Rules.prompt(prompt))
         ModelOptions.validateForModel(s.model, s.schema ?: throw UserError("Load model inputs first."), s.options)
@@ -141,6 +147,31 @@ class ProviderApi(private val transport: Transport) {
         val body = JSONObject().put("input", input)
         val endpoint = "${s.baseUrl.trimEnd('/')}/models/${s.model}/predictions"
         return prediction(checked(transport.request("POST", endpoint, model.key, body.toString())))
+    }
+
+    /**
+     * Runs a trained model's [version] with the user's settings. The version's own input list decides what is sent:
+     * settings it does not take are left out, and FLUX dev LoRA's guidance becomes its guidance_scale.
+     */
+    private fun createOnVersion(model: ResolvedModel, prompt: String?, owner: String, name: String, version: String): Prediction {
+        val s = model.settings
+        val base = s.baseUrl.trimEnd('/')
+        val root = checked(transport.request("GET", "$base/models/$owner/$name/versions/$version", model.key, null))
+        val schema = SchemaCodec.parse(root.optJSONObject("openapi_schema") ?: throw UserError("Your trained model has no readable input list."))
+        val names = schema.fields.map { it.name }.toSet()
+        val options = s.options.filter { it.name != "lora_weights" }.mapNotNull { v ->
+            when {
+                v.name in names -> v
+                v.name == "guidance" && "guidance_scale" in names -> v.copy(name = "guidance_scale")
+                else -> null
+            }
+        }
+        ModelOptions.validate(schema, options, true)
+        val input = JSONObject()
+        if (prompt != null) input.put("prompt", Rules.prompt(prompt))
+        SchemaCodec.append(input, schema, options)
+        val body = JSONObject().put("version", version).put("input", input)
+        return prediction(checked(transport.request("POST", "$base/predictions", model.key, body.toString())))
     }
 
     fun loadSchema(model: ResolvedModel): InputSchema {

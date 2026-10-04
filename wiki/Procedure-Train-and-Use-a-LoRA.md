@@ -39,6 +39,8 @@ The same steps also run from a terminal with `scripts/train_lora.py`, on any com
 
 The trigger word also works elsewhere. In Image, a prompt that names a saved trigger word while Image uses another model offers **Switch and generate**. In Chat, a request that names the trigger word or the LoRA's name gives a job card on FLUX dev LoRA with that LoRA.
 
+Your LoRA stays private. OT Studio runs the trained model in your own Replicate account, so the card still says FLUX dev LoRA, and the request goes to your model.
+
 If a LoRA picture fails and the card says the safety checker stopped it, open **API CALL**, tick **disable_safety_checker**, switch it on, and tap **Apply**.
 
 ## Tips
