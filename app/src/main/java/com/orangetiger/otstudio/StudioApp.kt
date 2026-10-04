@@ -606,6 +606,22 @@ class StudioApp : Application() {
         }
     }
 
+    /** Picture inputs saved with [mode]'s model, such as a reference or a starting frame. Each goes with every request. */
+    fun attachedPictures(mode: Mode): List<String> {
+        val s = settings.get(mode)
+        val pictures = s.schema?.fields.orEmpty().filter { it.uri && it.name != "lora_weights" }.map { it.name }.toSet()
+        return s.options.filter { it.name in pictures && it.value.isNotBlank() }.map { it.name }
+    }
+
+    /** Removes every saved picture input from [mode]'s model. */
+    fun removePictures(mode: Mode) {
+        val s = settings.get(mode)
+        val names = attachedPictures(mode).toSet()
+        if (names.isEmpty()) return
+        settings.save(s.copy(options = s.options.filter { it.name !in names }), null)
+        changed()
+    }
+
     /** Sets Image to FLUX dev LoRA with [lora], keeping the model's other saved inputs. */
     fun useLora(lora: SavedLora) {
         val current = settings.get(Mode.IMAGE)

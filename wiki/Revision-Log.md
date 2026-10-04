@@ -10,6 +10,10 @@ This log lists the main changes from one version to the next. It records what a 
 
 **Any photo format.** The trainer now accepts JPG, PNG, WebP, HEIC, and most other photo files, and converts them itself, so a photo saved under the wrong file type no longer stops it. Photos it cannot use are left out and named with the reason, and the accepted formats show under Choose photos. Choosing again adds photos, and Clear starts over.
 
+## 1.2.8 (October 2026)
+
+**Attached pictures in plain sight.** When a picture is attached to the Image or Video model, a line under the model says so, with a Remove picture button. An attached picture shapes every request, so it no longer hides in API CALL.
+
 ## 1.2.7 (October 2026)
 
 **Private LoRAs work.** A LoRA trained with the OT Studio LoRA Trainer lives in a private model in your Replicate account, which the public FLUX dev LoRA model cannot read ("Failed to download tarball"). OT Studio now runs your trained model itself, with your settings, so the LoRA stays private.

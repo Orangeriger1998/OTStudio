@@ -441,4 +441,16 @@ class AndroidFlowTest {
         SchemaCodec.append(body, loaded.schema!!, listOf(InputValue("image_input", InputKind.TEXT, "https://api.replicate.com/v1/files/x")))
         assertTrue(body.get("image_input") is org.json.JSONArray)
     }
+
+    @Test fun anAttachedPictureShowsOnTheImageScreenAndCanBeRemoved() {
+        val app = RuntimeEnvironment.getApplication() as StudioApp
+        val dev = app.settings.forModel(app.settings.get(Mode.IMAGE), "black-forest-labs/flux-dev")
+        app.settings.save(dev.copy(options = dev.options + InputValue("image", InputKind.TEXT, "https://api.replicate.com/v1/files/abc")), null)
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        click(activity, "Image"); shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(views(activity.window.decorView).filterIsInstance<TextView>().any { it.text.toString() == "Picture attached. Every request starts from it." })
+        click(activity, "Remove picture"); shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(app.attachedPictures(Mode.IMAGE).isEmpty())
+        assertFalse(views(activity.window.decorView).filterIsInstance<Button>().any { it.text.toString() == "Remove picture" })
+    }
 }

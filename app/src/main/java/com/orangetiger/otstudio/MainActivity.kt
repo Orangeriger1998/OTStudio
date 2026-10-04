@@ -237,6 +237,15 @@ class MainActivity : AppCompatActivity() {
         if (localChat()) setupRow.addView(ui.tonal("Models", R.drawable.ic_memory) { drafts[mode] = prompt.text.toString(); showModels() }.apply { contentDescription = "Manage on-device models" })
         else setupRow.addView(ui.tonal("API CALL", R.drawable.ic_tune) { openCallPanel() }.apply { contentDescription = "API CALL: choose models and generation inputs" })
         setup.addView(setupRow)
+        // A saved picture shapes every request on this model, so it is shown here with a way to remove it.
+        if (mode != Mode.CHAT) app.attachedPictures(mode).takeIf { it.isNotEmpty() }?.let { names ->
+            val row = ui.row().apply { setPadding(0, dp(8), 0, 0) }
+            row.addView(ui.text("${names.joinToString(" and ") { InputLabels.title(it) }} attached. Every request starts from it.", Ui.Type.SMALL, ui.orange), ui.weight())
+            row.addView(ui.textButton("Remove picture") {
+                try { app.removePictures(mode); showChat(); snack("Picture removed. New requests start from your words alone.") } catch (e: UserError) { showError(e.message.orEmpty()) }
+            }.apply { contentDescription = "Remove the attached picture" })
+            setup.addView(row)
+        }
         statusArea = ui.column()
         root.addView(statusArea)
         scroller = ScrollView(this).apply { isFillViewport = true }
