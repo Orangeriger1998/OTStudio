@@ -15,8 +15,8 @@ if (-not (Test-Path -LiteralPath $venvPython)) {
     & $Python -m venv $Venv
     CheckExit 'Creating the virtual environment'
 }
-& $venvPython -m pip install --quiet --disable-pip-version-check pyinstaller pillow
-CheckExit 'Installing PyInstaller and Pillow'
+& $venvPython -m pip install --quiet --disable-pip-version-check pyinstaller pillow pillow-heif
+CheckExit 'Installing PyInstaller, Pillow, and pillow-heif'
 
 Push-Location (Join-Path $project 'scripts')
 try {
@@ -31,6 +31,7 @@ $dist = Join-Path $project 'outputs\trainer'
     --icon (Join-Path $project 'branding\trainer.ico') `
     --add-data ((Join-Path $project 'branding\trainer-icon.png') + ';.') `
     --paths (Join-Path $project 'scripts') `
+    --collect-all pillow_heif `
     --distpath $dist --workpath $work --specpath $work `
     (Join-Path $project 'scripts\lora_trainer_app.py')
 CheckExit 'PyInstaller'

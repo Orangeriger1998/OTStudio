@@ -17,7 +17,7 @@ Training runs on Replicate, started from a Windows computer with the **OT Studio
 
 1. From the [Releases](https://github.com/Orangeriger1998/OTStudio/releases) page, download `OT-Studio-LoRA-Trainer.exe` and open it. It needs no installation. Windows may say it protected your PC, because the program carries no publisher signature. Choose **More info**, then **Run anyway**.
 2. Paste your Replicate token and click **Check token**. The window then shows your account name. The token stays in memory and is never saved.
-3. Choose **Choose photos...** and select 10 to 20 photos.
+3. Choose **Choose photos...** and select 10 to 20 photos. JPG, PNG, WebP, HEIC, and most other photo files work, each at least 512 pixels on its short side. The trainer leaves out any photo it cannot use and names it with the reason. Choose again to add more, or tap **Clear** to start over.
 4. Type a **LoRA name**, such as `My face`. The app suggests a **trigger word**, such as `MYFACE`. Keep it, or type another word that means nothing on its own.
 5. Tick the box that agrees to the upload and the charge, then choose **Train LoRA**.
 6. The trainer creates a private model for the LoRA in your Replicate account, uploads the photos, and starts the training. Its status line counts the minutes.

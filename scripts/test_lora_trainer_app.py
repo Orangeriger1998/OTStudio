@@ -81,12 +81,26 @@ class TrainerAppTests(unittest.TestCase):
         self.app.check_token()
         self.assertTrue(self.spin(lambda: self.app.username == "tester"))
         photos = []
+        from PIL import Image
         for i in range(10):
+            # Every second photo is a PNG saved under a .jpg name, as phone apps often do; the trainer converts it.
             p = self.dir / f"p{i}.jpg"
-            p.write_bytes(b"\xff\xd8\xff" + bytes([i]) * 50)
+            Image.new("RGB", (600, 520), (i * 20, 90, 160)).save(p, "PNG" if i % 2 else "JPEG")
             photos.append(p)
-        with patch.object(app_module.filedialog, "askopenfilenames", return_value=[str(p) for p in photos]):
+        small = self.dir / "tiny.jpg"; Image.new("RGB", (300, 300)).save(small, "JPEG")
+        broken = self.dir / "broken.jpg"; broken.write_bytes(b"\xff\xd8\xff" + b"x" * 50)
+        with patch.object(app_module.filedialog, "askopenfilenames", return_value=[str(p) for p in photos + [small, broken]]), \
+                patch.object(app_module.messagebox, "showwarning") as warned:
             self.app.choose_photos()
+        self.assertEqual(10, len(self.app.photos))
+        message = warned.call_args[0][1]
+        self.assertIn("tiny.jpg is too small (300 by 300 pixels)", message)
+        self.assertIn("broken.jpg is not a photo the trainer can read", message)
+        self.assertIn("Accepted: JPG, PNG, WebP, HEIC", message)
+        # Choosing the same photos again adds nothing.
+        with patch.object(app_module.filedialog, "askopenfilenames", return_value=[str(photos[0])]):
+            self.app.choose_photos()
+        self.assertEqual(10, len(self.app.photos))
         self.app.name.set("Sam")
         self.assertIn("Tick the box", self.app.ready_problem())
         self.assertEqual([("GET", "/v1/account")], self.app.api.calls)
@@ -99,6 +113,13 @@ class TrainerAppTests(unittest.TestCase):
         library = json.loads((folder / "trained.otstudio-lora.json").read_text(encoding="utf-8"))
         self.assertEqual(("Sam", "SAMLORA", "otstudio-lora-v1"), (library["name"], library["trigger_word"], library["format"]))
         self.assertTrue((folder / "lora-weights.tar").exists())
+        # The ZIP holds plain JPEG copies, and the staging copies are gone.
+        import zipfile
+        with zipfile.ZipFile(folder / "photos.zip") as z:
+            names = z.namelist()
+            self.assertEqual([f"photo-{i:02d}.jpg" for i in range(1, 11)], names)
+            self.assertTrue(all(z.read(n).startswith(b"\xff\xd8\xff") for n in names))
+        self.assertFalse(any(p.name.startswith(".photos-") for p in self.app.jobs_dir.iterdir()))
         # The private model was created once, the training was posted once, and the token never reached a file.
         self.assertEqual(1, sum(1 for c in self.app.api.calls if c == ("POST", "/v1/models")))
         self.assertEqual(1, sum(1 for c in self.app.api.calls if c[0] == "POST" and c[1].endswith("/trainings")))

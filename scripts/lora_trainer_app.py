@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import queue
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -18,6 +19,66 @@ from tkinter import filedialog, messagebox, ttk
 import webbrowser
 
 import train_lora as train
+
+# What the trainer takes. It converts every photo to a plain JPEG itself, so a photo's file name and format do not matter.
+ACCEPTED = "JPG, PNG, WebP, HEIC, and most other photo files, each at least 512 pixels on its short side and at most 50 MB"
+MIN_SIDE = 512
+MAX_FILE = 50 * 1024 * 1024
+PHOTO_TYPES = "*.jpg *.jpeg *.png *.webp *.heic *.heif *.avif *.bmp *.gif *.tif *.tiff *.JPG *.JPEG *.PNG *.WEBP *.HEIC *.HEIF"
+
+
+def image_module():
+    """Pillow, with HEIC support when pillow-heif is present. (None, None) without Pillow."""
+    try:
+        from PIL import Image, ImageOps
+    except ImportError:
+        return None, None
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+    except Exception:
+        pass
+    return Image, ImageOps
+
+
+def screen_photo(path: Path) -> str | None:
+    """Why this photo cannot be used, in a few words, or None when it is fine."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return "could not be opened"
+    if size == 0 or size > MAX_FILE:
+        return "is empty or larger than 50 MB"
+    image, _ = image_module()
+    if image is None:
+        return None
+    try:
+        with image.open(path) as im:
+            width, height = im.size
+            im.load()
+    except Exception:
+        return "is not a photo the trainer can read"
+    if min(width, height) < MIN_SIDE:
+        return f"is too small ({width} by {height} pixels)"
+    return None
+
+
+def normalize_photos(paths: list[Path], staging: Path) -> list[Path]:
+    """Upright, RGB JPEG copies (at most 2048 pixels on the long side) for the training ZIP. Originals stay untouched."""
+    image, ops = image_module()
+    if image is None:
+        return list(paths)
+    staging.mkdir(parents=True)
+    out = []
+    for index, path in enumerate(paths, 1):
+        with image.open(path) as im:
+            upright = ops.exif_transpose(im).convert("RGB")
+        if max(upright.size) > 2048:
+            upright.thumbnail((2048, 2048), image.LANCZOS)
+        dest = staging / f"photo-{index:02d}.jpg"
+        upright.save(dest, "JPEG", quality=95)
+        out.append(dest)
+    return out
 
 TITLE = "OT Studio LoRA Trainer"
 TOKENS_URL = "https://replicate.com/account/api-tokens"
@@ -111,8 +172,11 @@ class TrainerApp:
         c2 = card("2. Photos", "Choose 10 to 20 clear photos of the same face or style, from different angles and in different light.")
         row = ttk.Frame(c2, style="Card.TFrame"); row.pack(fill="x")
         ttk.Button(row, text="Choose photos...", command=self.choose_photos).pack(side="left")
+        ttk.Button(row, text="Clear", command=self.clear_photos).pack(side="left", padx=(8, 0))
         self.photo_count = ttk.Label(row, text="No photos chosen", style="Card.TLabel")
         self.photo_count.pack(side="left", padx=10)
+        ttk.Label(c2, text=f"Accepted: {ACCEPTED}. Choosing again adds to the set, up to 20.", style="Muted.TLabel",
+                  wraplength="6i").pack(anchor="w", pady=(6, 0))
         self.strip = ttk.Frame(c2, style="Card.TFrame")
         self.strip.pack(fill="x", pady=(8, 0))
 
@@ -257,26 +321,57 @@ class TrainerApp:
         self.background(work, kind="token_error")
 
     def choose_photos(self):
-        files = filedialog.askopenfilenames(title="Choose 10 to 20 photos", filetypes=[("Photos", "*.jpg *.jpeg *.png *.webp")])
+        files = filedialog.askopenfilenames(title="Choose 10 to 20 photos", filetypes=[("Photos", PHOTO_TYPES), ("All files", "*.*")])
         if not files:
             return
-        chosen = [Path(f) for f in files]
-        if len(chosen) > 20:
-            messagebox.showwarning(TITLE, "The trainer takes at most 20 photos. The first 20 were kept.")
-            chosen = chosen[:20]
-        self.photos = chosen
-        self.photo_count.configure(text=f"{len(chosen)} photo{'s' if len(chosen) != 1 else ''} chosen" + ("" if len(chosen) >= 10 else " (10 or more work best)"))
+        known = {p.resolve() for p in self.photos}
+        kept, problems = [], []
+        for f in files:
+            path = Path(f)
+            if path.resolve() in known:
+                continue
+            reason = screen_photo(path)
+            if reason:
+                problems.append(f"{path.name} {reason}")
+            else:
+                kept.append(path); known.add(path.resolve())
+        combined = self.photos + kept
+        notes = []
+        if problems:
+            shown = problems[:12] + ([f"and {len(problems) - 12} more"] if len(problems) > 12 else [])
+            notes.append("These photos were left out:\n- " + "\n- ".join(shown) + f"\n\nAccepted: {ACCEPTED}.")
+        if len(combined) > 20:
+            notes.append(f"The trainer takes at most 20 photos, so the first 20 were kept.")
+            combined = combined[:20]
+        self.photos = combined
+        self.update_count()
         self.show_thumbs()
         self.refresh()
+        if notes:
+            notes.append(f"You have {len(combined)} photo{'s' if len(combined) != 1 else ''}. Choose more photos to add them, or train with these.")
+            messagebox.showwarning(TITLE, "\n\n".join(notes))
+
+    def clear_photos(self):
+        self.photos = []
+        self.update_count()
+        self.show_thumbs()
+        self.refresh()
+
+    def update_count(self):
+        n = len(self.photos)
+        text = "No photos chosen" if n == 0 else f"{n} photo{'s' if n != 1 else ''} chosen" + ("" if n >= 10 else " (10 or more work best)")
+        self.photo_count.configure(text=text)
 
     def show_thumbs(self):
         for child in self.strip.winfo_children():
             child.destroy()
         self.thumbs = []
+        image, _ = image_module()
         try:
-            from PIL import Image, ImageTk
+            from PIL import ImageTk
         except ImportError:
             return
+        Image = image
         for i, path in enumerate(self.photos):
             try:
                 with Image.open(path) as im:
@@ -304,7 +399,12 @@ class TrainerApp:
             self.say("Preparing the photos...")
             self.jobs_dir.mkdir(parents=True, exist_ok=True)
             destination = train.ensure_destination(self.api, self.username, slug)
-            train.prepare(photos, folder, name, destination, trigger)
+            # Plain JPEG copies, so any photo format and any file name work; the copies are removed afterwards.
+            staging = self.jobs_dir / f".photos-{folder.name}"
+            try:
+                train.prepare(normalize_photos(photos, staging), folder, name, destination, trigger)
+            finally:
+                shutil.rmtree(staging, ignore_errors=True)
             self.say("Uploading the photos and starting the training...")
             with train.job_lock(folder):
                 job = train.submit(folder, self.api, accept_charge=True, upload_photos=True)

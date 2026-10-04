@@ -4,6 +4,10 @@
 
 This log lists the main changes from one version to the next. It records what a user would notice, not every code change.
 
+## LoRA Trainer update (October 2026)
+
+**Any photo format.** The trainer now accepts JPG, PNG, WebP, HEIC, and most other photo files, and converts them itself, so a photo saved under the wrong file type no longer stops it. Photos it cannot use are left out and named with the reason, and the accepted formats show under Choose photos. Choosing again adds photos, and Clear starts over.
+
 ## 1.2.2 (October 2026)
 
 **Motion becomes a video.** With a picture chosen, a description of motion, such as "she walks toward the camera", now plans a video that starts from the picture instead of an edit. Job cards for a chosen picture offer Make a video from it instead, and a chat message whose job failed offers Try again.
