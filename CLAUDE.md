@@ -22,7 +22,9 @@ On-device chat runs llama.cpp through net.ladenthin:llama-android (Java API, sta
 
 ## Signing and releases
 
-Release signing material lives only in %USERPROFILE%\OTStudioSigning, created by scripts/build-release.ps1. Never copy it into the repository, a ZIP, a log, or chat. Every release must use that key. Raise versionCode and versionName for each release (app/build.gradle.kts), and keep the package com.orangetiger.otstudio.
+Release signing material lives only in %USERPROFILE%\OTStudioSigning, created by scripts/build-release.ps1. Never copy it into the repository, a ZIP, a log, or chat. Every release must use that key. A release signed with any other key cannot update the app, and the user would have to uninstall it and lose the saved API keys.
+
+Saved API keys must survive every update. Never rename the credentials file, the Keystore alias, the key slots, the AAD format, or the default provider origins; KeyStorageContractTest pins them, and it must never be edited to make a change pass. Never add a migration, reset, or first-run step that clears saved keys. Test each new version by installing it over the previous one (adb install -r) and checking that the saved keys still work. Raise versionCode and versionName for each release (app/build.gradle.kts), and keep the package com.orangetiger.otstudio.
 
 ## Documentation rules
 

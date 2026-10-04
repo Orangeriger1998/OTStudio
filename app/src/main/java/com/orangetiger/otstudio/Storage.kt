@@ -14,8 +14,18 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 class SettingsStore(private val context: Context) {
+    companion object {
+        // Saved API keys must survive app updates. An update keeps app data, so these names must never change:
+        // a new file name, Keystore alias, slot name, or AAD format would make every saved key unreadable.
+        // KeyStorageContractTest pins them.
+        const val KEY_FILE = "credentials"
+        const val KEY_ALIAS = "otstudio-keys-v1"
+        const val SEARCH_SLOT = "SEARCH"
+        fun slot(mode: Mode) = mode.name
+        fun aad(slot: String, origin: String) = "$slot|$origin"
+    }
     private val prefs = context.getSharedPreferences("models", Context.MODE_PRIVATE)
-    private val keys = context.getSharedPreferences("credentials", Context.MODE_PRIVATE)
+    private val keys = context.getSharedPreferences(KEY_FILE, Context.MODE_PRIVATE)
     private val profiles = ProfileStore(context)
 
     fun get(mode: Mode): ModelSettings {
@@ -71,15 +81,15 @@ class SettingsStore(private val context: Context) {
 
     private fun encryptionKey(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (store.getKey("otstudio-keys-v1", null) as? SecretKey)?.let { return it }
+        (store.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").run {
-            init(KeyGenParameterSpec.Builder("otstudio-keys-v1", KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            init(KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
             generateKey()
         }
     }
 
-    fun key(mode: Mode): String = readKey(mode.name, Rules.origin(get(mode).baseUrl))
+    fun key(mode: Mode): String = readKey(slot(mode), Rules.origin(get(mode).baseUrl))
 
     /** Reads the key in [slot], which must be bound to [origin]. Empty when none is saved. */
     private fun readKey(slot: String, origin: String): String {
@@ -93,15 +103,15 @@ class SettingsStore(private val context: Context) {
             require(parts.size == 2)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, encryptionKey(), GCMParameterSpec(128, Base64.decode(parts[0], Base64.NO_WRAP)))
-            cipher.updateAAD("$slot|$boundOrigin".toByteArray(Charsets.UTF_8))
+            cipher.updateAAD(aad(slot, origin).toByteArray(Charsets.UTF_8))
             return String(cipher.doFinal(Base64.decode(parts[1], Base64.NO_WRAP)), Charsets.UTF_8)
         } catch (_: Exception) { throw UserError("The saved API key cannot be decrypted. Re-enter it in Settings.") }
     }
 
-    fun hasKey(mode: Mode): Boolean = keys.contains(mode.name)
+    fun hasKey(mode: Mode): Boolean = keys.contains(slot(mode))
 
     // The Tavily key has its own slot, bound to Tavily's origin, so it can never reach another host.
-    private val searchSlot = "SEARCH"
+    private val searchSlot = SEARCH_SLOT
     private val searchOrigin get() = Rules.origin(WebSearch.TAVILY_ORIGIN)
     fun searchKey(): String = readKey(searchSlot, searchOrigin)
     fun hasSearchKey(): Boolean = keys.contains(searchSlot)
@@ -117,7 +127,7 @@ class SettingsStore(private val context: Context) {
         get() = prefs.getBoolean("search.allow", true)
         set(v) { prefs.edit().putBoolean("search.allow", v).apply() }
 
-    private fun writeKey(mode: Mode, value: String, origin: String) = writeKey(mode.name, value, origin)
+    private fun writeKey(mode: Mode, value: String, origin: String) = writeKey(slot(mode), value, origin)
 
     private fun writeKey(slot: String, value: String, origin: String) {
         if (value.isEmpty()) {
@@ -128,7 +138,7 @@ class SettingsStore(private val context: Context) {
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, encryptionKey())
-            cipher.updateAAD("$slot|$origin".toByteArray(Charsets.UTF_8))
+            cipher.updateAAD(aad(slot, origin).toByteArray(Charsets.UTF_8))
             val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
             val record = Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(encrypted, Base64.NO_WRAP)
             if (!keys.edit().putString(slot, record).putString("$slot.origin", origin).commit()) throw UserError("Could not save the API key.")
