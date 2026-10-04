@@ -934,14 +934,13 @@ class MainActivity : AppCompatActivity() {
         var ratio = EXPAND_RATIOS.first().first
         ui.dropdown(content, "New shape", labels, labels.first()) { label -> ratio = EXPAND_RATIOS[labels.indexOf(label)].first }
         val words = ui.field(content, "What should the new area show? (optional)", "", multiline = true, helper = "For example: more of the beach and the sky.")
-        content.addView(ui.text("One expansion with Bria Expand Image costs about 2 to 4 cents at Replicate. The result appears as a new card.", Ui.Type.SMALL, ui.muted))
+        content.addView(ui.text("One expansion with FLUX Fill dev costs about 4 cents at Replicate. The phone then puts the full-size result together, so the picture keeps its own quality. The result appears as a new card.", Ui.Type.SMALL, ui.muted))
         val dialog = MaterialAlertDialogBuilder(this).setTitle("Expand this image").setView(ScrollView(this).apply { addView(content) })
             .setPositiveButton("Expand", null).setNegativeButton("Cancel", null).create()
         dialog.setOnShowListener { dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-            val mime = when (file.extension) { "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"; else -> "image/webp" }
             try {
-                if (app.expand(e, ratio, words.text.toString(), { Triple(file.inputStream().use { readLimited(it) }, mime, file.name) })) {
-                    dialog.dismiss(); snack("Expanding with Bria. The result appears as a new card."); renderFeed()
+                if (app.expand(e, ratio, words.text.toString())) {
+                    dialog.dismiss(); snack("Expanding. The result appears as a new card."); renderFeed()
                 } else ui.layoutOf(words)?.error = "Wait for the current operation to finish."
             } catch (ex: UserError) { ui.layoutOf(words)?.error = ex.message }
         } }

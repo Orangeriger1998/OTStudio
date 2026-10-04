@@ -271,19 +271,68 @@ object ModelCatalog {
     )))
 
     /**
-     * Bria Expand Image, used only by Expand: it keeps the picture as it is, centered, and paints new picture around it
-     * until the frame has the chosen shape. Not in the model lists.
+     * FLUX.1 Fill dev, used only by Expand: it fills the white part of a mask. The app sends the picture on a larger
+     * canvas of the new shape, then rebuilds the full-size result on the phone. Not in the model lists.
      */
-    val expander = ModelPreset(Mode.IMAGE, "bria/expand-image", InputSchema(listOf(
-        text("image", note = "Image to expand.", uri = true).copy(required = true),
-        choice("aspect_ratio", EXPAND_RATIOS.map { it.first }, "16:9", note = "Shape of the expanded picture."),
-        bool("content_moderation", false, "Provider-side content moderation.")
+    val expander = ModelPreset(Mode.IMAGE, "black-forest-labs/flux-fill-dev", InputSchema(listOf(
+        text("image", note = "The canvas with the picture on it.", uri = true).copy(required = true),
+        text("mask", note = "White areas are filled; black areas are kept.", uri = true),
+        text("megapixels", note = "match_input keeps the canvas size, up to 1440 by 1440."),
+        choice("output_format", listOf("webp", "jpg", "png"), "webp"),
+        number("num_inference_steps", "28", 1.0, 50.0, note = "Denoising steps."),
+        bool("disable_safety_checker", false, "Disable the safety checker.")
     )))
 }
 
-/** The shapes Bria Expand Image accepts, with plain names. The first is the usual choice. */
+/** The shapes Expand offers, with plain names. The first is the usual choice. */
 val EXPAND_RATIOS = listOf("16:9" to "Wide", "9:16" to "Tall", "1:1" to "Square", "3:2" to "Landscape", "2:3" to "Portrait",
     "4:3" to "Landscape", "3:4" to "Portrait", "5:4" to "Landscape", "4:5" to "Portrait")
+
+/** Geometry for Expand. Plain arithmetic, so a desktop build can share it. */
+object Outpaint {
+    /** The full-size canvas of the new shape, and where the picture ([w] by [h]) sits on it. */
+    data class Layout(val canvasW: Int, val canvasH: Int, val x: Int, val y: Int, val w: Int, val h: Int)
+    /** The reduced copy sent to the model: [w] by [h], multiples of 32. The canvas fills its top-left [contentW] by [contentH]. */
+    data class Send(val w: Int, val h: Int, val contentW: Int, val contentH: Int, val scale: Double)
+
+    /** FLUX Fill dev's largest size with match_input. */
+    const val MAX_SEND = 1440
+    /** The largest result side, which keeps a phone's memory use moderate. */
+    const val MAX_CANVAS = 4096
+
+    fun ratio(text: String): Double {
+        val parts = text.split(':').mapNotNull { it.toDoubleOrNull() }
+        if (parts.size != 2 || parts.any { it <= 0 }) throw UserError("Choose one of the listed shapes.")
+        return parts[0] / parts[1]
+    }
+
+    /** Only the new area grows: a wider shape keeps the picture's full height, and a taller shape keeps its full width. */
+    fun layout(w: Int, h: Int, ratio: String): Layout {
+        if (w <= 0 || h <= 0) throw UserError("This picture could not be read.")
+        val r = ratio(ratio)
+        val s = w.toDouble() / h
+        if (Math.abs(r - s) / s < 0.02) throw UserError("The picture already has this shape. Choose another one.")
+        val cw = if (r > s) Math.round(h * r).toInt() else w
+        val ch = if (r > s) h else Math.round(w / r).toInt()
+        return Layout(cw, ch, (cw - w) / 2, (ch - h) / 2, w, h)
+    }
+
+    fun send(layout: Layout): Send {
+        // One step of 32 below the limit, so rounding up to a multiple of 32 stays inside it.
+        val scale = minOf(1.0, (MAX_SEND - 32).toDouble() / maxOf(layout.canvasW, layout.canvasH))
+        val cw = maxOf(32, Math.round(layout.canvasW * scale).toInt()); val ch = maxOf(32, Math.round(layout.canvasH * scale).toInt())
+        return Send((cw + 31) / 32 * 32, (ch + 31) / 32 * 32, cw, ch, scale)
+    }
+
+    /** The width of the blend between the original and the new area, in full-size pixels. */
+    fun feather(layout: Layout): Int = maxOf(8, minOf(layout.w, layout.h) / 12)
+
+    /** The words sent to the fill model. Its prompt is required, so plain continuation is the default. */
+    fun prompt(words: String): String {
+        val base = "Continue the scene beyond the edges of the photo, with the same lighting, colors, and camera style. Photorealistic."
+        return if (words.isBlank()) base else "${words.trim().trimEnd('.')}. $base"
+    }
+}
 
 /** An editing model: [imageField] receives the image to edit, and [price] is a plain estimate per edit. */
 data class EditModel(val model: String, val title: String, val imageField: String, val price: String)

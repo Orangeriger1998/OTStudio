@@ -56,14 +56,16 @@ OT Studio never retries a paid request on its own. When the outcome of a request
 
 ## Expand
 
-**Expand...** on a finished image gives it a new shape. The picture stays exactly as it is, centered, and Bria Expand Image (`bria/expand-image`) paints new picture around it until the frame has the chosen shape.
+**Expand...** on a finished image gives it a new shape. The picture stays exactly as it is, centered, and FLUX Fill dev (`black-forest-labs/flux-fill-dev`) paints new picture around it until the frame has the chosen shape.
+
+FLUX Fill dev works at about 1440 by 1440 pixels at most, so the phone does the rest. It sends a reduced copy of the larger canvas with a mask of the empty area. When the result comes back, the phone enlarges it to full size and matches its colors to the original. Then it lays the original pixels back on top, with a soft blend where the original meets the new area. The result keeps the original's resolution, up to 4096 pixels on the long side.
 
 | Box | What it holds | Why |
 |---|---|---|
 | Size line | The picture's size in pixels, such as "1024 by 1024 pixels" | Shows the shape the picture has now |
-| New shape | Wide 16:9, Tall 9:16, Square 1:1, and the 3:2, 2:3, 4:3, 3:4, 5:4, and 4:5 frames | These are the shapes Bria accepts |
-| What should the new area show? | An optional plain description, such as "more of the beach and the sky" | Steers what fills the new area. Left empty, Bria continues the scene on its own. |
-| Cost line | About 2 to 4 cents per expansion | Each Expand is one paid request |
+| New shape | Wide 16:9, Tall 9:16, Square 1:1, and the 3:2, 2:3, 4:3, 3:4, 5:4, and 4:5 frames | The common photo and screen shapes |
+| What should the new area show? | An optional plain description, such as "more of the beach and the sky" | Steers what fills the new area. Left empty, the model continues the scene on its own. |
+| Cost line | About 4 cents per expansion | Each Expand is one paid request |
 
-The result appears as a new card that begins with "Edit of:" and the original's prompt, so the original stays. Bria's own content moderation is switched off, like the safety checkers of the other models. In Image, the photo button offers **Expand it to a new shape** as well. In Chat, a request such as "make it wide" gives an expand job card with a **New shape** list in place of the model list.
+The result appears as a new card that begins with "Edit of:" and the original's prompt, so the original stays. The safety checker is switched off, as on the other models. In Image, the photo button offers **Expand it to a new shape** as well. In Chat, a request such as "make it wide" gives an expand job card with a **New shape** list in place of the model list.
 

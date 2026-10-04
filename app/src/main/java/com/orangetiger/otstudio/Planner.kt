@@ -170,7 +170,7 @@ Each user message starts with an app note that lists the pictures you may name i
         return out.toString()
     }
 
-    /** The Bria shape a plan's plain shape asks for. */
+    /** The Expand shape a plan's plain shape asks for. */
     fun expandRatio(shape: String): String = when (shape) { "portrait" -> "9:16"; "square" -> "1:1"; else -> "16:9" }
 
     /** The line the conversation keeps after a job, so the model knows what exists. */
@@ -266,7 +266,7 @@ object Prices {
         fun v(name: String) = options.firstOrNull { it.name == name }?.value
         val count = v("num_outputs")?.toIntOrNull() ?: 1
         ModelCatalog.edit(model)?.let { return it.price }
-        if (model == ModelCatalog.expander.model) return "about 2 to 4 cents"
+        if (model == ModelCatalog.expander.model) return "about 4 cents"
         val dollars = when (model) {
             "black-forest-labs/flux-schnell" -> 0.003 * count
             "black-forest-labs/flux-dev" -> 0.025 * count

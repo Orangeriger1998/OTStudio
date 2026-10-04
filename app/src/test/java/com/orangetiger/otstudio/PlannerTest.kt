@@ -117,9 +117,25 @@ class PlannerTest {
         assertEquals("16:9", Planner.expandRatio("landscape")); assertEquals("9:16", Planner.expandRatio("portrait")); assertEquals("1:1", Planner.expandRatio("square"))
         assertTrue(Planner.parse("""{"action":"expand","reply":"x","prompt":"more","reference":"none","shape":"square","seconds":5}""", refs, null) is PlanResult.Invalid)
         assertEquals("Your picture, expanded, tall", PlainSummary.describe(Mode.IMAGE, ModelCatalog.expander.model, listOf(InputValue("aspect_ratio", InputKind.TEXT, "9:16"))))
-        assertEquals("about 2 to 4 cents", Prices.estimate(ModelCatalog.expander.model, emptyList()))
-        assertEquals(ModelCatalog.expander, ModelCatalog.find(Mode.IMAGE, "bria/expand-image"))
-        ModelOptions.validate(ModelCatalog.expander.schema, listOf(InputValue("image", InputKind.TEXT, "https://api.replicate.com/v1/files/x"), InputValue("aspect_ratio", InputKind.TEXT, "4:5")))
-        assertThrows(UserError::class.java) { ModelOptions.validate(ModelCatalog.expander.schema, listOf(InputValue("aspect_ratio", InputKind.TEXT, "7:3"))) }
+        assertEquals("about 4 cents", Prices.estimate(ModelCatalog.expander.model, emptyList()))
+        assertEquals(ModelCatalog.expander, ModelCatalog.find(Mode.IMAGE, "black-forest-labs/flux-fill-dev"))
+        ModelOptions.validate(ModelCatalog.expander.schema, listOf(InputValue("image", InputKind.TEXT, "https://api.replicate.com/v1/files/x"),
+            InputValue("mask", InputKind.TEXT, "https://api.replicate.com/v1/files/y"), InputValue("megapixels", InputKind.TEXT, "match_input"),
+            InputValue("output_format", InputKind.TEXT, "png"), InputValue("disable_safety_checker", InputKind.BOOLEAN, "true")))
+    }
+
+    @Test fun expandGeometryKeepsThePictureWholeAndSendsASmallCanvas() {
+        // A square picture made wide keeps its full height; the new area splits evenly on both sides.
+        assertEquals(Outpaint.Layout(1778, 1000, 389, 0, 1000, 1000), Outpaint.layout(1000, 1000, "16:9"))
+        // A landscape photo made tall keeps its full width.
+        assertEquals(Outpaint.Layout(3000, 5333, 0, 1666, 3000, 2000), Outpaint.layout(3000, 2000, "9:16"))
+        assertThrows(UserError::class.java) { Outpaint.layout(1600, 900, "16:9") }
+        assertThrows(UserError::class.java) { Outpaint.layout(1000, 1000, "wide") }
+        val send = Outpaint.send(Outpaint.layout(1000, 1000, "16:9"))
+        assertTrue(send.w <= Outpaint.MAX_SEND && send.h <= Outpaint.MAX_SEND && send.w % 32 == 0 && send.h % 32 == 0)
+        assertEquals(1408, send.contentW); assertTrue(send.contentH in 790..793)
+        assertEquals(83, Outpaint.feather(Outpaint.layout(1000, 1000, "16:9")))
+        assertTrue(Outpaint.prompt("").startsWith("Continue the scene"))
+        assertTrue(Outpaint.prompt("more of the beach.").startsWith("more of the beach. Continue"))
     }
 }

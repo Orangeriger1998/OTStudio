@@ -159,7 +159,7 @@ class SettingsStore(private val context: Context) {
     }
 }
 
-class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 6) {
+class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 7) {
     companion object {
         const val LOCAL_BASE = "on-device"
         /** The base URL and model label of a photo the user added from the phone. It has no provider job. */
@@ -181,7 +181,7 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 6
             remote_id TEXT NOT NULL DEFAULT '', output_url TEXT NOT NULL DEFAULT '',
             local_file TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, request_summary TEXT NOT NULL DEFAULT '',
             parent_id INTEGER NOT NULL DEFAULT 0, plan TEXT NOT NULL DEFAULT '', job_entry INTEGER NOT NULL DEFAULT 0,
-            sources TEXT NOT NULL DEFAULT '')""")
+            sources TEXT NOT NULL DEFAULT '', finish TEXT NOT NULL DEFAULT '')""")
         db.execSQL("CREATE INDEX entries_mode_id ON entries(mode,id)")
         createDetails(db)
         createMemory(db)
@@ -195,7 +195,7 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 6
     }
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 1 || newVersion != 6) error("Unsupported history schema upgrade.")
+        if (oldVersion < 1 || newVersion != 7) error("Unsupported history schema upgrade.")
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE entries ADD COLUMN request_summary TEXT NOT NULL DEFAULT ''")
             createDetails(db)
@@ -208,6 +208,7 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 6
             db.execSQL("ALTER TABLE entries ADD COLUMN job_entry INTEGER NOT NULL DEFAULT 0")
         }
         if (oldVersion < 6) db.execSQL("ALTER TABLE entries ADD COLUMN sources TEXT NOT NULL DEFAULT ''")
+        if (oldVersion < 7) db.execSQL("ALTER TABLE entries ADD COLUMN finish TEXT NOT NULL DEFAULT ''")
     }
 
     private fun unsavedChat(prompt: String, model: String, baseUrl: String): Long {
@@ -304,6 +305,14 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 6
         return readableDatabase.query("media_outputs", arrayOf("entry_id", "position", "url", "local_file"), "entry_id IN (${ids.joinToString(",") { "?" }})", ids.map { it.toString() }.toTypedArray(), null, null, "entry_id,position").use { c ->
             buildList { while (c.moveToNext()) add(c.getLong(0) to MediaOutput(c.getInt(1), c.getString(2), c.getString(3))) }.groupBy({ it.first }, { it.second })
         }
+    }
+
+    /** Work the phone still does after a job's output arrives, such as "expand|<source id>|<shape>". Empty when none. */
+    @Synchronized fun finishOf(id: Long): String = readableDatabase.query("entries", arrayOf("finish"), "id = ?", arrayOf(id.toString()), null, null, null).use { c ->
+        if (c.moveToFirst()) c.getString(0) else ""
+    }
+    @Synchronized fun setFinish(id: Long, value: String) {
+        writableDatabase.update("entries", ContentValues().apply { put("finish", value) }, "id = ?", arrayOf(id.toString()))
     }
 
     @Synchronized fun savedOutput(id: Long, position: Int, file: String) {

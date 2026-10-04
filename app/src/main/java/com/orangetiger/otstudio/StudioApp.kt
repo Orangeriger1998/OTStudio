@@ -399,10 +399,7 @@ class StudioApp : Application() {
 
     /** Reads a finished image's first output from private storage: bytes, MIME type, and file name. */
     fun mediaBytes(entry: Entry): Triple<ByteArray, String, String> {
-        val name = history.outputs(listOf(entry.id))[entry.id]?.firstOrNull { it.localFile.isNotEmpty() }?.localFile ?: entry.localFile
-        val folder = File(filesDir, "media")
-        val file = File(folder, name)
-        if (name.isEmpty() || file.parentFile?.canonicalPath != folder.canonicalPath || !file.isFile) throw UserError("The picture's file is missing on this phone.")
+        val file = mediaFile(entry)
         if (file.length() > Rules.MAX_UPLOAD_BYTES) throw UserError("Pictures must be smaller than 20 MB to upload.")
         val mime = when (file.extension) { "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"; else -> "image/webp" }
         return Triple(file.readBytes(), mime, file.name)
@@ -429,7 +426,7 @@ class StudioApp : Application() {
      * is a placeholder here; the real upload happens on Generate.
      */
     fun planSettings(plan: JobPlan, modelId: String, ratio: String? = null): Pair<ModelSettings, List<String>> {
-        if (plan.action == "expand") return expandSettings(settings.get(Mode.IMAGE), ratio ?: Planner.expandRatio(plan.shape), uploadCheck) to emptyList()
+        if (plan.action == "expand") return expandSettings(settings.get(Mode.IMAGE), uploadCheck, uploadCheck) to emptyList()
         val mode = if (plan.action == "video") Mode.VIDEO else Mode.IMAGE
         val current = settings.get(mode)
         // A plan attaches only the picture it names. Pictures saved in a model's profile (a reference, frames, a clip) stay out.
@@ -456,7 +453,7 @@ class StudioApp : Application() {
         val source = plan.reference?.let { history.entry(it) }
         if (plan.reference != null && source == null) throw UserError("The picture this plan uses is gone.")
         if (plan.action == "edit") return edit(source ?: throw UserError("This edit has no picture."), text, modelId, { mediaBytes(source) }, chat.id)
-        if (plan.action == "expand") return expand(source ?: throw UserError("This plan has no picture."), ratio ?: Planner.expandRatio(plan.shape), text, { mediaBytes(source) }, chat.id)
+        if (plan.action == "expand") return expand(source ?: throw UserError("This plan has no picture."), ratio ?: Planner.expandRatio(plan.shape), text, chat.id)
         val mode = if (plan.action == "video") Mode.VIDEO else Mode.IMAGE
         val (planned, _) = planSettings(plan, modelId)
         val resolved = Rules.resolve(mode, { if (it == mode) planned else settings.get(it) }, settings::key)
@@ -524,35 +521,50 @@ class StudioApp : Application() {
         return true
     }
 
-    /** Bria Expand Image settings: the picture, the shape, and moderation off like the other safety switches. What to add goes as the prompt. */
-    private fun expandSettings(base: ModelSettings, ratio: String, url: String): ModelSettings {
+    /** Fill settings: canvas and mask, the canvas's own size, PNG out, and the safety checker off like the other models. */
+    private fun expandSettings(base: ModelSettings, imageUrl: String, maskUrl: String): ModelSettings {
         val preset = ModelCatalog.expander
-        if (ratio !in EXPAND_RATIOS.map { it.first }) throw UserError("Choose one of the listed shapes.")
-        val options = listOf(InputValue("image", InputKind.TEXT, url), InputValue("aspect_ratio", InputKind.TEXT, ratio), InputValue("content_moderation", InputKind.BOOLEAN, "false"))
-        val s = base.copy(model = preset.model, schema = preset.schema, options = options)
+        val options = listOf(InputValue("image", InputKind.TEXT, imageUrl), InputValue("mask", InputKind.TEXT, maskUrl),
+            InputValue("megapixels", InputKind.TEXT, "match_input"), InputValue("output_format", InputKind.TEXT, "png"),
+            InputValue("num_inference_steps", InputKind.INTEGER, "40"), InputValue("disable_safety_checker", InputKind.BOOLEAN, "true"))
         ModelOptions.validate(preset.schema, options)
-        return s
+        return base.copy(model = preset.model, schema = preset.schema, options = options)
+    }
+
+    /** A finished picture's file in private storage. */
+    private fun mediaFile(entry: Entry): File {
+        val name = history.outputs(listOf(entry.id))[entry.id]?.firstOrNull { it.localFile.isNotEmpty() }?.localFile ?: entry.localFile
+        val folder = File(filesDir, "media")
+        val file = File(folder, name)
+        if (name.isEmpty() || file.parentFile?.canonicalPath != folder.canonicalPath || !file.isFile) throw UserError("The picture's file is missing on this phone.")
+        return file
     }
 
     /**
-     * Expands a saved image to [ratio] with Bria Expand Image: the picture stays as it is, and new picture fills the rest.
+     * Expands a saved image to [ratio] with FLUX Fill dev: the picture stays as it is, and new picture fills the rest.
      * Uploads the image, then starts one prediction that appears as a new Image entry. Returns false while busy.
      */
-    fun expand(source: Entry, ratio: String, prompt: String, read: () -> Triple<ByteArray, String, String>, chatId: Long = 0): Boolean {
+    fun expand(source: Entry, ratio: String, prompt: String, chatId: Long = 0): Boolean {
         if (busy.get()) return false
+        if (ratio !in EXPAND_RATIOS.map { it.first }) throw UserError("Choose one of the listed shapes.")
         if (history.list(pendingOnly = true).any { it.mode != Mode.CHAT }) throw UserError("Finish or cancel the pending media job before starting another.")
         val image = settings.resolve(Mode.IMAGE)
         val words = if (prompt.isBlank()) "" else Rules.prompt(prompt)
-        expandSettings(image.settings, ratio, uploadCheck)
+        val file = mediaFile(source)
+        // Fails here, before any upload, when the picture already has this shape.
+        Outpainter.check(file, ratio)
+        expandSettings(image.settings, uploadCheck, uploadCheck)
         run {
-            val (bytes, mime, name) = read()
-            val url = api.uploadFile(image.settings.baseUrl, image.key, name, mime, bytes)
-            val model = image.copy(settings = expandSettings(image.settings, ratio, url))
+            val (canvas, mask) = Outpainter.prepare(file, ratio)
+            val imageUrl = api.uploadFile(image.settings.baseUrl, image.key, "expand-canvas.jpg", "image/jpeg", canvas)
+            val maskUrl = api.uploadFile(image.settings.baseUrl, image.key, "expand-mask.png", "image/png", mask)
+            val model = image.copy(settings = expandSettings(image.settings, imageUrl, maskUrl))
             val label = EXPAND_RATIOS.first { it.first == ratio }.let { "${it.second} ${it.first}" }
             val id = history.insert(Mode.IMAGE, Rules.prompt("Expanded to $label${if (words.isEmpty()) "" else ": $words"}".take(Rules.MAX_PROMPT)), model, parentId = source.id)
+            history.setFinish(id, "expand|${source.id}|$ratio")
             if (chatId != 0L) history.setJob(chatId, id)
             changed()
-            try { applyPrediction(id, Mode.IMAGE, api.create(model, words.ifEmpty { null })) }
+            try { applyPrediction(id, Mode.IMAGE, api.create(model, Outpaint.prompt(words))) }
             catch (e: ProviderRejected) { history.update(id, "failed", "${e.message} No job was created.") }
             catch (e: Exception) { history.update(id, "uncertain", "${friendly(e)} No job ID was saved. The provider may have accepted the request; inspect its dashboard before retrying.") }
         }
@@ -652,8 +664,29 @@ class StudioApp : Application() {
         outputs.forEach { output ->
             if (output.localFile.isEmpty() || !File(File(filesDir, "media"), output.localFile).exists()) download(id, mode, output.url, output.position)
         }
+        val note = finishExpand(id)
         val first = history.outputs(listOf(id))[id]?.firstOrNull()?.localFile.orEmpty()
-        history.update(id, "succeeded", "${outputs.size} output(s) ready to preview or save.", localFile = first)
+        history.update(id, "succeeded", note ?: "${outputs.size} output(s) ready to preview or save.", localFile = first)
+    }
+
+    /** For an Expand job: rebuilds the result at full size with the original pixels in the middle. Runs once. Returns a note, or null. */
+    private fun finishExpand(id: Long): String? {
+        val parts = history.finishOf(id).split('|')
+        if (parts.size != 3 || parts[0] != "expand") return null
+        val folder = File(filesDir, "media")
+        val output = history.outputs(listOf(id))[id]?.firstOrNull() ?: return null
+        val made = File(folder, output.localFile)
+        try {
+            val source = history.entry(parts[1].toLongOrNull() ?: 0) ?: throw UserError("The original picture is gone.")
+            val out = File(folder, "${UUID.randomUUID()}.jpg")
+            Outpainter.finish(mediaFile(source), parts[2], made, out)
+            history.savedOutput(id, output.position, out.name)
+            made.delete()
+            return "Ready at full size. The original picture sits unchanged in the middle."
+        } catch (e: Throwable) {
+            // The model's own, smaller picture stays; nothing is charged again.
+            return "The full-size version could not be made (${(e as? UserError)?.message ?: e.javaClass.simpleName}). This is the model's smaller picture."
+        } finally { history.setFinish(id, "") }
     }
 
     private fun download(id: Long, mode: Mode, rawUrl: String, position: Int) {

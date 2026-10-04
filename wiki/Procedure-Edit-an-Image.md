@@ -24,7 +24,7 @@ Editing keeps a picture's own shape. To make a picture wider, taller, or square 
 1. On the picture's card, tap **Expand...**.
 2. Under **New shape**, choose a shape, such as **Wide 16:9**.
 3. If you like, say what the new area should show, such as `more of the beach and the sky`.
-4. Tap **Expand**. The result, about 2 to 4 cents, appears as a new card. The original picture sits unchanged in its middle.
+4. Tap **Expand**. The result, about 4 cents, appears as a new card at the original's full resolution. The original picture sits unchanged in its middle.
 
 In Chat, choose the picture with **Talk about this** or the photo button, then write `make it wide` or `make it 9:16`. The job card lets you pick the exact shape before Generate.
 

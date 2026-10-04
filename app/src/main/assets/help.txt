@@ -20,7 +20,7 @@ Ask for a picture, an edit, or a video in plain words, such as "make a picture o
 
 # Change a picture's shape
 
-Tap Expand on a finished image to give it a new shape, such as wide 16:9, tall 9:16, or square. The picture itself stays exactly as it is, in the middle, and Bria Expand Image paints new picture around it. You can say what the new area should show, such as "more of the beach and the sky". Each expansion costs about 2 to 4 cents. In Chat, ask for it in words, such as "make it wide".
+Tap Expand on a finished image to give it a new shape, such as wide 16:9, tall 9:16, or square. The picture itself stays exactly as it is, in the middle, at its full resolution, and FLUX Fill dev paints new picture around it. You can say what the new area should show, such as "more of the beach and the sky". Each expansion costs about 4 cents. In Chat, ask for it in words, such as "make it wide".
 
 # Your own photos
 
