@@ -72,6 +72,7 @@ class MainActivity : AppCompatActivity() {
     // Job cards keep the user's prompt edits and model choice across redraws of the feed.
     private val cardPrompts = mutableMapOf<Long, String>()
     private val cardModels = mutableMapOf<Long, String>()
+    private val cardRatios = mutableMapOf<Long, String>()
     private lateinit var selectionRow: LinearLayout
     private var lastSent = ""
     private val drafts = mutableMapOf<Mode, String>()
@@ -519,7 +520,7 @@ class MainActivity : AppCompatActivity() {
         val title = ui.bold(ui.text("", Ui.Type.SUBTITLE))
         card.addView(title)
         plan.reference?.let { id -> app.history.entry(id)?.let { ref ->
-            card.addView(ui.text("${if (plan.action == "edit") "Edits" else "Starts from"} the picture: ${app.describe(ref).take(120)}", Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(2), 0, dp(6)) })
+            card.addView(ui.text("${when (plan.action) { "edit" -> "Edits"; "expand" -> "Expands"; else -> "Starts from" }} the picture: ${app.describe(ref).take(120)}", Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(2), 0, dp(6)) })
             if (plan.action == "video") card.addView(ui.textButton("Without the picture") { cardModels.remove(e.id); app.dropPlanPicture(e, plan) }, LinearLayout.LayoutParams(-2, -2))
         } }
         // A small chat model sometimes plans a brand-new picture when the user meant to change the chosen one.
@@ -527,7 +528,7 @@ class MainActivity : AppCompatActivity() {
             cardModels.remove(e.id); cardPrompts.remove(e.id); ownWords(e, "edit")
         }, LinearLayout.LayoutParams(-2, -2))
         ui.gap(card, 6)
-        val field = ui.field(card, if (plan.action == "edit") "Instruction" else "Prompt the model receives", cardPrompts[e.id] ?: plan.prompt, multiline = true)
+        val field = ui.field(card, when (plan.action) { "edit" -> "Instruction"; "expand" -> "What the new area should show"; else -> "Prompt the model receives" }, cardPrompts[e.id] ?: plan.prompt, multiline = true)
         field.maxLines = 8
         field.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) { }
@@ -537,19 +538,23 @@ class MainActivity : AppCompatActivity() {
         val details = ui.text("", Ui.Type.SMALL, ui.muted)
         fun refresh() {
             try {
-                val (s, notes) = app.planSettings(plan, modelId)
+                val (s, notes) = app.planSettings(plan, modelId, cardRatios[e.id])
                 title.text = PlainSummary.describe(if (plan.action == "video") Mode.VIDEO else Mode.IMAGE, s.model, s.options)
                 details.text = (listOf("Model: ${s.model}", "Likely cost: ${Prices.estimate(s.model, s.options) ?: "see the model's page at Replicate"}") + notes).joinToString("\n")
             } catch (ex: UserError) { title.text = "This plan cannot run with this model"; details.text = ex.message }
         }
-        if (models.isNotEmpty()) ui.dropdown(card, "Model", models, modelId) { modelId = it; cardModels[e.id] = it; refresh() }
+        if (plan.action == "expand") {
+            val labels = EXPAND_RATIOS.map { "${it.second} ${it.first}" }
+            val current = cardRatios[e.id] ?: Planner.expandRatio(plan.shape)
+            ui.dropdown(card, "New shape", labels, labels[EXPAND_RATIOS.indexOfFirst { it.first == current }]) { label -> cardRatios[e.id] = EXPAND_RATIOS[labels.indexOf(label)].first; refresh() }
+        } else if (models.isNotEmpty()) ui.dropdown(card, "Model", models, modelId) { modelId = it; cardModels[e.id] = it; refresh() }
         card.addView(details)
         refresh()
         val busy = app.isBusy()
         card.addView(actionRow(
             ui.filled("Generate", R.drawable.ic_send) {
                 try {
-                    if (app.runPlan(e, plan, field.text.toString(), modelId)) { cardPrompts.remove(e.id); cardModels.remove(e.id); snack("Started. The result appears under this plan."); renderFeed() }
+                    if (app.runPlan(e, plan, field.text.toString(), modelId, cardRatios[e.id])) { cardPrompts.remove(e.id); cardModels.remove(e.id); cardRatios.remove(e.id); snack("Started. The result appears under this plan."); renderFeed() }
                 } catch (ex: UserError) { showError(ex.message.orEmpty()) }
             }.apply { isEnabled = !busy },
             ui.textButton("Cancel") { app.cancelPlan(e) }
@@ -595,6 +600,7 @@ class MainActivity : AppCompatActivity() {
                 if (e.mode == Mode.IMAGE && mode == Mode.CHAT) ui.textButton("Talk about this", R.drawable.ic_chat) { app.selectedImage = e.id; renderFeed(); prompt.requestFocus() } else null,
                 if (e.mode == Mode.IMAGE) ui.textButton("Edit...", R.drawable.ic_edit) { editImage(e, file) } else null,
                 if (e.mode == Mode.IMAGE) ui.textButton("Use as...", R.drawable.ic_auto_awesome) { useAs(file) } else null,
+                if (e.mode == Mode.IMAGE) ui.textButton("Expand...", R.drawable.ic_open_in_full) { expandImage(e, file) } else null,
                 if (e.mode == Mode.IMAGE) ui.textButton("Upscale 2x", R.drawable.ic_zoom_in) { upscale(e, file) } else null
             ))
         }
@@ -864,18 +870,18 @@ class MainActivity : AppCompatActivity() {
                 snack(if (app.createFromChat) "Photo added. Say what to do with it, such as make it black and white or turn it into a video."
                     else "Photo added to the Image feed. Turn on Create from chat in Settings to edit or animate it from here.")
             }
-            Mode.IMAGE -> { scrollToEnd = true; renderFeed(); useAs(file, listOf(MediaRole.REFERENCE), "Use this photo to...") { editImage(entry, file) } }
+            Mode.IMAGE -> { scrollToEnd = true; renderFeed(); useAs(file, listOf(MediaRole.REFERENCE), "Use this photo to...", listOf("Edit it" to { editImage(entry, file) }, "Expand it to a new shape" to { expandImage(entry, file) })) }
             Mode.VIDEO -> { renderFeed(); useAs(file, listOf(MediaRole.START_FRAME, MediaRole.END_FRAME), "Use this photo as...") }
         }
     }
 
     /** Uploads a generated image and puts it into the chosen model input (reference, starting frame, or ending frame). */
-    private fun useAs(file: File, roles: List<MediaRole> = MediaRole.entries, title: String = "Use this image as...", edit: (() -> Unit)? = null) {
+    private fun useAs(file: File, roles: List<MediaRole> = MediaRole.entries, title: String = "Use this image as...", extras: List<Pair<String, () -> Unit>> = emptyList()) {
         if (!file.exists()) { showError("The private media file is missing."); return }
-        val labels = listOfNotNull(if (edit != null) "Edit it" else null) + roles.map { it.title }
+        val labels = extras.map { it.first } + roles.map { it.title }
         MaterialAlertDialogBuilder(this).setTitle(title).setItems(labels.toTypedArray()) { _, which ->
-            if (edit != null && which == 0) { edit(); return@setItems }
-            val role = roles[which - if (edit != null) 1 else 0]
+            if (which < extras.size) { extras[which].second(); return@setItems }
+            val role = roles[which - extras.size]
             val mime = when (file.extension) { "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"; else -> "image/webp" }
             app.uploadPhoto(role.mode, { Triple(file.inputStream().use { readLimited(it) }, mime, file.name) }) { url, error ->
                 if (isFinishing || isDestroyed) return@uploadPhoto
@@ -913,6 +919,31 @@ class MainActivity : AppCompatActivity() {
                     dialog.dismiss(); snack("Editing with ${chosen.title}. The result appears as a new card."); renderFeed()
                 } else ui.layoutOf(instruction)?.error = "Wait for the current operation to finish."
             } catch (ex: UserError) { ui.layoutOf(instruction)?.error = ex.message }
+        } }
+        dialog.show()
+    }
+
+    /** Asks for a new shape and, optionally, what the new area should show. The Expand tap starts one paid request. */
+    private fun expandImage(e: Entry, file: File) {
+        if (!file.exists()) { showError("The private media file is missing."); return }
+        val content = ui.column(20)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        if (bounds.outWidth > 0) content.addView(ui.text("This picture is ${bounds.outWidth} by ${bounds.outHeight} pixels. It stays as it is, in the middle, and new picture fills the rest of the new shape.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, dp(8)) })
+        val labels = EXPAND_RATIOS.map { "${it.second} ${it.first}" }
+        var ratio = EXPAND_RATIOS.first().first
+        ui.dropdown(content, "New shape", labels, labels.first()) { label -> ratio = EXPAND_RATIOS[labels.indexOf(label)].first }
+        val words = ui.field(content, "What should the new area show? (optional)", "", multiline = true, helper = "For example: more of the beach and the sky.")
+        content.addView(ui.text("One expansion with Bria Expand Image costs about 2 to 4 cents at Replicate. The result appears as a new card.", Ui.Type.SMALL, ui.muted))
+        val dialog = MaterialAlertDialogBuilder(this).setTitle("Expand this image").setView(ScrollView(this).apply { addView(content) })
+            .setPositiveButton("Expand", null).setNegativeButton("Cancel", null).create()
+        dialog.setOnShowListener { dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val mime = when (file.extension) { "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"; else -> "image/webp" }
+            try {
+                if (app.expand(e, ratio, words.text.toString(), { Triple(file.inputStream().use { readLimited(it) }, mime, file.name) })) {
+                    dialog.dismiss(); snack("Expanding with Bria. The result appears as a new card."); renderFeed()
+                } else ui.layoutOf(words)?.error = "Wait for the current operation to finish."
+            } catch (ex: UserError) { ui.layoutOf(words)?.error = ex.message }
         } }
         dialog.show()
     }

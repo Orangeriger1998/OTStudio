@@ -28,6 +28,8 @@ After Generate, the result card appears in place of the job card, under the plan
 
 ## When no plan comes back
 
+An expand plan, from a request such as "make it wide", shows "Expands the picture:" and a **New shape** list instead of the model list. Its text box holds what the new area should show.
+
 Sometimes the chat model returns no usable plan. It may also answer in words when the user wanted a picture. A card then says so plainly and offers Picture from my words and Video from my words. With a chosen picture, it offers Edit the picture with my words first. Under any answer, Use my words offers the same choices. When a picture is chosen and the plan makes a new picture instead, the job card offers Edit the chosen picture instead. Either one creates a job card with the user's message exactly as typed, so a missing plan is never a dead end.
 
 ## Pictures the chat can refer to

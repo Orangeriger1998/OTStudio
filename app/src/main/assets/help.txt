@@ -18,6 +18,10 @@ Chat can run on the phone itself, with no key and no cost per message. Open Sett
 
 Ask for a picture, an edit, or a video in plain words, such as "make a picture of a red fox in the snow". The reply carries a job card with the exact prompt, the model, and the likely cost. Change the prompt if you like, then tap Generate. Nothing is paid for until you do. The result appears in the chat, and the next request can build on it, such as "turn that picture into a video". If the chat answers in words instead, Use my words makes a card from your own message.
 
+# Change a picture's shape
+
+Tap Expand on a finished image to give it a new shape, such as wide 16:9, tall 9:16, or square. The picture itself stays exactly as it is, in the middle, and Bria Expand Image paints new picture around it. You can say what the new area should show, such as "more of the beach and the sky". Each expansion costs about 2 to 4 cents. In Chat, ask for it in words, such as "make it wide".
+
 # Your own photos
 
 The photo button at the left of the message bar adds a photo from your phone. It works in all three modes, and the photo also joins the Image feed.

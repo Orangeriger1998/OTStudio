@@ -260,7 +260,8 @@ object ModelCatalog {
         )))
     )
     val presets: List<ModelPreset> = basePresets + editPresets
-    fun find(mode: Mode, model: String): ModelPreset? = presets.firstOrNull { it.mode == mode && it.model == model } ?: upscaler.takeIf { mode == it.mode && model == it.model }
+    fun find(mode: Mode, model: String): ModelPreset? = presets.firstOrNull { it.mode == mode && it.model == model }
+        ?: listOf(upscaler, expander).firstOrNull { mode == it.mode && model == it.model }
 
     /** Real-ESRGAN upscaler, used only by the Upscale action (it takes an image, not a prompt), so it is not in the model lists. */
     val upscaler = ModelPreset(Mode.IMAGE, "nightmareai/real-esrgan", InputSchema(listOf(
@@ -268,7 +269,21 @@ object ModelCatalog {
         number("scale", "4", 0.0, 10.0, false, "Factor to scale the image by."),
         bool("face_enhance", false, "Run GFPGAN face enhancement.")
     )))
+
+    /**
+     * Bria Expand Image, used only by Expand: it keeps the picture as it is, centered, and paints new picture around it
+     * until the frame has the chosen shape. Not in the model lists.
+     */
+    val expander = ModelPreset(Mode.IMAGE, "bria/expand-image", InputSchema(listOf(
+        text("image", note = "Image to expand.", uri = true).copy(required = true),
+        choice("aspect_ratio", EXPAND_RATIOS.map { it.first }, "16:9", note = "Shape of the expanded picture."),
+        bool("content_moderation", false, "Provider-side content moderation.")
+    )))
 }
+
+/** The shapes Bria Expand Image accepts, with plain names. The first is the usual choice. */
+val EXPAND_RATIOS = listOf("16:9" to "Wide", "9:16" to "Tall", "1:1" to "Square", "3:2" to "Landscape", "2:3" to "Portrait",
+    "4:3" to "Landscape", "3:4" to "Portrait", "5:4" to "Landscape", "4:5" to "Portrait")
 
 /** An editing model: [imageField] receives the image to edit, and [price] is a plain estimate per edit. */
 data class EditModel(val model: String, val title: String, val imageField: String, val price: String)

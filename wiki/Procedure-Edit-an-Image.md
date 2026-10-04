@@ -17,6 +17,17 @@ This procedure changes one thing in a finished picture, such as a color or an ob
 5. Tap **Edit**. The app uploads the picture to your Replicate account and starts the edit.
 6. The edited picture appears as a new card that begins with **Edit of:** and the original's prompt. Save or share it as usual.
 
+## Change the shape of a picture
+
+Editing keeps a picture's own shape. To make a picture wider, taller, or square without changing what is in it, expand it instead.
+
+1. On the picture's card, tap **Expand...**.
+2. Under **New shape**, choose a shape, such as **Wide 16:9**.
+3. If you like, say what the new area should show, such as `more of the beach and the sky`.
+4. Tap **Expand**. The result, about 2 to 4 cents, appears as a new card. The original picture sits unchanged in its middle.
+
+In Chat, choose the picture with **Talk about this** or the photo button, then write `make it wide` or `make it 9:16`. The job card lets you pick the exact shape before Generate.
+
 ## Edit a photo from your phone
 
 1. On the main screen, tap **Image**, then the photo button at the left of the message bar.

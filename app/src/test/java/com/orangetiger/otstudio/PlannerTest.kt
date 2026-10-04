@@ -108,4 +108,18 @@ class PlannerTest {
         assertEquals(plan, JobPlan.fromJson(plan.toJson()))
         assertNull(JobPlan.fromJson("{broken"))
     }
+
+    @Test fun anExpansionKeepsThePictureAndPicksAShape() {
+        val refs = listOf(ImageRef(21, "a woman on a beach"))
+        assertTrue(Planner.schemaText(refs).contains("\"expand\""))
+        val wide = Planner.parse("""{"action":"expand","reply":"Widening it.","prompt":"more of the beach","reference":"image_21","shape":"default","seconds":5}""", refs, null)
+        assertEquals(JobPlan("expand", "Widening it.", "more of the beach", 21, "landscape"), (wide as PlanResult.Ok).plan)
+        assertEquals("16:9", Planner.expandRatio("landscape")); assertEquals("9:16", Planner.expandRatio("portrait")); assertEquals("1:1", Planner.expandRatio("square"))
+        assertTrue(Planner.parse("""{"action":"expand","reply":"x","prompt":"more","reference":"none","shape":"square","seconds":5}""", refs, null) is PlanResult.Invalid)
+        assertEquals("Your picture, expanded, tall", PlainSummary.describe(Mode.IMAGE, ModelCatalog.expander.model, listOf(InputValue("aspect_ratio", InputKind.TEXT, "9:16"))))
+        assertEquals("about 2 to 4 cents", Prices.estimate(ModelCatalog.expander.model, emptyList()))
+        assertEquals(ModelCatalog.expander, ModelCatalog.find(Mode.IMAGE, "bria/expand-image"))
+        ModelOptions.validate(ModelCatalog.expander.schema, listOf(InputValue("image", InputKind.TEXT, "https://api.replicate.com/v1/files/x"), InputValue("aspect_ratio", InputKind.TEXT, "4:5")))
+        assertThrows(UserError::class.java) { ModelOptions.validate(ModelCatalog.expander.schema, listOf(InputValue("aspect_ratio", InputKind.TEXT, "7:3"))) }
+    }
 }

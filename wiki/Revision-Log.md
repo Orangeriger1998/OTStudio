@@ -4,6 +4,10 @@
 
 This log lists the main changes from one version to the next. It records what a user would notice, not every code change.
 
+## 1.2.0 (October 2026)
+
+**Expand a picture to a new shape.** Image cards gained Expand..., which turns a picture into wide 16:9, tall 9:16, square, or six other shapes. The picture stays exactly as it is, and Bria Expand Image adds new picture around it. The photo button in Image offers it, and Chat plans it from requests such as "make it wide".
+
 ## 1.1.3 (October 2026)
 
 **Chat on the phone answers again after a restart.** In 1.0.0 and 1.1.0, the first message after the on-device model loaded could fail with "The model returned no text". That is fixed.

@@ -38,7 +38,7 @@ sealed class PlanResult {
 }
 
 object Planner {
-    val MEDIA_ACTIONS = listOf("image", "edit", "video")
+    val MEDIA_ACTIONS = listOf("image", "edit", "expand", "video")
     val SHAPES = listOf("default", "square", "portrait", "landscape")
     const val MAX_IMAGES = 6
     const val REPLY_TOKENS = 1024
@@ -57,6 +57,7 @@ Answer every message with one JSON object and nothing else.
 - "action": "answer" for questions and conversation. Put the whole reply in "reply".
 - "action": "image" when the user wants a new picture. Write "prompt" as a complete, vivid description for an image model: subject, setting, style, lighting, and framing. The image model remembers nothing, so describe everything again each time.
 - "action": "edit" when the user wants to change an existing picture. Write "prompt" as one short, direct instruction, such as "change the border to black". Set "reference" to that picture.
+- "action": "expand" when the user wants the same picture in another shape, such as wider, taller, square, or 16:9, with more of the scene added around it. Set "reference" to that picture and "shape" to "landscape", "portrait", or "square". Write "prompt" as what the added area should show, such as "more of the beach and the sky", or "more of the same scene".
 - "action": "video" when the user wants a moving clip. Write "prompt" as the scene and its motion. Set "reference" to a picture to start from it, or "none". Set "seconds" from 2 to 15, normally 5.
 - "shape": "square", "portrait", or "landscape" when the user asks for one, otherwise "default".
 - For image, edit, and video, "reply" is one short sentence saying what the plan does. Put the details in "prompt", not in "reply".
@@ -77,7 +78,7 @@ Each user message starts with an app note that lists the pictures you may name i
             append("Pictures in this conversation, newest first. \"last_image\" means the first one.")
             if (selected != null) append(" The user selected ${refName(selected)} to work on, so \"that picture\", \"it\", \"this\", \"her\", and \"him\" mean it." +
                 " A request to change it, such as \"make it black and white\", \"make her jacket red\", or \"add a hat\", is an \"edit\" with \"reference\" set to ${refName(selected)}, never a new \"image\"." +
-                " A request to make it move is a \"video\" from it. You cannot see the picture, so never describe what is in it.")
+                " A request for the same picture in another shape (wider, taller, square) is an \"expand\" of it. A request to make it move is a \"video\" from it. You cannot see the picture, so never describe what is in it.")
             images.take(MAX_IMAGES).forEach { append("\n").append(refName(it.id)).append(": ").append(it.prompt.take(200).replace('\n', ' ')) }
         } else append("No pictures exist yet, so edits and videos from a picture are not possible. Use \"reference\": \"none\".")
     }
@@ -138,7 +139,9 @@ Each user message starts with an app note that lists the pictures you may name i
             else -> return PlanResult.Invalid("The plan pointed at an unknown picture.", reply)
         }
         if (action == "edit" && reference == null) return PlanResult.Invalid("An edit needs a picture to work on, and none was found.", reply)
-        val shape = o.optString("shape", "default").takeIf { it in SHAPES } ?: "default"
+        if (action == "expand" && reference == null) return PlanResult.Invalid("Expanding needs a picture to work on, and none was found.", reply)
+        // An expansion always changes the shape; wide is the usual wish when the model names none.
+        val shape = (o.optString("shape", "default").takeIf { it in SHAPES } ?: "default").let { if (action == "expand" && it == "default") "landscape" else it }
         val seconds = if (action == "video") o.optInt("seconds", 5).takeIf { it in 2..15 } ?: 5 else null
         // A plan's reply is one line above the card; small models sometimes repeat the whole prompt there.
         val short = Regex("^.{1,200}?[.!?](\\s|$)").find(reply)?.value?.trim() ?: if (reply.length > 200) reply.take(197).trimEnd() + "..." else reply
@@ -166,6 +169,9 @@ Each user message starts with an app note that lists the pictures you may name i
         }
         return out.toString()
     }
+
+    /** The Bria shape a plan's plain shape asks for. */
+    fun expandRatio(shape: String): String = when (shape) { "portrait" -> "9:16"; "square" -> "1:1"; else -> "16:9" }
 
     /** The line the conversation keeps after a job, so the model knows what exists. */
     fun note(kind: String, entryId: Long, state: String, prompt: String): String = when (state) {
@@ -224,6 +230,7 @@ object PlainSummary {
         val edit = ModelCatalog.edit(model)
         when {
             edit != null -> parts.add("Edit of your picture")
+            model == ModelCatalog.expander.model -> parts.add("Your picture, expanded")
             mode == Mode.VIDEO -> {
                 val seconds = v("duration")?.toIntOrNull() ?: v("num_frames")?.toIntOrNull()?.let { it / 16 }
                     ?: v("frame_num")?.toIntOrNull()?.let { it / 16 }
@@ -259,6 +266,7 @@ object Prices {
         fun v(name: String) = options.firstOrNull { it.name == name }?.value
         val count = v("num_outputs")?.toIntOrNull() ?: 1
         ModelCatalog.edit(model)?.let { return it.price }
+        if (model == ModelCatalog.expander.model) return "about 2 to 4 cents"
         val dollars = when (model) {
             "black-forest-labs/flux-schnell" -> 0.003 * count
             "black-forest-labs/flux-dev" -> 0.025 * count

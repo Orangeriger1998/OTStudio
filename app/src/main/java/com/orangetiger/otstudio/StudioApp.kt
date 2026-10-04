@@ -411,6 +411,7 @@ class StudioApp : Application() {
     /** Models a plan may use: edits use editing models; a video from a picture needs a starting-frame model. */
     fun planModels(plan: JobPlan): List<String> = when (plan.action) {
         "edit" -> ModelCatalog.edits.map { it.model }
+        "expand" -> listOf(ModelCatalog.expander.model)
         "video" -> settings.models(Mode.VIDEO, settings.get(Mode.VIDEO).baseUrl)
             .filter { if (plan.reference != null) ModelOptions.supports(it, setOf("Starting frame")) else !ModelCatalog.needsStartPicture(it.model) && it.schema.fields.none { f -> f.required && f.uri } }.map { it.model }
         else -> settings.models(Mode.IMAGE, settings.get(Mode.IMAGE).baseUrl).filter { ModelCatalog.edit(it.model) == null }.map { it.model }
@@ -427,7 +428,8 @@ class StudioApp : Application() {
      * The settings a plan's job would use with [modelId], as the card shows them. A picture to start from or edit
      * is a placeholder here; the real upload happens on Generate.
      */
-    fun planSettings(plan: JobPlan, modelId: String): Pair<ModelSettings, List<String>> {
+    fun planSettings(plan: JobPlan, modelId: String, ratio: String? = null): Pair<ModelSettings, List<String>> {
+        if (plan.action == "expand") return expandSettings(settings.get(Mode.IMAGE), ratio ?: Planner.expandRatio(plan.shape), uploadCheck) to emptyList()
         val mode = if (plan.action == "video") Mode.VIDEO else Mode.IMAGE
         val current = settings.get(mode)
         // A plan attaches only the picture it names. Pictures saved in a model's profile (a reference, frames, a clip) stay out.
@@ -445,7 +447,7 @@ class StudioApp : Application() {
      * Starts the job a chat plan describes. Called only from the Generate button on its job card, which is the user's
      * confirmation for this one paid request. [prompt] is the card's prompt, which the user may have changed.
      */
-    fun runPlan(chat: Entry, plan: JobPlan, prompt: String, modelId: String): Boolean {
+    fun runPlan(chat: Entry, plan: JobPlan, prompt: String, modelId: String, ratio: String? = null): Boolean {
         if (busy.get()) return false
         if (chat.jobEntry != 0L) throw UserError("This plan already ran or was canceled.")
         val text = Rules.prompt(prompt)
@@ -454,6 +456,7 @@ class StudioApp : Application() {
         val source = plan.reference?.let { history.entry(it) }
         if (plan.reference != null && source == null) throw UserError("The picture this plan uses is gone.")
         if (plan.action == "edit") return edit(source ?: throw UserError("This edit has no picture."), text, modelId, { mediaBytes(source) }, chat.id)
+        if (plan.action == "expand") return expand(source ?: throw UserError("This plan has no picture."), ratio ?: Planner.expandRatio(plan.shape), text, { mediaBytes(source) }, chat.id)
         val mode = if (plan.action == "video") Mode.VIDEO else Mode.IMAGE
         val (planned, _) = planSettings(plan, modelId)
         val resolved = Rules.resolve(mode, { if (it == mode) planned else settings.get(it) }, settings::key)
@@ -515,6 +518,41 @@ class StudioApp : Application() {
             val id = history.insert(Mode.IMAGE, Rules.prompt("Upscale 2x: ${source.prompt}".take(Rules.MAX_PROMPT)), model)
             changed()
             try { applyPrediction(id, Mode.IMAGE, api.create(model, null)) }
+            catch (e: ProviderRejected) { history.update(id, "failed", "${e.message} No job was created.") }
+            catch (e: Exception) { history.update(id, "uncertain", "${friendly(e)} No job ID was saved. The provider may have accepted the request; inspect its dashboard before retrying.") }
+        }
+        return true
+    }
+
+    /** Bria Expand Image settings: the picture, the shape, and moderation off like the other safety switches. What to add goes as the prompt. */
+    private fun expandSettings(base: ModelSettings, ratio: String, url: String): ModelSettings {
+        val preset = ModelCatalog.expander
+        if (ratio !in EXPAND_RATIOS.map { it.first }) throw UserError("Choose one of the listed shapes.")
+        val options = listOf(InputValue("image", InputKind.TEXT, url), InputValue("aspect_ratio", InputKind.TEXT, ratio), InputValue("content_moderation", InputKind.BOOLEAN, "false"))
+        val s = base.copy(model = preset.model, schema = preset.schema, options = options)
+        ModelOptions.validate(preset.schema, options)
+        return s
+    }
+
+    /**
+     * Expands a saved image to [ratio] with Bria Expand Image: the picture stays as it is, and new picture fills the rest.
+     * Uploads the image, then starts one prediction that appears as a new Image entry. Returns false while busy.
+     */
+    fun expand(source: Entry, ratio: String, prompt: String, read: () -> Triple<ByteArray, String, String>, chatId: Long = 0): Boolean {
+        if (busy.get()) return false
+        if (history.list(pendingOnly = true).any { it.mode != Mode.CHAT }) throw UserError("Finish or cancel the pending media job before starting another.")
+        val image = settings.resolve(Mode.IMAGE)
+        val words = if (prompt.isBlank()) "" else Rules.prompt(prompt)
+        expandSettings(image.settings, ratio, uploadCheck)
+        run {
+            val (bytes, mime, name) = read()
+            val url = api.uploadFile(image.settings.baseUrl, image.key, name, mime, bytes)
+            val model = image.copy(settings = expandSettings(image.settings, ratio, url))
+            val label = EXPAND_RATIOS.first { it.first == ratio }.let { "${it.second} ${it.first}" }
+            val id = history.insert(Mode.IMAGE, Rules.prompt("Expanded to $label${if (words.isEmpty()) "" else ": $words"}".take(Rules.MAX_PROMPT)), model, parentId = source.id)
+            if (chatId != 0L) history.setJob(chatId, id)
+            changed()
+            try { applyPrediction(id, Mode.IMAGE, api.create(model, words.ifEmpty { null })) }
             catch (e: ProviderRejected) { history.update(id, "failed", "${e.message} No job was created.") }
             catch (e: Exception) { history.update(id, "uncertain", "${friendly(e)} No job ID was saved. The provider may have accepted the request; inspect its dashboard before retrying.") }
         }
