@@ -48,6 +48,8 @@ This card appears only for `black-forest-labs/flux-dev-lora`.
 
 ## Input cards
 
+The panel opens in a simple view. It shows the model by a plain name and price, such as "Quick draft (FLUX schnell), under 1 cent", with its provider ID in small type. Below come only the settings most people change: Shape, Number of pictures, Length and Resolution for video, the Safety checker, picture inputs, and any required input. A picture input shows "A picture is attached" with Remove the picture, not a web address. **Show all settings** opens every input, the model finder, Add a model, and the Tools card; **Show fewer settings** goes back, and the app remembers the choice. Settings hidden by the simple view keep their saved values when the user taps Apply.
+
 Each input of the model gets its own card, in the provider's order. Every card has one control, which shows what will be sent. An input starts at the model's default and is sent only after the user changes it. People who find ComfyUI and similar tools hard to read are the reason for this layout.
 
 | Box | What it holds | Why |

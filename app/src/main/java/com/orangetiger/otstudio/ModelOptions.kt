@@ -307,6 +307,37 @@ object InputLabels {
     fun defaultChoice(d: InputDefinition) = "Model default" + (d.defaultValue?.takeIf { it.isNotEmpty() }?.let { " ($it)" } ?: "")
 }
 
+/** Plain model names with what they are for and what they cost, for the simple view. Unknown models show their ID. */
+object ModelNames {
+    private val names = mapOf(
+        "mistralai/mistral-nemo" to "Mistral Nemo, recommended", "qwen/qwen3-30b-a3b-instruct-2507" to "Qwen3 30B", "qwen/qwen3-8b" to "Qwen3 8B",
+        "gryphe/mythomax-l2-13b" to "MythoMax",
+        "black-forest-labs/flux-schnell" to "Quick draft (FLUX schnell), under 1 cent",
+        "black-forest-labs/flux-dev" to "Detailed picture (FLUX dev), 2.5 cents",
+        "black-forest-labs/flux-dev-lora" to "Your trained face or style (FLUX dev LoRA), 3 cents",
+        "black-forest-labs/flux-1.1-pro" to "Best quality (FLUX 1.1 pro), 4 cents",
+        "black-forest-labs/flux-2-dev" to "FLUX.2 dev, about 3 cents",
+        "black-forest-labs/flux-2-klein-9b" to "FLUX.2 klein 9B, about 1.5 cents",
+        "black-forest-labs/flux-2-klein-4b" to "FLUX.2 klein 4B, under 1 cent",
+        "bytedance/seedream-4.5" to "Seedream 4.5, about 4 cents",
+        "black-forest-labs/flux-kontext-dev" to "Edit a picture (FLUX Kontext dev), 2.5 cents",
+        "qwen/qwen-image-edit-plus" to "Edit a picture (Qwen Image Edit Plus), 3 cents",
+        "qwen/qwen-image-edit" to "Edit a picture (Qwen Image Edit), 3 cents",
+        "qwen/qwen-image-edit-2511" to "Edit a picture (Qwen Image Edit 2511), 3 cents",
+        "prunaai/p-image-edit" to "Edit a picture (P-Image Edit), 1 cent",
+        "wan-video/wan-2.2-t2v-fast" to "Quick video from words (WAN 2.2 fast), 5 cents",
+        "wan-video/wan-2.2-i2v-fast" to "Quick video from a picture (WAN 2.2 fast), 5 cents",
+        "wan-video/wan-2.7-t2v" to "Video from words (WAN 2.7), about 50 cents",
+        "wan-video/wan-2.7-i2v" to "Video from a picture (WAN 2.7), about 50 cents",
+        "wan-video/wan-2.1-1.3b" to "Older small video model (WAN 2.1)",
+        "wavespeedai/wan-2.1-t2v-480p" to "Older video model (WAN 2.1, 480p)", "wavespeedai/wan-2.1-t2v-720p" to "Older video model (WAN 2.1, 720p)"
+    )
+    fun title(model: String): String = names[model] ?: model
+
+    /** The settings the simple view shows: the ones most people change. Pictures and required inputs always show. */
+    val simple = setOf("aspect_ratio", "num_outputs", "duration", "resolution", "disable_safety_checker")
+}
+
 /** The shapes Expand offers, with plain names. The first is the usual choice. */
 val EXPAND_RATIOS = listOf("16:9" to "Wide", "9:16" to "Tall", "1:1" to "Square", "3:2" to "Landscape", "2:3" to "Portrait",
     "4:3" to "Landscape", "3:4" to "Portrait", "5:4" to "Landscape", "4:5" to "Portrait")

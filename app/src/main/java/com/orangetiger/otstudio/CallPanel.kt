@@ -37,7 +37,14 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
             MaterialAlertDialogBuilder(activity).setMessage((e as? UserError)?.message ?: "Could not save settings. Check device storage.").setPositiveButton("OK", null).show()
         }
     }
-    private fun read(): ModelSettings = draft.copy(options = readers.mapNotNull { it() }).also(Rules::validate)
+    /** Inputs shown in this render. Inputs the simple view hides keep their saved values. */
+    private val shown = HashSet<String>()
+    private fun read(): ModelSettings = draft.copy(options = readers.mapNotNull { it() } + draft.options.filter { it.name !in shown }).also(Rules::validate)
+    private val prefs by lazy { activity.getSharedPreferences("ui", android.content.Context.MODE_PRIVATE) }
+    /** The simple view shows the few settings most people change; "Show all settings" shows every input and tool. */
+    private var allSettings: Boolean
+        get() = prefs.getBoolean("api_call_all", false)
+        set(v) { prefs.edit().putBoolean("api_call_all", v).apply() }
     private fun identity(s: ModelSettings) = "${s.mode}|${Rules.origin(s.baseUrl)}|${s.model}"
     private fun remember() { draft = read(); edits[identity(draft)] = draft }
     private fun select(model: String): ModelSettings {
@@ -59,7 +66,7 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
 
     private fun render() {
         scroll?.let { scrollY = it.scrollY }
-        readers.clear()
+        readers.clear(); shown.clear()
         val root = ui.column().apply { setPadding(dp(16), dp(8), dp(16), dp(10)); setBackgroundColor(ui.color(R.color.ot_black)) }
         // The window is edge to edge and does not resize, so the root pads for the system bars and the keyboard exactly once.
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
@@ -72,7 +79,7 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
         bar.addView(ui.iconButton(R.drawable.ic_close, "Close") { dialog.dismiss() })
         val titles = ui.column()
         titles.addView(ui.text("API CALL", Ui.Type.TITLE))
-        titles.addView(ui.text("Choose the model and inputs for your next request.", Ui.Type.SMALL, ui.muted))
+        titles.addView(ui.text(if (allSettings) "Every setting this model offers." else "The model and the few settings most people change.", Ui.Type.SMALL, ui.muted))
         bar.addView(titles, ui.weight())
         root.addView(bar)
         if (waiting) root.addView(ui.progress(), ui.matchWrap(6))
@@ -89,11 +96,11 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
         }.isEnabled = !waiting
 
         val modelCard = ui.card(content)
-        ui.sectionTitle(modelCard, "Model", "${draft.baseUrl}")
+        ui.sectionTitle(modelCard, "Model", if (allSettings) draft.baseUrl else null)
         val all = app.settings.models(mode, draft.baseUrl)
         val matches = candidates()
         val filtered = features.isNotEmpty() || requiredResolution != null
-        if (mode != Mode.CHAT) {
+        if (mode != Mode.CHAT && allSettings) {
             modelCard.addView(ui.textButton(if (filtersOpen) "Hide model finder" else "Find a model by features", R.drawable.ic_tune) { safely { remember(); filtersOpen = !filtersOpen; render() } }.apply { isEnabled = !waiting })
             if (filtersOpen) {
                 modelCard.addView(ui.text("Resolution", Ui.Type.LABEL, ui.muted))
@@ -109,10 +116,16 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
         val choices = if (filtered) listOf("Choose matching model") + matches.map { it.model } else all.map { it.model }
         val selection = if (draft.model in choices) draft.model else if (filtered) "Choose matching model" else draft.model
         val shownChoices = if (!filtered && draft.model !in choices) choices + draft.model else choices
-        ui.dropdown(modelCard, if (filtered) "Matching models (${matches.size})" else "Saved models", shownChoices, selection) { model ->
+        // The simple view names each model by what it is for; the full view shows provider IDs.
+        val label = { id: String -> if (allSettings || id == "Choose matching model") id else ModelNames.title(id) }
+        val labels = shownChoices.map(label)
+        ui.dropdown(modelCard, if (filtered) "Matching models (${matches.size})" else if (allSettings) "Saved models" else "Model", labels, label(selection)) { picked ->
+            val model = shownChoices[labels.indexOf(picked)]
             if (model != "Choose matching model" && model != draft.model) safely { remember(); draft = select(model); notice = ""; render() }
         }.isEnabled = !waiting
+        if (!allSettings) modelCard.addView(ui.text(draft.model, Ui.Type.CAPTION, ui.muted).apply { setPadding(dp(4), dp(2), 0, 0) })
         if (filtered && matches.none { it.model == draft.model }) modelCard.addView(ui.text("The current model does not meet every selected requirement. Choose a matching model before applying.", Ui.Type.SMALL, ui.color(R.color.ot_error)))
+        if (allSettings) {
         val addRow = ui.row()
         val addHolder = ui.column()
         val custom = ui.field(addHolder, "Add a model (owner/model)", "")
@@ -122,6 +135,7 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
             safely { remember(); draft = select(custom.text.toString().trim()); app.settings.remember(draft); features.clear(); requiredResolution = null; notice = "Model added to this provider's list."; render() }
         }.apply { isEnabled = !waiting; contentDescription = "Use and remember typed model"; layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) } })
         modelCard.addView(addRow)
+        }
         val fixed = ModelCatalog.find(mode, draft.model)?.fixedResolution
         if (fixed != null) { ui.gap(modelCard, 8); ui.dropdown(modelCard, "Resolution selects the WAN 2.1 model", listOf("480p", "720p"), fixed) { r -> if (r != fixed) safely { remember(); draft = select(ModelOptions.routedModel(draft.model, r)); render() } } }
 
@@ -144,12 +158,18 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
             }
             content.addView(ui.text("Inputs", Ui.Type.SUBTITLE).apply { setPadding(dp(4), dp(4), 0, 0) })
             content.addView(ui.text("Each setting starts at the model's default. Change only what you need; Use default puts a setting back.", Ui.Type.SMALL, ui.muted).apply { setPadding(dp(4), 0, 0, dp(8)) })
-            schema.fields.forEach { definition -> option(content, definition) }
+            val visible = schema.fields.filter { d -> allSettings || d.required || photoField(d) || d.name in ModelNames.simple }
+            visible.forEach { definition -> shown.add(definition.name); option(content, definition) }
+            val hidden = schema.fields.size - visible.size
+            content.addView(ui.outlined(if (allSettings) "Show fewer settings" else if (hidden > 0) "Show all settings ($hidden more)" else "Show all settings") {
+                safely { remember(); allSettings = !allSettings; render() }
+            }.apply { isEnabled = !waiting }, ui.matchWrap(8))
             if (schema.unsupported.isNotEmpty()) content.addView(ui.text("Inputs needing another editor: ${schema.unsupported.joinToString()}. Required unsupported inputs block generation.", Ui.Type.SMALL, ui.muted))
             if (mode == Mode.VIDEO && schema.fields.none { it.name in listOf("frames_per_second", "frame_per_second", "fps") }) content.addView(ui.text("This model does not expose frame-rate control. Use the Frame rate filter to find one that does.", Ui.Type.SMALL, ui.muted))
         }
 
         val tools = ui.card(content)
+        if (!allSettings) tools.visibility = View.GONE
         ui.sectionTitle(tools, "Tools")
         if (mode != Mode.CHAT) {
             tools.addView(ui.outlined("Refresh model inputs", R.drawable.ic_refresh) {
@@ -217,7 +237,7 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
         val card = ui.card(parent, padding = 12, bottom = 8)
         val head = ui.row()
         head.addView(ui.text(InputLabels.title(d.name) + if (d.required) " (required)" else "", Ui.Type.SUBTITLE), ui.weight())
-        if (stored != null && !d.required) head.addView(ui.textButton("Use default") {
+        if (stored != null && !d.required && !(photoField(d) && !allSettings)) head.addView(ui.textButton("Use default") {
             safely { remember(); draft = draft.copy(options = draft.options.filter { it.name != d.name }); render() }
         }.apply { isEnabled = !waiting; contentDescription = "Use the model's default for ${InputLabels.title(d.name)}" })
         card.addView(head)
@@ -241,6 +261,13 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
             toggle.setOnCheckedChangeListener { _, _ -> changed = true }
             card.addView(toggle)
             readValue = { if (changed || d.required) ModelOptions.value(d, (if (inverted) !toggle.isChecked else toggle.isChecked).toString()) else null }
+        } else if (photoField(d) && !allSettings) {
+            // The simple view shows a picture input as attached or not, never as a web address.
+            card.addView(ui.text(if (stored != null) "A picture is attached. It goes with every request on this model until you remove it." else "No picture attached.", Ui.Type.BODY).apply { setPadding(0, dp(4), 0, 0) })
+            if (stored != null) card.addView(ui.textButton("Remove the picture") {
+                safely { remember(); draft = draft.copy(options = draft.options.filter { it.name != d.name }); render() }
+            }.apply { isEnabled = !waiting }, LinearLayout.LayoutParams(-2, -2))
+            readValue = { stored }
         } else {
             val hint = d.defaultValue?.takeIf { it.isNotEmpty() }?.let { "Empty uses the model default: $it" } ?: "Empty leaves it to the model"
             val edit = ui.field(card, if (d.required) "Value" else "Value (optional)", stored?.value.orEmpty(), multiline = d.kind == InputKind.TEXT,

@@ -10,6 +10,12 @@ This log lists the main changes from one version to the next. It records what a 
 
 **Any photo format.** The trainer now accepts JPG, PNG, WebP, HEIC, and most other photo files, and converts them itself, so a photo saved under the wrong file type no longer stops it. Photos it cannot use are left out and named with the reason, and the accepted formats show under Choose photos. Choosing again adds photos, and Clear starts over.
 
+## 1.2.6 (October 2026)
+
+**A simple API CALL.** The panel now opens with only the settings most people change, and names each model by what it is for and what it costs. Show all settings opens everything else. An attached picture shows as attached, with a button to remove it.
+
+**Seedream edits work after Apply.** Saved settings now remember inputs that take a list of pictures, so Seedream 4.5 no longer refuses its picture. Settings saved before this version are repaired on their own.
+
 ## 1.2.5 (October 2026)
 
 **Simpler API CALL.** Every input now has one control and a plain title, such as "Safety checker" or "Shape", with the provider's name in small type below. Inputs start at the model's default; change one, and Use default puts it back. The safety setting is one switch, Safety checker on or off, instead of two checkboxes with a double negative.

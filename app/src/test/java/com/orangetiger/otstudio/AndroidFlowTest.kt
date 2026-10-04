@@ -404,4 +404,41 @@ class AndroidFlowTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("true", app.settings.get(Mode.IMAGE).options.firstOrNull { it.name == "disable_safety_checker" }?.value)
     }
+
+    @Test fun theSimpleViewHidesRareSettingsButKeepsTheirValues() {
+        val app = RuntimeEnvironment.getApplication() as StudioApp
+        val dev = app.settings.forModel(app.settings.get(Mode.IMAGE), "black-forest-labs/flux-dev")
+        app.settings.save(dev.copy(options = dev.options.filter { it.name != "seed" } + InputValue("seed", InputKind.INTEGER, "42")), null)
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        click(activity, "Image"); shadowOf(Looper.getMainLooper()).idle()
+        click(activity, "API CALL"); shadowOf(Looper.getMainLooper()).idle()
+        val panel: Dialog = ShadowDialog.getLatestDialog()
+        var all = views(panel.window!!.decorView)
+        val titles = all.filterIsInstance<TextView>().map { it.text.toString() }
+        assertTrue(titles.contains("Shape")); assertTrue(titles.contains("Picture")); assertFalse(titles.contains("Seed"))
+        assertTrue(all.filterIsInstance<android.widget.AutoCompleteTextView>().any { it.text.toString() == "Detailed picture (FLUX dev), 2.5 cents" })
+        // Applying the simple view keeps the hidden seed.
+        all.filterIsInstance<Button>().first { it.text.toString() == "Apply" }.performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("42", app.settings.get(Mode.IMAGE).options.firstOrNull { it.name == "seed" }?.value)
+        click(activity, "API CALL"); shadowOf(Looper.getMainLooper()).idle()
+        val again: Dialog = ShadowDialog.getLatestDialog()
+        views(again.window!!.decorView).filterIsInstance<Button>().first { it.text.toString().startsWith("Show all settings") }.performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        all = views(again.window!!.decorView)
+        assertTrue(all.filterIsInstance<TextView>().any { it.text.toString() == "Seed" })
+        all.filterIsInstance<Button>().first { it.text.toString() == "Show fewer settings" }.performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    @Test fun aSavedSeedreamProfileStillSendsItsPictureAsAList() {
+        val app = RuntimeEnvironment.getApplication() as StudioApp
+        val seed = app.settings.forModel(app.settings.get(Mode.IMAGE), "bytedance/seedream-4.5")
+        app.settings.remember(seed)
+        val loaded = app.settings.forModel(app.settings.get(Mode.IMAGE), "bytedance/seedream-4.5")
+        assertTrue(loaded.schema!!.fields.first { it.name == "image_input" }.list)
+        val body = org.json.JSONObject()
+        SchemaCodec.append(body, loaded.schema!!, listOf(InputValue("image_input", InputKind.TEXT, "https://api.replicate.com/v1/files/x")))
+        assertTrue(body.get("image_input") is org.json.JSONArray)
+    }
 }
