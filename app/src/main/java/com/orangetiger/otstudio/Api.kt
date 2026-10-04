@@ -94,7 +94,7 @@ class ProviderApi(private val transport: Transport) {
                 401, 403 -> "Provider rejected access. Check this mode's API key and model permissions."
                 402 -> "The provider reports insufficient credit. Check billing."
                 404 -> "Model or API endpoint was not found. Check Settings."
-                422, 400 -> "The provider rejected these inputs. Check the model ID, aspect ratio, and duration."
+                422, 400 -> "The provider rejected these inputs.${providerReason(r.body)}"
                 429 -> "The provider is rate-limiting requests. Wait before trying again."
                 in 300..399 -> "The API attempted a redirect. Check the exact API base URL."
                 else -> "Provider request failed (HTTP ${r.code}). Check the provider dashboard before retrying a generation."
@@ -103,6 +103,14 @@ class ProviderApi(private val transport: Transport) {
             throw if (r.code in 400..499 && r.code !in listOf(408, 409)) ProviderRejected(message) else UserError(message)
         }
         return try { JSONObject(r.body) } catch (_: Exception) { throw UserError("The provider returned malformed JSON.") }
+    }
+
+    /** The provider's own short reason, shown as plain text. It is untrusted, so it is clipped and stripped of control characters. */
+    private fun providerReason(body: String): String {
+        val o = try { JSONObject(body) } catch (_: Exception) { return " Check the model ID, aspect ratio, and duration." }
+        val detail = (o.opt("detail") as? String) ?: o.optJSONObject("error")?.optString("message") ?: o.optString("title")
+        val clean = detail.orEmpty().replace(Regex("[\\p{Cntrl}]+"), " ").replace(Regex("\\s+"), " ").trim().take(300)
+        return if (clean.isEmpty()) " Check the model ID, aspect ratio, and duration." else " It said: $clean"
     }
 
     /** [responseFormat] is an OpenAI response_format object, used by chat-led creation to ask for a job plan. */

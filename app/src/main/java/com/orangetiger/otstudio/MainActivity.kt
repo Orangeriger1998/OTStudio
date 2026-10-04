@@ -456,7 +456,9 @@ class MainActivity : AppCompatActivity() {
         }
         val meta = ui.row()
         meta.addView(statePill(e.state)); meta.addView(ui.text("  ${e.model}", Ui.Type.CAPTION, ui.muted), ui.weight())
-        if (plan == null && app.createFromChat && e.state == "succeeded") meta.addView(ui.textButton("Use my words") { ownWordsChoice(e) })
+        // Also after a job that failed, so the same message can try another kind of job.
+        val jobFailed = e.jobEntry > 0 && app.history.entry(e.jobEntry)?.state in listOf("failed", "canceled", "unavailable")
+        if ((plan == null || jobFailed) && app.createFromChat && e.state == "succeeded") meta.addView(ui.textButton(if (jobFailed) "Try again" else "Use my words") { ownWordsChoice(e) })
         meta.addView(ui.textButton("Use prompt") { prompt.setText(e.prompt); prompt.requestFocus() })
         // On-device replies carry a speed line; online replies would only repeat raw settings, so they show none.
         val speed = e.requestSummary.takeIf { e.baseUrl == History.LOCAL_BASE && it.isNotEmpty() }
@@ -523,10 +525,11 @@ class MainActivity : AppCompatActivity() {
             card.addView(ui.text("${when (plan.action) { "edit" -> "Edits"; "expand" -> "Expands"; else -> "Starts from" }} the picture: ${app.describe(ref).take(120)}", Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(2), 0, dp(6)) })
             if (plan.action == "video") card.addView(ui.textButton("Without the picture") { cardModels.remove(e.id); app.dropPlanPicture(e, plan) }, LinearLayout.LayoutParams(-2, -2))
         } }
-        // A small chat model sometimes plans a brand-new picture when the user meant to change the chosen one.
-        if (plan.action == "image" && app.selectedImage != null) card.addView(ui.textButton("Edit the chosen picture instead", R.drawable.ic_edit) {
-            cardModels.remove(e.id); cardPrompts.remove(e.id); ownWords(e, "edit")
-        }, LinearLayout.LayoutParams(-2, -2))
+        // A small chat model sometimes picks the wrong kind of job for the chosen picture. These switch it, with the user's own words.
+        if (app.selectedImage != null && plan.action in listOf("image", "edit", "expand")) card.addView(actionRow(
+            if (plan.action != "edit") ui.textButton("Edit the chosen picture instead", R.drawable.ic_edit) { cardModels.remove(e.id); cardPrompts.remove(e.id); ownWords(e, "edit") } else null,
+            ui.textButton("Make a video from it instead", R.drawable.ic_movie) { cardModels.remove(e.id); cardPrompts.remove(e.id); ownWords(e, "video") }
+        ))
         ui.gap(card, 6)
         val field = ui.field(card, when (plan.action) { "edit" -> "Instruction"; "expand" -> "What the new area should show"; else -> "Prompt the model receives" }, cardPrompts[e.id] ?: plan.prompt, multiline = true)
         field.maxLines = 8

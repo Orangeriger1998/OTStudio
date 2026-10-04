@@ -7,8 +7,8 @@ android {
         applicationId = "com.orangetiger.otstudio"
         minSdk = 29
         targetSdk = 35
-        versionCode = 12
-        versionName = "1.2.1"
+        versionCode = 13
+        versionName = "1.2.2"
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
     }
     buildTypes {

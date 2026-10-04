@@ -112,7 +112,10 @@ class StudioApp : Application() {
         set(v) { chatPrefs.edit().putBoolean("create", v).apply(); changed() }
 
     /** The picture the user pointed at with "Talk about this". "That picture" in the next message means it. */
-    @Volatile var selectedImage: Long? = null
+    // Kept across restarts and updates, so an attached photo stays attached.
+    var selectedImage: Long?
+        get() = chatPrefs.getLong("selected", 0L).takeIf { it > 0 }
+        set(v) { chatPrefs.edit().putLong("selected", v ?: 0L).apply() }
 
     /** Finished pictures the chat may refer to, newest first, with the selected one always included. */
     fun imageRefs(): List<ImageRef> {
@@ -377,7 +380,7 @@ class StudioApp : Application() {
         if (history.list(pendingOnly = true).any { it.mode != Mode.CHAT }) throw UserError("Finish or cancel the pending media job before starting another.")
         val image = settings.resolve(Mode.IMAGE)
         // Checked before the upload, so a settings problem never leaves an orphan file at the provider.
-        val chosen = settings.forModel(image.settings, preset.model)
+        val chosen = keepShape(settings.forModel(image.settings, preset.model))
         ModelOptions.validateForModel(preset.model, chosen.schema ?: throw UserError("This editing model has no input list."), chosen.options.filter { it.name != preset.imageField } + InputValue(preset.imageField, InputKind.TEXT, "https://api.replicate.com/v1/files/check"))
         settings.editModel = preset.model
         run {
@@ -392,6 +395,16 @@ class StudioApp : Application() {
             catch (e: Exception) { history.update(id, "uncertain", "${friendly(e)} No job ID was saved. The provider may have accepted the request; inspect its dashboard before retrying.") }
         }
         return true
+    }
+
+    /**
+     * An edit keeps the picture's own shape. A shape saved in the model's profile, such as 9:16, is replaced by
+     * match_input_image where the model offers it; some models refuse a fixed shape together with an input picture.
+     */
+    private fun keepShape(s: ModelSettings): ModelSettings {
+        val aspect = s.schema?.fields?.firstOrNull { it.name == "aspect_ratio" } ?: return s
+        if ("match_input_image" !in aspect.choices) return s
+        return s.copy(options = s.options.filter { it.name != "aspect_ratio" } + InputValue("aspect_ratio", InputKind.TEXT, "match_input_image"))
     }
 
     /** A placeholder that passes URL checks, for validating settings before the real upload exists. */
@@ -433,7 +446,7 @@ class StudioApp : Application() {
         fun withoutPictures(s: ModelSettings) = s.copy(options = s.options.filter { o -> s.schema?.fields?.firstOrNull { it.name == o.name }?.uri != true })
         val chosen = withoutPictures(if (modelId == current.model) current else settings.forModel(current, modelId))
         val withPicture = when {
-            plan.action == "edit" -> ModelCatalog.edit(modelId)?.let { e -> chosen.copy(options = chosen.options.filter { it.name != e.imageField } + InputValue(e.imageField, InputKind.TEXT, uploadCheck)) } ?: chosen
+            plan.action == "edit" -> ModelCatalog.edit(modelId)?.let { e -> keepShape(chosen).let { k -> k.copy(options = k.options.filter { it.name != e.imageField } + InputValue(e.imageField, InputKind.TEXT, uploadCheck)) } } ?: chosen
             plan.action == "video" && plan.reference != null -> MediaRole.START_FRAME.apply(chosen, uploadCheck) { withoutPictures(settings.forModel(chosen, it)) }
             else -> chosen
         }

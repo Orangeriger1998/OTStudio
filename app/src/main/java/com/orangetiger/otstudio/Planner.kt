@@ -78,7 +78,8 @@ Each user message starts with an app note that lists the pictures you may name i
             append("Pictures in this conversation, newest first. \"last_image\" means the first one.")
             if (selected != null) append(" The user selected ${refName(selected)} to work on, so \"that picture\", \"it\", \"this\", \"her\", and \"him\" mean it." +
                 " A request to change it, such as \"make it black and white\", \"make her jacket red\", or \"add a hat\", is an \"edit\" with \"reference\" set to ${refName(selected)}, never a new \"image\"." +
-                " A request for the same picture in another shape (wider, taller, square) is an \"expand\" of it. A request to make it move is a \"video\" from it. You cannot see the picture, so never describe what is in it.")
+                " A request for the same picture in another shape (wider, taller, square) is an \"expand\" of it." +
+                " A request to make it move is a \"video\" from it, and so is any description of motion or action over time, such as \"she walks toward the camera\", \"he turns and waves\", or \"the camera pans left\", even without the word video. You cannot see the picture, so never describe what is in it.")
             images.take(MAX_IMAGES).forEach { append("\n").append(refName(it.id)).append(": ").append(it.prompt.take(200).replace('\n', ' ')) }
         } else append("No pictures exist yet, so edits and videos from a picture are not possible. Use \"reference\": \"none\".")
     }

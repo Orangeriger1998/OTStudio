@@ -4,6 +4,16 @@
 
 This log lists the main changes from one version to the next. It records what a user would notice, not every code change.
 
+## 1.2.2 (October 2026)
+
+**Motion becomes a video.** With a picture chosen, a description of motion, such as "she walks toward the camera", now plans a video that starts from the picture instead of an edit. Job cards for a chosen picture offer Make a video from it instead, and a chat message whose job failed offers Try again.
+
+**Edits keep the picture's shape.** An edit no longer carries a shape saved in the model's profile, such as 9:16, which made Seedream 4.5 refuse the request.
+
+**Clearer refusals.** When a provider rejects a request, the card now shows the provider's own reason.
+
+**The chosen picture stays chosen.** "Talking about" now survives an app restart or update.
+
 ## 1.2.1 (October 2026)
 
 **Expand keeps full quality.** Expand now uses FLUX Fill dev with its safety checker off. The phone rebuilds the result at the original's full resolution, with the original pixels unchanged in the middle and a soft, color-matched blend into the new area.

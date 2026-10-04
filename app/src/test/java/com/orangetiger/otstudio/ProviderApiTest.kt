@@ -91,6 +91,14 @@ class ProviderApiTest {
             try { api.create(model(Mode.IMAGE), "test"); fail("Expected error") } catch (e: UserError) { assertFalse("HTTP $code", e is ProviderRejected) }
         }
     }
+    @Test fun aRejectionShowsTheProvidersOwnReasonAsPlainText() {
+        val api = ProviderApi { _, _, _, _ -> HttpReply(422, """{"title":"Input validation failed","detail":"- input.size: Value must be one of 1K, 2K, 4K\n\u0007"}""") }
+        val e = try { api.create(model(Mode.IMAGE), "test"); null } catch (e: ProviderRejected) { e }
+        assertEquals("The provider rejected these inputs. It said: - input.size: Value must be one of 1K, 2K, 4K", e?.message)
+        val plain = ProviderApi { _, _, _, _ -> HttpReply(400, "not json") }
+        val e2 = try { plain.create(model(Mode.IMAGE), "test"); null } catch (e: ProviderRejected) { e }
+        assertTrue(e2!!.message!!.endsWith("Check the model ID, aspect ratio, and duration."))
+    }
     @Test fun nonTextChatOutputIsNotPresentedAsSuccess() {
         for (body in listOf("{}", """{"choices":[{"message":{"content":null}}]}""", """{"choices":[{"message":{"content":[]}}]}""")) {
             val api = ProviderApi { _, _, _, _ -> HttpReply(200, body) }
