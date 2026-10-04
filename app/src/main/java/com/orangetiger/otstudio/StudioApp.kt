@@ -484,7 +484,12 @@ class StudioApp : Application() {
     /** Replaces a missing or declined plan with the user's own words, as typed, for [action] "image" or "video". */
     fun planFromWords(chat: Entry, action: String) {
         if (busy.get()) throw UserError("Wait for the current reply to finish.")
-        val reference = if (action == "video") selectedImage ?: imageRefs().firstOrNull()?.id else null
+        val reference = when (action) {
+            "video" -> selectedImage ?: imageRefs().firstOrNull()?.id
+            // An edit needs the picture the user chose, never a guess.
+            "edit" -> selectedImage?.takeIf { id -> imageRefs().any { it.id == id } } ?: throw UserError("Choose the picture first: tap Talk about this on it, or add a photo.")
+            else -> null
+        }
         history.update(chat.id, chat.state, plan = JobPlan(action, "Your own words, as you typed them.", chat.prompt, reference).toJson())
         history.setJob(chat.id, 0)
         changed()
@@ -530,6 +535,20 @@ class StudioApp : Application() {
             try { val suggestion = api.suggest(model, prompt, candidates, requirements); main.post { complete(suggestion, null) } }
             catch (e: Exception) { main.post { complete(null, friendly(e)) } }
         }
+    }
+
+    /** Copies a picked photo into private media and adds it to the Image feed. Runs off the main thread. Nothing is uploaded. */
+    fun importPhoto(bytes: ByteArray, mime: String): Long {
+        val folder = File(filesDir, "media").apply { mkdirs() }
+        if (folder.listFiles().orEmpty().sumOf { it.length() } + bytes.size > Rules.MAX_STORAGE_BYTES) throw UserError("Private media storage is full (512 MB). Save your files and clear app storage in Android Settings before adding more.")
+        val ext = when (mime) { "image/png" -> "png"; "image/jpeg" -> "jpg"; "image/webp" -> "webp"; else -> throw UserError("Choose a JPG, PNG, or WebP photo.") }
+        val file = File(folder, "${UUID.randomUUID()}.$ext")
+        file.writeBytes(bytes)
+        // The photo picker hides real file names, so the time it was added tells photos apart in the chat's picture list.
+        val added = java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.US).format(java.util.Date())
+        val id = try { history.insertPhoto("Your photo, added $added", file.name) } catch (e: Exception) { file.delete(); throw e }
+        changed()
+        return id
     }
 
     /** Uploads a photo with [mode]'s Replicate key. [read] runs off the main thread and returns bytes, MIME type, and a file name. */

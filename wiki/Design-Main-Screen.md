@@ -59,7 +59,7 @@ The feed lists this mode's history, oldest at the top. It keeps its scroll posit
 
 **Chat entries** appear as two bubbles. The user's prompt sits on the right in orange. The model's reply sits on the left in gray. A failed reply turns red. An on-device reply appears word by word as the phone writes it. Replies show simple formatting, such as bold words, headings, and bullet points. Under an on-device reply, a small line reports how long the first word took and how many tokens per second followed.
 
-With Create from chat on, a reply that describes a picture, an edit, or a video carries a [job card](Design-Job-Card.md) under it. After Generate, the result card takes the job card's place. Pictures in the chat carry Talk about this, which marks one picture for the next message. A line above the message bar then reads "Talking about:" with a Clear button.
+With Create from chat on, a reply that describes a picture, an edit, or a video carries a [job card](Design-Job-Card.md) under it. After Generate, the result card takes the job card's place. Pictures in the chat carry Talk about this, which marks one picture for the next message. A line above the message bar then shows a small copy of the picture and reads "Talking about:", with a Clear button. A photo added with the photo button gets the same line. When the chat returns no plan, the fallback card then offers **Edit the picture with my words** as well.
 
 A reply that searched the web lists each search under it, such as "Searched Wikipedia: Nobel Prize in Literature 2024 winner", followed by the sources in blue. Tapping one opens it in the browser. Wikipedia results carry the line "Text from Wikipedia, available under CC BY-SA 4.0."
 
@@ -104,6 +104,7 @@ A new mode shows the tiger with a short headline. One line of guidance sits belo
 
 | Box | What it holds | Why |
 |---|---|---|
+| Photo button | A picture icon with a plus, at the left | Adds a photo from the phone through Android's photo picker. In Chat, the photo becomes the picture the next message is about. In Image, a choice follows: Edit it, or Reference for the next image. In Video, the choice is the starting or the ending frame. The photo also joins the Image feed as "Your photo, added" and the time. |
 | Prompt field | A rounded field labeled "Message", "Describe an image", or "Describe the scene and its motion" | The label tells the user what kind of prompt each mode expects. The field grows to five lines. |
 | Send button | An orange circle with a send arrow | The one primary action on the screen, so it gets the brand color. Its spoken label says Send, Generate image, or Generate video. |
 

@@ -22,7 +22,8 @@ This procedure makes a picture and then a short video from it, by describing bot
 ## Tips
 
 - "That picture" means the newest picture. To point at another one, tap **Talk about this** on it. A line above the message bar then says which picture the next message is about.
-- If the chat answers in words instead of making a plan, tap **Use my words** under the reply. A job card then uses your message exactly as you typed it.
+- To work on a photo from your phone, tap the photo button at the left of the message bar and pick the photo. Then say what to do with it, such as `make it black and white` or `turn it into a 5 second video`. The chat model cannot see the photo itself, so describe the change plainly.
+- If the chat answers in words instead of making a plan, tap **Use my words** under the reply. A job card then uses your message exactly as you typed it. With a picture chosen, it can also edit that picture with your words.
 - **Cancel** closes a plan without spending anything. Nothing runs until you tap Generate.
 - A video plan that attached a picture you did not want has **Without the picture**.
 - Edits work the same way: `make the last picture black and white` gives an edit card. [Procedure 9](Procedure-Edit-an-Image.md) explains editing in more detail.

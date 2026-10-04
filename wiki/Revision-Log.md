@@ -4,6 +4,16 @@
 
 This log lists the main changes from one version to the next. It records what a user would notice, not every code change.
 
+## 1.1.0 (October 2026)
+
+**Photos from your phone in every mode.** A photo button at the left of the message bar adds a photo from the phone. In Chat, the next message can edit the photo or turn it into a video. In Image, the photo can be edited or used as the reference for the next image. In Video, it becomes the first or the last frame. A small copy of the chosen picture now sits beside "Talking about:".
+
+**Edit with your own words.** When the chat returns no plan and a picture is chosen, the fallback card offers Edit the picture with my words.
+
+**Keys kept across updates.** Saved API keys stay in place when the app is updated. Automated tests now guard the names under which the phone stores them.
+
+**Steadier stop, fewer crashes.** Stop now also ends a web search, the trainer's Cancel waits until Replicate has a training to cancel, and several rare crashes are fixed.
+
 ## 1.0.0 (October 2026)
 
 The first release under the OT Studio name. It is a beta, shared with a small group of testers. The [Roadmap](Roadmap.md) lists what may come next.

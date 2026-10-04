@@ -12,6 +12,10 @@ A reference does not lock a face. FLUX keeps the general look but often changes 
 
 ## Option A: a photo from your phone
 
+The quick way: tap **Image**, tap the photo button at the left of the message bar, pick the photo, and choose **Reference for the next image**. OT Studio uploads the photo and switches Image to FLUX dev when the current model takes no reference. Then continue at step 5.
+
+The same steps in API CALL:
+
 1. Tap **Image**, then **API CALL**.
 2. Under **Saved models**, choose `black-forest-labs/flux-dev`. This model has an `image` input for the reference.
 3. Scroll to the **image** input card and tap **Choose photo**.

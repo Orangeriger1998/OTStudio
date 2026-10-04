@@ -15,7 +15,7 @@ An image-to-video model animates a still image. Give it a starting frame and it 
 1. Make or choose the starting image. It can come from OT Studio or from your phone's photos. Match its shape to the video you want: `16:9` for landscape or `9:16` for a phone-shaped video.
 2. Set the starting frame.
    - For an image made in OT Studio, tap **Use as...** on its card and choose **Starting frame for a video**.
-   - For a photo on your phone, tap **Video**, open **API CALL**, choose `wan-video/wan-2.7-i2v`, scroll to **first_frame**, and tap **Choose photo**.
+   - For a photo on your phone, tap **Video**, then the photo button at the left of the message bar. Pick the photo and choose **Starting frame for a video**. API CALL offers the same through **Choose photo** under **first_frame**.
 
    OT Studio uploads the image and fills `first_frame`. When Video was on a text-only model, OT Studio switches it to WAN 2.7 image-to-video.
 3. (Optional) Set an ending frame. Tap **Use as...** on a second image and choose **Ending frame for a video**. This fills `last_frame`. An ending frame needs a starting frame.

@@ -18,6 +18,16 @@ Chat can run on the phone itself, with no key and no cost per message. Open Sett
 
 Ask for a picture, an edit, or a video in plain words, such as "make a picture of a red fox in the snow". The reply carries a job card with the exact prompt, the model, and the likely cost. Change the prompt if you like, then tap Generate. Nothing is paid for until you do. The result appears in the chat, and the next request can build on it, such as "turn that picture into a video". If the chat answers in words instead, Use my words makes a card from your own message.
 
+# Your own photos
+
+The photo button at the left of the message bar adds a photo from your phone. It works in all three modes, and the photo also joins the Image feed.
+
+In Chat, the photo becomes the picture your next message is about. Say what to do with it, such as "make it black and white" or "turn it into a 5 second video". The chat model cannot see inside the photo. It knows only that you added it, so say plainly what should change.
+
+In Image, choose Edit it, or use the photo as the reference for the next image. In Video, use it as the first or the last frame of the next clip.
+
+Adding a photo costs nothing. The photo goes to your Replicate account only when you tap Generate, Edit, or a Use as choice.
+
 # Memory and chat history
 
 Memory holds standing instructions, such as a name to call you or a writing rule. Every chat starts with the ones that are switched on. Open it from Settings under Chat, with Edit memory. When Chat uses OpenRouter, the instructions that are on go to OpenRouter with each message.
@@ -56,7 +66,7 @@ LoRA training runs on a Windows computer with the OT Studio LoRA Trainer from th
 
 Replicate deletes results made through its API after about an hour. OT Studio downloads each result the moment it finishes. Save anything you want to keep.
 
-OT Studio needs Android 10 or later and an internet connection. It has no cloud backup. Removing the app deletes your history and your saved keys.
+OT Studio needs Android 10 or later and an internet connection. It has no cloud backup. Updating the app keeps your history and your saved keys. Removing the app deletes them.
 
 # Full guide
 

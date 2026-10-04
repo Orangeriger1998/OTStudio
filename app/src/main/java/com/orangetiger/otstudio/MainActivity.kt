@@ -252,6 +252,9 @@ class MainActivity : AppCompatActivity() {
         prompt.maxLines = 5
         ui.layoutOf(prompt)?.setBoxCornerRadii(dp(26).toFloat(), dp(26).toFloat(), dp(26).toFloat(), dp(26).toFloat())
         (field.getChildAt(0).layoutParams as LinearLayout.LayoutParams).bottomMargin = 0
+        composer.addView(ui.iconButton(R.drawable.ic_add_photo_alternate, "Add a photo from this phone") { addPhoto() }.apply {
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(56)).apply { marginEnd = dp(4); bottomMargin = dp(2) }
+        })
         composer.addView(field, ui.weight())
         send = ui.iconButton(R.drawable.ic_send, if (mode == Mode.CHAT) "Send" else "Generate ${mode.title.lowercase()}", filled = true) {
             try {
@@ -335,6 +338,22 @@ class MainActivity : AppCompatActivity() {
             val picked = app.history.entry(id)
             if (picked == null) app.selectedImage = null
             else {
+                val file = try { localMedia(picked) } catch (_: UserError) { null }
+                if (file != null && file.isFile) {
+                    val thumb = ShapeableImageView(this).apply {
+                        scaleType = ImageView.ScaleType.CENTER_CROP; contentDescription = "Picture being talked about"
+                        shapeAppearanceModel = ShapeAppearanceModel.builder().setAllCornerSizes(dp(8).toFloat()).build()
+                        setOnClickListener { previewImage(file) }
+                    }
+                    selectionRow.addView(thumb, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(10); topMargin = dp(6) })
+                    io.execute {
+                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeFile(file.path, bounds)
+                        val options = BitmapFactory.Options().apply { inSampleSize = 1; while (bounds.outWidth / inSampleSize > 160 || bounds.outHeight / inSampleSize > 160) inSampleSize *= 2 }
+                        val bitmap = BitmapFactory.decodeFile(file.path, options)
+                        runOnUiThread { if (generation == renderGeneration && !isFinishing && !isDestroyed) thumb.setImageBitmap(bitmap) else bitmap?.recycle() }
+                    }
+                }
                 selectionRow.addView(ui.text("Talking about: ${picked.prompt.take(60)}", Ui.Type.SMALL, ui.orange).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, ui.weight())
                 selectionRow.addView(ui.textButton("Clear") { app.selectedImage = null; renderFeed() })
             }
@@ -463,10 +482,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Offers to send the user's own message, as typed, to an image or video model. Only a job card follows; nothing is paid yet. */
+    /** Ways to use a message as typed: a new picture, an edit of the chosen picture (only when one is chosen), or a video. */
+    private fun ownWordsActions(): List<Pair<String, String>> =
+        listOfNotNull("New picture" to "image", if (app.selectedImage != null) "Edit the chosen picture" to "edit" else null, "Video" to "video")
+
+    private fun ownWords(e: Entry, action: String) { try { app.planFromWords(e, action) } catch (ex: UserError) { showError(ex.message.orEmpty()) } }
+
     private fun ownWordsChoice(e: Entry) {
-        MaterialAlertDialogBuilder(this).setTitle("Use your own words").setMessage("Make a job card that sends your message exactly as you typed it. You still review it and tap Generate.")
-            .setPositiveButton("Picture") { _, _ -> try { app.planFromWords(e, "image") } catch (ex: UserError) { showError(ex.message.orEmpty()) } }
-            .setNeutralButton("Video") { _, _ -> try { app.planFromWords(e, "video") } catch (ex: UserError) { showError(ex.message.orEmpty()) } }
+        val actions = ownWordsActions()
+        // A list instead of a message, so it can hold every choice. You still review the job card and tap Generate.
+        MaterialAlertDialogBuilder(this).setTitle("Make a job card from your exact words")
+            .setItems(actions.map { it.first }.toTypedArray()) { _, which -> ownWords(e, actions[which].second) }
             .setNegativeButton("Cancel", null).show()
     }
 
@@ -474,9 +500,11 @@ class MainActivity : AppCompatActivity() {
         val card = ui.card(feed, 14, R.color.ot_surface_high, 6)
         card.addView(ui.text(reason, Ui.Type.BODY))
         card.addView(ui.text("You can still use your own words, exactly as you typed them.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(4), 0, 0) })
+        val editing = app.selectedImage != null
         card.addView(actionRow(
-            ui.tonal("Picture from my words", R.drawable.ic_image) { try { app.planFromWords(e, "image") } catch (ex: UserError) { showError(ex.message.orEmpty()) } },
-            ui.textButton("Video from my words", R.drawable.ic_movie) { try { app.planFromWords(e, "video") } catch (ex: UserError) { showError(ex.message.orEmpty()) } }
+            if (editing) ui.tonal("Edit the picture with my words", R.drawable.ic_edit) { ownWords(e, "edit") } else null,
+            if (editing) ui.textButton("Picture from my words", R.drawable.ic_image) { ownWords(e, "image") } else ui.tonal("Picture from my words", R.drawable.ic_image) { ownWords(e, "image") },
+            ui.textButton("Video from my words", R.drawable.ic_movie) { ownWords(e, "video") }
         ))
     }
 
@@ -543,7 +571,7 @@ class MainActivity : AppCompatActivity() {
             if (outputs.size > 1) card.addView(ui.text("Output ${output.position + 1}", Ui.Type.CAPTION, ui.muted).apply { setPadding(0, dp(8), 0, 0) })
             if (file.exists() && e.mode == Mode.IMAGE && recent) {
                 val image = ShapeableImageView(this).apply {
-                    contentDescription = "Generated image: ${e.prompt}"; adjustViewBounds = true; scaleType = ImageView.ScaleType.CENTER_CROP
+                    contentDescription = if (e.baseUrl == History.PHONE_BASE) e.prompt else "Generated image: ${e.prompt}"; adjustViewBounds = true; scaleType = ImageView.ScaleType.CENTER_CROP
                     shapeAppearanceModel = ShapeAppearanceModel.builder().setAllCornerSizes(dp(16).toFloat()).build()
                     setOnClickListener { previewImage(file) }
                 }
@@ -568,7 +596,7 @@ class MainActivity : AppCompatActivity() {
         }
         val busy = app.isBusy()
         card.addView(actionRow(
-            ui.textButton("Use prompt") { prompt.setText(e.prompt); prompt.requestFocus() },
+            if (e.baseUrl != History.PHONE_BASE) ui.textButton("Use prompt") { prompt.setText(e.prompt); prompt.requestFocus() } else null,
             if (e.state == "processing") ui.textButton("Refresh", R.drawable.ic_refresh) { app.refresh(e) }.apply { isEnabled = !busy } else null,
             if (e.state == "processing") ui.textButton("Cancel") { app.refresh(e, true) }.apply { isEnabled = !busy } else null,
             if (e.state == "processing") ui.textButton("Stop tracking") { confirmStopTracking(e) }.apply { isEnabled = !busy } else null,
@@ -807,12 +835,43 @@ class MainActivity : AppCompatActivity() {
         return output.toByteArray()
     }
 
+    /** The message bar's photo button: brings a phone photo in as a picture, then offers what this mode can do with it. */
+    private fun addPhoto() {
+        val target = mode
+        pickPhoto { uri ->
+            if (uri == null) return@pickPhoto
+            io.execute {
+                try {
+                    val (bytes, mime) = readPhoto(uri)
+                    val id = app.importPhoto(bytes, mime)
+                    runOnUiThread { if (!isFinishing && !isDestroyed) photoAdded(id, target) }
+                } catch (e: Exception) { runOnUiThread { if (!isFinishing && !isDestroyed) showError((e as? UserError)?.message ?: "Could not add this photo.") } }
+            }
+        }
+    }
+
+    private fun photoAdded(id: Long, target: Mode) {
+        val entry = app.history.entry(id) ?: return
+        val file = localMedia(entry)
+        if (target != mode) { renderFeed(); snack("Photo added to the Image feed."); return }
+        when (target) {
+            Mode.CHAT -> {
+                app.selectedImage = id; scrollToEnd = true; renderFeed(); prompt.requestFocus()
+                snack(if (app.createFromChat) "Photo added. Say what to do with it, such as make it black and white or turn it into a video."
+                    else "Photo added to the Image feed. Turn on Create from chat in Settings to edit or animate it from here.")
+            }
+            Mode.IMAGE -> { scrollToEnd = true; renderFeed(); useAs(file, listOf(MediaRole.REFERENCE), "Use this photo to...") { editImage(entry, file) } }
+            Mode.VIDEO -> { renderFeed(); useAs(file, listOf(MediaRole.START_FRAME, MediaRole.END_FRAME), "Use this photo as...") }
+        }
+    }
+
     /** Uploads a generated image and puts it into the chosen model input (reference, starting frame, or ending frame). */
-    private fun useAs(file: File) {
+    private fun useAs(file: File, roles: List<MediaRole> = MediaRole.entries, title: String = "Use this image as...", edit: (() -> Unit)? = null) {
         if (!file.exists()) { showError("The private media file is missing."); return }
-        val roles = MediaRole.entries
-        MaterialAlertDialogBuilder(this).setTitle("Use this image as...").setItems(roles.map { it.title }.toTypedArray()) { _, which ->
-            val role = roles[which]
+        val labels = listOfNotNull(if (edit != null) "Edit it" else null) + roles.map { it.title }
+        MaterialAlertDialogBuilder(this).setTitle(title).setItems(labels.toTypedArray()) { _, which ->
+            if (edit != null && which == 0) { edit(); return@setItems }
+            val role = roles[which - if (edit != null) 1 else 0]
             val mime = when (file.extension) { "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"; else -> "image/webp" }
             app.uploadPhoto(role.mode, { Triple(file.inputStream().use { readLimited(it) }, mime, file.name) }) { url, error ->
                 if (isFinishing || isDestroyed) return@uploadPhoto
@@ -821,7 +880,8 @@ class MainActivity : AppCompatActivity() {
                     val current = app.settings.get(role.mode)
                     val updated = role.apply(current, url) { app.settings.forModel(current, it) }
                     app.settings.save(updated, null)
-                    snack("${role.title} set on ${updated.model}.", "Open ${role.mode.title}") { drafts[mode] = prompt.text.toString(); mode = role.mode; showChat() }
+                    if (role.mode == mode) snack("${role.title} set on ${updated.model}. Describe what you want, then tap Generate.")
+                    else snack("${role.title} set on ${updated.model}.", "Open ${role.mode.title}") { drafts[mode] = prompt.text.toString(); mode = role.mode; showChat() }
                     renderFeed()
                 } catch (e: UserError) { showError(e.message.orEmpty()) }
             }

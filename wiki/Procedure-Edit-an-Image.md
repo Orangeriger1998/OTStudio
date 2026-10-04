@@ -17,6 +17,14 @@ This procedure changes one thing in a finished picture, such as a color or an ob
 5. Tap **Edit**. The app uploads the picture to your Replicate account and starts the edit.
 6. The edited picture appears as a new card that begins with **Edit of:** and the original's prompt. Save or share it as usual.
 
+## Edit a photo from your phone
+
+1. On the main screen, tap **Image**, then the photo button at the left of the message bar.
+2. Pick the photo. It appears in the Image feed as **Your photo**.
+3. Choose **Edit it**, then follow steps 3 to 6 above.
+
+In Chat, the same photo button works with plain words. Pick the photo, then send an instruction such as `make it black and white`. The job card names the photo, and Generate starts the edit.
+
 ## Tips
 
 - One change per edit works best. For two changes, edit the result again.

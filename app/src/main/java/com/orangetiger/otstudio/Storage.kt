@@ -160,7 +160,12 @@ class SettingsStore(private val context: Context) {
 }
 
 class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 6) {
-    companion object { const val LOCAL_BASE = "on-device" }
+    companion object {
+        const val LOCAL_BASE = "on-device"
+        /** The base URL and model label of a photo the user added from the phone. It has no provider job. */
+        const val PHONE_BASE = "phone"
+        const val PHONE_MODEL = "Photo from this phone"
+    }
     /**
      * When false, new chat turns live only in this list and vanish when the app process ends.
      * Image and video entries always go to the database, so their files can be kept.
@@ -234,6 +239,21 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 6
         put("mode", Mode.CHAT.name); put("prompt", prompt); put("state", "chatting"); put("model", model); put("base_url", LOCAL_BASE)
         put("credential_mode", Mode.CHAT.name); put("created", System.currentTimeMillis())
     })
+
+    /** A photo picked from the phone. It joins the Image feed as a finished picture, so it can be edited, used, or talked about. */
+    @Synchronized fun insertPhoto(prompt: String, localFile: String): Long {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val id = db.insertOrThrow("entries", null, ContentValues().apply {
+                put("mode", Mode.IMAGE.name); put("prompt", prompt); put("state", "succeeded"); put("model", PHONE_MODEL); put("base_url", PHONE_BASE)
+                put("credential_mode", Mode.IMAGE.name); put("created", System.currentTimeMillis()); put("local_file", localFile)
+            })
+            db.insertOrThrow("media_outputs", null, ContentValues().apply { put("entry_id", id); put("position", 0); put("url", ""); put("local_file", localFile) })
+            db.setTransactionSuccessful()
+            return id
+        } finally { db.endTransaction() }
+    }
 
     @Synchronized fun update(id: Long, state: String, response: String? = null, remoteId: String? = null, outputUrl: String? = null, localFile: String? = null, summary: String? = null, plan: String? = null, sources: String? = null) {
         val values = ContentValues().apply {

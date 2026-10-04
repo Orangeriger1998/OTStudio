@@ -21,7 +21,7 @@ The full guide lives in the **[OT Studio wiki](wiki/Home.md)**. It explains ever
 - **Memory** for standing instructions, and **web search** on Wikipedia or with a free Tavily key.
 - **Images** with FLUX schnell, FLUX dev, FLUX 1.1 Pro, and FLUX dev with your own LoRA.
 - **Video** with WAN 2.7 and WAN 2.2, from text or from starting and ending frames.
-- **Photos as inputs.** Pick a photo from the phone as a reference or a video frame. A finished image can become the next reference or frame in one tap.
+- **Photos as inputs.** The photo button in the message bar adds a photo from the phone in any mode. The chat can edit or animate it, and Image and Video can use it as a reference or a frame. A finished image can become the next reference or frame in one tap.
 - **Upscale 2x** to bring a 1024 by 1024 image to about 2048 by 2048.
 - **API CALL**, a panel that shows each model's real inputs and filters models by feature.
 - **A LoRA library** for LoRAs trained with the **OT Studio LoRA Trainer**, a standalone Windows program on the Releases page, or with the included script.

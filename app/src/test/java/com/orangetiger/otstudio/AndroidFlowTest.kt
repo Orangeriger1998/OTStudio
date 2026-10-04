@@ -351,4 +351,38 @@ class AndroidFlowTest {
         assertEquals("existing.png", upgraded.outputs(listOf(1L))[1L]!!.single().localFile)
         upgraded.close()
     }
+
+    @Test fun aPhotoFromThePhoneBecomesAPictureTheChatCanUse() {
+        val app = RuntimeEnvironment.getApplication() as StudioApp
+        val id = app.importPhoto(byteArrayOf(1, 2, 3), "image/jpeg")
+        val e = app.history.entry(id)!!
+        assertEquals(Mode.IMAGE, e.mode); assertEquals("succeeded", e.state); assertEquals(History.PHONE_BASE, e.baseUrl)
+        assertTrue(e.prompt, e.prompt.matches(Regex("Your photo, added [A-Z][a-z]{2} \\d{1,2}, \\d{1,2}:\\d{2} [AP]M")))
+        val file = java.io.File(java.io.File(app.filesDir, "media"), e.localFile)
+        assertArrayEquals(byteArrayOf(1, 2, 3), file.readBytes())
+        assertEquals(e.localFile, app.history.outputs(listOf(id))[id]!!.single().localFile)
+        // The chat sees it as the newest picture, and an edit or a video reads its bytes.
+        assertEquals(id, app.imageRefs().first().id)
+        assertArrayEquals(byteArrayOf(1, 2, 3), app.mediaBytes(e).first)
+        assertThrows(UserError::class.java) { app.importPhoto(byteArrayOf(1), "image/gif") }
+        // When the chat model returns no plan, "my words" can still edit the chosen photo, and only a chosen one.
+        val chat = app.history.insertLocal("make it black and white", "test model")
+        app.history.update(chat, "succeeded", "No plan.")
+        app.selectedImage = null
+        assertThrows(UserError::class.java) { app.planFromWords(app.history.entry(chat)!!, "edit") }
+        app.selectedImage = id
+        app.planFromWords(app.history.entry(chat)!!, "edit")
+        assertEquals(JobPlan("edit", "Your own words, as you typed them.", "make it black and white", id), JobPlan.fromJson(app.history.entry(chat)!!.plan))
+        app.selectedImage = null
+    }
+
+    @Test fun theMessageBarHasAPhotoButtonInEveryMode() {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        listOf("Chat", "Image", "Video").forEach { tab ->
+            views(activity.window.decorView).filterIsInstance<android.widget.RadioButton>().firstOrNull { it.text.toString() == tab }?.performClick()
+                ?: views(activity.window.decorView).filterIsInstance<TextView>().first { it.text.toString() == tab }.performClick()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertTrue(tab, views(activity.window.decorView).any { it.contentDescription?.toString() == "Add a photo from this phone" })
+        }
+    }
 }
