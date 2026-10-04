@@ -135,7 +135,8 @@ class TrainerApp:
         row = ttk.Frame(c4, style="Card.TFrame"); row.pack(fill="x", pady=(8, 0))
         self.train_button = ttk.Button(row, text="Train LoRA", style="Accent.TButton", command=self.start_training)
         self.train_button.pack(side="left")
-        ttk.Button(row, text="Resume a job...", command=self.resume_job).pack(side="left", padx=8)
+        self.resume_button = ttk.Button(row, text="Resume a job...", command=self.resume_job)
+        self.resume_button.pack(side="left", padx=8)
         self.cancel_button = ttk.Button(row, text="Cancel training", command=self.cancel_training)
         self.progress = ttk.Progressbar(c4, mode="indeterminate")
         self.status = ttk.Label(c4, text="", style="Card.TLabel", wraplength="6i")
@@ -193,11 +194,18 @@ class TrainerApp:
                     self.username = value
                     self.account.configure(text=f"Signed in as {value}." if value else "")
                     self.check_button.state(["!disabled"])
-                elif kind == "error":
-                    self.set_working(False)
+                elif kind == "token_error":
                     self.check_button.state(["!disabled"])
                     self.status.configure(text=value)
                     messagebox.showerror(TITLE, value)
+                elif kind == "error":
+                    self.set_working(False)
+                    self.status.configure(text=value)
+                    messagebox.showerror(TITLE, value)
+                elif kind == "submitted":
+                    # Cancel exists only once Replicate has a training to cancel.
+                    if self.working:
+                        self.cancel_button.pack(side="left", padx=8)
                 elif kind == "done":
                     self.set_working(False)
                     self.show_result(value)
@@ -211,23 +219,24 @@ class TrainerApp:
 
     def set_working(self, on: bool):
         self.working = on
+        for button in (self.resume_button, self.check_button):
+            button.state(["disabled"] if on else ["!disabled"])
         if on:
             self.progress.pack(fill="x", pady=(10, 0), before=self.status)
             self.progress.start(12)
-            self.cancel_button.pack(side="left", padx=8)
         else:
             self.progress.stop()
             self.progress.pack_forget()
             self.cancel_button.pack_forget()
 
-    def background(self, work):
+    def background(self, work, kind="error"):
         def run():
             try:
                 work()
             except train.TrainingError as e:
-                self.events.put(("error", str(e)))
+                self.events.put((kind, str(e)))
             except Exception:
-                self.events.put(("error", "The network or Replicate failed. Nothing is retried on its own. Check the Replicate dashboard, then use Resume a job."))
+                self.events.put((kind, "The network or Replicate failed. Nothing is retried on its own. Check the Replicate dashboard, then use Resume a job."))
         threading.Thread(target=run, daemon=True).start()
 
     # ---------- actions ----------
@@ -245,7 +254,7 @@ class TrainerApp:
             self.api = api
             self.events.put(("account", name))
             self.say("Token works. Now choose the photos.")
-        self.background(work)
+        self.background(work, kind="token_error")
 
     def choose_photos(self):
         files = filedialog.askopenfilenames(title="Choose 10 to 20 photos", filetypes=[("Photos", "*.jpg *.jpeg *.png *.webp")])
@@ -303,6 +312,8 @@ class TrainerApp:
         self.background(work)
 
     def watch(self, folder: Path, job):
+        if job.get("training_id"):
+            self.events.put(("submitted", job["training_id"]))
         started = time.monotonic()
         while job["status"] not in train.TERMINAL:
             minutes = int((time.monotonic() - started) // 60)
@@ -337,7 +348,7 @@ class TrainerApp:
         self.background(work)
 
     def cancel_training(self):
-        if not self.job_folder or not messagebox.askyesno(TITLE, "Cancel this training at Replicate? Time already used is still charged."):
+        if not self.working or not self.job_folder or not messagebox.askyesno(TITLE, "Cancel this training at Replicate? Time already used is still charged."):
             return
         self.stop_polling.set()
         folder = self.job_folder

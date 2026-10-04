@@ -28,10 +28,15 @@ class HttpFetcher : Fetcher {
         // Identity encoding keeps byte counts and ranges exact.
         c.setRequestProperty("Accept-Encoding", "identity")
         if (rangeFrom > 0) c.setRequestProperty("Range", "bytes=$rangeFrom-")
-        val code = c.responseCode
-        val headers = c.headerFields.filterKeys { it != null }.mapKeys { it.key.lowercase() }.mapValues { it.value.firstOrNull().orEmpty() }
-        val body = if (code in 200..299) c.inputStream else null
-        return FetchReply(code, headers, body) { c.disconnect(); if (active === c) active = null }
+        try {
+            val code = c.responseCode
+            val headers = c.headerFields.filterKeys { it != null }.mapKeys { it.key.lowercase() }.mapValues { it.value.firstOrNull().orEmpty() }
+            val body = if (code in 200..299) c.inputStream else null
+            return FetchReply(code, headers, body) { c.disconnect(); if (active === c) active = null }
+        } catch (e: Exception) {
+            c.disconnect(); if (active === c) active = null
+            throw e
+        }
     }
 }
 

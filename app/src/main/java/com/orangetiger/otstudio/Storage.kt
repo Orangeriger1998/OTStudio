@@ -240,7 +240,8 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 6
     }
 
     @Synchronized fun list(mode: Mode? = null, pendingOnly: Boolean = false): List<Entry> {
-        if (mode == Mode.CHAT && !pendingOnly && !saveChat) return unsaved.toList()
+        // Like the stored list, at most the newest 100 entries, so callers can rely on that bound.
+        if (mode == Mode.CHAT && !pendingOnly && !saveChat) return unsaved.takeLast(100)
         val stored = listStored(mode, pendingOnly)
         return if (pendingOnly) stored + unsaved.filter { it.state == "chatting" } else stored
     }

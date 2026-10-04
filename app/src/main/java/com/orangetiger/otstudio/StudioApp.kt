@@ -143,9 +143,13 @@ class StudioApp : Application() {
     private fun planWithSearch(id: Long, start: List<Turn>, refs: List<ImageRef>, selected: Long?, fits: (List<Turn>) -> Boolean, ask: (List<Turn>, Boolean) -> String): Pair<String, List<SearchResult>> {
         var messages = start
         val found = ArrayList<SearchResult>()
+        var last = ""
         while (true) {
+            // Stop during a search ends the turn; nothing more is asked of the model.
+            if (stopRequested && found.isNotEmpty()) return last to found
             val allow = settings.allowSearch && found.size < WebSearch.MAX_SEARCHES && !stopRequested && fits(messages)
             val raw = ask(messages, allow)
+            last = raw
             val r = Planner.parse(raw, refs, selected, allow)
             if (r !is PlanResult.Ok || r.plan.action != "search") return raw to found
             postStream(id, "Searching the web for: ${r.plan.prompt}")
@@ -153,6 +157,7 @@ class StudioApp : Application() {
             val result = try { web.search(r.plan.prompt, key) }
                 catch (e: Exception) { SearchResult(r.plan.prompt, "failed", (e as? UserError)?.message ?: "The search could not reach the service.", emptyList()) }
             found.add(result)
+            if (stopRequested) return raw to found
             messages = messages + Turn("assistant", raw.trim()) +
                 Turn("user", if (result.source == "failed") "The web search failed: ${result.answer} Answer without it, and say that the search failed." else WebSearch.context(result))
         }
@@ -189,6 +194,8 @@ class StudioApp : Application() {
     fun send(mode: Mode, prompt: String): Boolean {
         if (busy.get()) return false
         val p = Rules.prompt(prompt)
+        // Reset here, before the task is queued, so a Stop tapped while it waits is kept.
+        stopRequested = false
         if (mode == Mode.CHAT && local.engine == ChatEngine.LOCAL) return sendLocal(p)
         val model = settings.resolve(mode)
         ModelOptions.validateForModel(model.settings.model, model.settings.schema ?: throw UserError("Open API CALL and load this model's inputs first."), model.settings.options)
@@ -207,6 +214,7 @@ class StudioApp : Application() {
             changed()
             if (mode == Mode.CHAT) {
                 try {
+                    streaming = null
                     if (plan) {
                         val (raw, found) = planWithSearch(id, turns.map { if (it.role == "system") Turn("system", Planner.systemPrompt(memory, refs, selected, settings.allowSearch)) else it },
                             refs, selected, { m -> m.sumOf { it.content.length } < 60_000 }) { m, allow -> api.chat(model, m, Planner.responseFormat(refs, allow)) }
@@ -215,6 +223,7 @@ class StudioApp : Application() {
                     else history.update(id, "succeeded", api.chat(model, turns))
                 }
                 catch (e: Exception) { history.update(id, "failed", friendly(e)) }
+                finally { streaming = null }
             } else {
                 try { applyPrediction(id, mode, api.create(model, p)) }
                 catch (e: ProviderRejected) { history.update(id, "failed", "${e.message} No job was created.") }
@@ -233,7 +242,8 @@ class StudioApp : Application() {
         run {
             val turns = history.turns()
             val id = history.insertLocal(p, "${m.title} (on this phone)")
-            stopRequested = false
+            engine.clearCancel()
+            if (stopRequested) engine.cancel()
             changed()
             NativeEngine.prepare(this)
             NativeEngine.begin(this)
@@ -365,7 +375,7 @@ class StudioApp : Application() {
         val image = settings.resolve(Mode.IMAGE)
         // Checked before the upload, so a settings problem never leaves an orphan file at the provider.
         val chosen = settings.forModel(image.settings, preset.model)
-        ModelOptions.validateForModel(preset.model, chosen.schema ?: throw UserError("This editing model has no input list."), chosen.options + InputValue(preset.imageField, InputKind.TEXT, "https://api.replicate.com/v1/files/check"))
+        ModelOptions.validateForModel(preset.model, chosen.schema ?: throw UserError("This editing model has no input list."), chosen.options.filter { it.name != preset.imageField } + InputValue(preset.imageField, InputKind.TEXT, "https://api.replicate.com/v1/files/check"))
         settings.editModel = preset.model
         run {
             val (bytes, mime, name) = read()

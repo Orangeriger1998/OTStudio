@@ -13,6 +13,8 @@ class LlamaEngine : LocalLlm {
     private var model: LlamaModel? = null
     @Volatile private var running: LlamaIterator? = null
     @Volatile private var cancelled = false
+    // After the native library failed to load once, its classes stay unusable for this process.
+    @Volatile private var nativeBroken = false
     override var loadedPath: String? = null
         private set
     override var lastStats: ChatStats? = null
@@ -21,6 +23,7 @@ class LlamaEngine : LocalLlm {
     private var stateDir: String? = null
 
     override fun load(path: String, contextTokens: Int, threads: Int, stateDir: String?, progress: (Float) -> Boolean) {
+        if (nativeBroken) throw UserError(NO_ENGINE)
         unload()
         var aborted = false
         try {
@@ -32,8 +35,9 @@ class LlamaEngine : LocalLlm {
             model = LlamaModel(params) { p -> progress(p).also { if (!it) aborted = true } }
             loadedPath = path
             this.stateDir = stateDir
-        } catch (e: UnsatisfiedLinkError) {
-            throw UserError("This phone's processor cannot run the on-device engine. Use OpenRouter for chat instead.")
+        } catch (e: LinkageError) {
+            nativeBroken = true
+            throw UserError(NO_ENGINE)
         } catch (e: Exception) {
             if (aborted) throw UserError("Stopped while loading the model.")
             throw UserError("The model could not be loaded. The file may be damaged, or this engine may not support it.")
@@ -64,7 +68,7 @@ class LlamaEngine : LocalLlm {
 
     override fun chat(messages: List<Turn>, maxTokens: Int, responseFormat: String?, thinking: Boolean, onText: (String) -> Unit): String {
         val m = model ?: throw UserError("Load a model first.")
-        cancelled = false
+        if (cancelled) return ""
         val array = JSONArray()
         messages.forEach { array.put(JSONObject().put("role", it.role).put("content", it.content)) }
         var params = InferenceParameters.empty().withMessagesJson(array.toString()).withNPredict(maxTokens).withCachePrompt(true)
@@ -90,6 +94,10 @@ class LlamaEngine : LocalLlm {
     }
 
     override fun cancel() { cancelled = true; running?.cancel() }
+    override fun clearCancel() { cancelled = false }
 
-    companion object { const val STATE_FILE = "chat.bin" }
+    companion object {
+        const val STATE_FILE = "chat.bin"
+        const val NO_ENGINE = "This phone's processor cannot run the on-device engine. Use OpenRouter for chat instead."
+    }
 }

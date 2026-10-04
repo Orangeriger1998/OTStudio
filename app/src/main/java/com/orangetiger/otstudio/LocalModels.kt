@@ -137,6 +137,8 @@ interface LocalLlm {
     fun countTokens(text: String): Int
     /** Streams a reply to [messages]. Returns the full text. [responseFormat] is an OpenAI response_format JSON object or null. */
     fun chat(messages: List<Turn>, maxTokens: Int, responseFormat: String?, thinking: Boolean, onText: (String) -> Unit): String
-    /** Stops the running [chat] from another thread. */
+    /** Stops the running [chat] from another thread. Later [chat] calls return at once until [clearCancel]. */
     fun cancel()
+    /** Called once at the start of each user message, before any [chat] for it. */
+    fun clearCancel()
 }

@@ -28,6 +28,15 @@ class SearchTest {
         assertEquals("Paris is the capital.", r.hits.single().snippet)
     }
 
+    @Test fun overlongAndBrokenLinksNeverBreakTheResults() {
+        val long = "https://example.org/" + "a%20".repeat(150)
+        val web = Recorder(listOf(HttpReply(200, """{"results":[{"title":"Long","url":"$long","content":"x"},{"title":"Fine","url":"https://example.org/ok","content":"y"}]}""")))
+        assertEquals(listOf("Fine"), WebSearch(web).search("q", "tvly-abc").hits.map { it.title })
+        // Saved results from older versions may hold a cut link; the context still builds.
+        val ctx = WebSearch.context(SearchResult("q", "Tavily", "", listOf(SearchHit("Cut", "https://example.org/a%2", "z"))))
+        assertTrue(ctx.contains("[1] Cut ()"))
+    }
+
     @Test fun wikipediaSearchesThenReadsExtractsWithoutAKey() {
         val web = Recorder(listOf(
             HttpReply(200, """{"query":{"search":[{"title":"Red fox"},{"title":"Fox"}]}}"""),

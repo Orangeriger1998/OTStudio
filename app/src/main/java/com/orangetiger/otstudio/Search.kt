@@ -99,8 +99,8 @@ class WebSearch(private val web: WebFetch) {
 
     private fun hit(title: String, url: String, snippet: String): SearchHit? {
         val u = try { URI(url) } catch (_: Exception) { return null }
-        if (u.scheme != "https" || u.host.isNullOrBlank() || u.userInfo != null) return null
-        return SearchHit(clip(title, 200).ifBlank { u.host }, url.take(500), clip(snippet, 700))
+        if (u.scheme != "https" || u.host.isNullOrBlank() || u.userInfo != null || url.length > 500) return null
+        return SearchHit(clip(title, 200).ifBlank { u.host }, url, clip(snippet, 700))
     }
 
     companion object {
@@ -134,7 +134,10 @@ class WebSearch(private val web: WebFetch) {
             append("<<<RESULTS\n")
             if (r.answer.isNotBlank()) append("Summary: ").append(r.answer).append("\n")
             if (r.hits.isEmpty()) append("No results.\n")
-            r.hits.forEachIndexed { i, h -> append("[${i + 1}] ").append(h.title).append(" (").append(URI(h.url).host).append(")\n").append(h.snippet).append("\n") }
+            r.hits.forEachIndexed { i, h ->
+                val host = try { URI(h.url).host.orEmpty() } catch (_: Exception) { "" }
+                append("[${i + 1}] ").append(h.title).append(" (").append(host).append(")\n").append(h.snippet).append("\n")
+            }
             append("RESULTS>>>\n")
             append("Now answer the user's message with these results. Name the sources you used by their numbers.")
         }
