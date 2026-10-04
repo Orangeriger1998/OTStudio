@@ -24,7 +24,7 @@ The full guide lives in the **[OT Studio wiki](wiki/Home.md)**. It explains ever
 - **Photos as inputs.** Pick a photo from the phone as a reference or a video frame. A finished image can become the next reference or frame in one tap.
 - **Upscale 2x** to bring a 1024 by 1024 image to about 2048 by 2048.
 - **API CALL**, a panel that shows each model's real inputs and filters models by feature.
-- **A LoRA library** for LoRAs trained with the included script.
+- **A LoRA library** for LoRAs trained with the **OT Studio LoRA Trainer**, a standalone Windows program on the Releases page, or with the included script.
 
 ## Requirements
 
@@ -94,6 +94,7 @@ The script runs the tests and lint, builds the minified release, and signs it. O
 | `app/src/main/assets/help.txt` | The in-app Help text |
 | `app/src/test` | Unit tests, including screen tests that run under Robolectric |
 | `scripts/train_lora.py` | The computer-side LoRA training helper, with its tests |
+| `scripts/lora_trainer_app.py`, `scripts/build-trainer.ps1` | The Windows LoRA Trainer window and its standalone build |
 | `scripts/build-release.ps1` | The signed release build |
 | `docs` | Provider contracts, privacy notes, and LoRA training details |
 | `branding` | The OT Studio logo and tiger artwork |

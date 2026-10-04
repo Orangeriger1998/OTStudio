@@ -14,7 +14,7 @@ FLUX Kontext dev has a LoRA version, and so does Qwen Image Edit Plus. Whether t
 
 ### A companion app for Windows
 
-A Windows app would match the phone app: the same chat on the computer with the same model files, the same job cards, and Replicate for every picture and video. The 1.0.0 logic for plans, search, memory, and the model manager already runs on a plain desktop Java runtime for that reason. A small standalone LoRA trainer for Windows comes first.
+A Windows app would match the phone app: the same chat on the computer with the same model files, the same job cards, and Replicate for every picture and video. The 1.0.0 logic for plans, search, memory, and the model manager already runs on a plain desktop Java runtime for that reason. The standalone LoRA Trainer for Windows shipped with 1.0.0 as the first piece.
 
 ### OpenRouter as a second provider for images and video
 

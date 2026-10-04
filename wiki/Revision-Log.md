@@ -24,6 +24,8 @@ The first release under the OT Studio name. It is a beta, shared with a small gr
 
 **Plain summaries.** Setup and job cards describe settings in words, such as "Image, square", instead of raw setting names.
 
+**LoRA Trainer for Windows.** A standalone program trains a LoRA from 10 to 20 photos: paste the Replicate token, choose the photos, name the LoRA, and press Train LoRA. It creates the private model, starts the training, and shows the reference to use in OT Studio on any device.
+
 **Default chat model.** New installs use Mistral Nemo through OpenRouter, which follows the job-plan format reliably. MythoMax stays in the list.
 
 **New look.** Every screen moved to Google's Material 3 components on a black canvas, in the tiger orange and logo blue of the OT Studio brand. Chat replies appear as bubbles. Image and video results appear as cards with colored status labels.

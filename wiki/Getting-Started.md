@@ -72,7 +72,7 @@ The chat prices count tokens, which are pieces of words, so the "words" in the t
 
 OT Studio makes one photo or one clip at a time. It does not join clips into a longer video. Music and titles also need another app. CapCut handles both on a phone. On a computer, any desktop video editor does the same job.
 
-LoRA training runs on a computer with the `train_lora.py` script from this repository. A phone cannot train a LoRA.
+LoRA training runs on a Windows computer with the OT Studio LoRA Trainer from the Releases page, or anywhere with the `train_lora.py` script. A phone cannot train a LoRA.
 
 Replicate deletes results made through its API after about an hour. OT Studio downloads each result the moment it finishes, so this rarely matters. Still, save anything you want to keep.
 

@@ -118,9 +118,16 @@ def prepare(photos, folder, name, destination, trigger="TOK", steps=1000, rank=1
     require(1 <= len(name.strip()) <= 80 and not any(ord(c) < 32 for c in name), "Use a name of 1-80 characters.")
     require(re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,79}", trigger), "Use a trigger of 1-80 letters, digits, or underscores, starting with a letter.")
     require(3 <= steps <= 6000 and 1 <= rank <= 128, "Steps must be 3-6000 and rank 1-128.")
-    photos, folder = Path(photos).resolve(), Path(folder).resolve()
-    require(photos.is_dir(), "The photo folder does not exist.")
-    images = sorted(p for p in photos.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"})
+    folder = Path(folder).resolve()
+    if isinstance(photos, (list, tuple)):
+        # The desktop trainer passes the chosen files directly; they may come from several folders.
+        images = [Path(p).resolve() for p in photos]
+        require(all(p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"} for p in images), "Choose JPG, PNG, or WebP photos only.")
+        require(len({p for p in images}) == len(images), "The same photo was chosen twice.")
+    else:
+        photos = Path(photos).resolve()
+        require(photos.is_dir(), "The photo folder does not exist.")
+        images = sorted(p for p in photos.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"})
     require(1 <= len(images) <= 20, "Select between 1 and 20 JPG, PNG, or WebP photos. The trainer recommends at least 10.")
     total, data = 0, []
     for index, photo in enumerate(images, 1):
@@ -205,7 +212,8 @@ class ReplicateApi:
         require(0 < len(token) <= 4096 and all(33 <= ord(c) <= 126 for c in token), "Invalid Replicate API token.")
         self._token = token
 
-    def request(self, method, path, body=None):
+    def request(self, method, path, body=None, allow_missing=False):
+        """Returns the JSON reply. With allow_missing, an HTTP 404 returns None instead of failing."""
         require(path.startswith("/v1/") and "?" not in path and ".." not in path, "Invalid API path.")
         payload = json.dumps(body, allow_nan=False).encode() if body is not None else None
         headers = {"Authorization": "Bearer " + self._token, "Accept": "application/json", "User-Agent": "OTStudioTrainer/1.0.0"}
@@ -216,6 +224,9 @@ class ReplicateApi:
         try:
             conn.request(method, path, body=payload, headers=headers)
             response = conn.getresponse()
+            if allow_missing and response.status == 404:
+                return None
+            require(response.status not in (401, 403), "Replicate refused the token. Check it on replicate.com/account/api-tokens.")
             require(200 <= response.status < 300, f"Replicate returned HTTP {response.status}. Check access, inputs, and dashboard. No automatic retry was made.")
             return read_json_response(response, deadline)
         finally:
@@ -273,6 +284,35 @@ class ReplicateApi:
         finally:
             conn.close()
             partial.unlink(missing_ok=True)
+
+
+def account_username(api):
+    """The Replicate account the token belongs to. Free; no model or training is touched."""
+    result = api.request("GET", "/v1/account")
+    username = result.get("username", "")
+    require(isinstance(username, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,100}", username), "Replicate did not report a usable account name.")
+    return username
+
+
+def destination_slug(name):
+    """A Replicate model name for a LoRA: lowercase letters, digits, and dashes, starting with lora-."""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:50].strip("-")
+    require(slug, "Use a LoRA name with at least one letter or digit.")
+    return "lora-" + slug
+
+
+def ensure_destination(api, owner, slug):
+    """Uses the private model owner/slug, creating it when it does not exist. Creating a model is free."""
+    require(re.fullmatch(r"[A-Za-z0-9_-]{1,100}", owner) and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,99}", slug), "Invalid destination name.")
+    destination = owner + "/" + slug
+    found = api.request("GET", "/v1/models/" + destination, allow_missing=True)
+    if found is None:
+        created = api.request("POST", "/v1/models", {"owner": owner, "name": slug, "visibility": "private", "hardware": "cpu",
+                                                    "description": "FLUX dev LoRA trained with the OT Studio LoRA Trainer"})
+        require(created.get("owner") == owner and created.get("name") == slug, "Replicate did not create the destination model.")
+        found = created
+    require(found.get("visibility") == "private", f"The model {destination} exists but is not private. Choose another LoRA name.")
+    return destination
 
 
 def submit(folder, api, accept_charge=False, upload_photos=False):

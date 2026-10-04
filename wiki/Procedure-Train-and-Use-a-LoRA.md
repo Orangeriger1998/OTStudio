@@ -2,56 +2,34 @@
 
 # Procedure 4: Train a LoRA and Use It
 
-Training runs on Replicate, started from a computer with the `train_lora.py` script in this repository's `scripts` folder. The phone then uses the finished LoRA through the LoRA Library.
+Training runs on Replicate, started from a Windows computer with the **OT Studio LoRA Trainer**. The phone then uses the finished LoRA through the LoRA Library.
 
 **Before you start:**
 
-- a photo set in one folder ([Procedure 3](Procedure-Create-a-LoRA-Training-Set.md))
-- a computer with Python 3.11 or later
+- 10 to 20 photos of one face or style ([Procedure 3](Procedure-Create-a-LoRA-Training-Set.md))
+- a Windows computer
 - your Replicate token
 - credit on your Replicate account
 
-**Cost and time:** one training run with the default 1000 steps costs about $1.50 to $2. By Replicate's own estimate, it takes about 20 minutes.
+**Cost and time:** one training run with 1,000 steps costs about $1.50 to $2 and takes about 20 to 30 minutes.
 
-## Part 1: Create a destination model on Replicate
+## Part 1: Train on your computer
 
-The trained LoRA needs a home in your Replicate account.
+1. From the [Releases](https://github.com/Orangeriger1998/OTStudio/releases) page, download `OT-Studio-LoRA-Trainer.exe` and open it. It needs no installation. Windows may say it protected your PC, because the program carries no publisher signature. Choose **More info**, then **Run anyway**.
+2. Paste your Replicate token and click **Check token**. The window then shows your account name. The token stays in memory and is never saved.
+3. Choose **Choose photos...** and select 10 to 20 photos.
+4. Type a **LoRA name**, such as `My face`. The app suggests a **trigger word**, such as `MYFACE`. Keep it, or type another word that means nothing on its own.
+5. Tick the box that agrees to the upload and the charge, then choose **Train LoRA**.
+6. The trainer creates a private model for the LoRA in your Replicate account, uploads the photos, and starts the training. Its status line counts the minutes.
+7. When training finishes, the window shows the **Reference**, with a **Copy** button. The job folder, in `Documents\OT Studio LoRA`, holds `trained.otstudio-lora.json` and a backup of the LoRA weights.
 
-1. Open [replicate.com/create](https://replicate.com/create).
-2. Name the model, for example `my-face`, and set it to **Private**.
-3. Note its full ID, such as `yourname/my-face`.
+Closing the window does not stop the training at Replicate, which is still charged. **Resume a job...** picks up a job folder later and finishes the download.
 
-## Part 2: Train on your computer
-
-1. Download `scripts/train_lora.py` from this repository. Open a terminal in the folder that holds it.
-2. Prepare the job. This step runs only on your computer and costs nothing:
-
-   ```
-   python train_lora.py prepare --photos ./my-photos --job ./training-jobs/my-face --name "My face" --destination yourname/my-face --trigger MYFACE
-   ```
-
-   The trigger word must start with a letter and use only letters, digits, or underscores. Pick a word that means nothing on its own, such as `MYFACE`.
-3. Open `training-jobs/my-face/photos.zip` and check that every photo belongs.
-4. Start the paid training. The two flags confirm that you accept the upload and the charge:
-
-   ```
-   python train_lora.py submit --job ./training-jobs/my-face --upload-photos --accept-charge
-   ```
-
-   The script asks for your Replicate token with the input hidden. It never saves the token.
-5. Check progress every few minutes:
-
-   ```
-   python train_lora.py status --job ./training-jobs/my-face
-   ```
-
-6. When status reports success, the job folder holds `trained.otstudio-lora.json` and a backup copy of the LoRA weights. Keep the whole folder.
-
-If the script loses contact during submit, it marks the job uncertain and refuses to submit again. That rule protects you from paying twice. The full recovery steps are in `docs/LORA-TRAINING.md`.
+The same steps also run from a terminal with `scripts/train_lora.py`, on any computer with Python 3.11 or later. `docs/LORA-TRAINING.md` explains both, including recovery after a lost connection.
 
 ## Part 3: Use the LoRA in OT Studio
 
-1. Copy `trained.otstudio-lora.json` to your phone.
+1. Copy `trained.otstudio-lora.json` to your phone. Or, in step 2, tap **Add manually** and paste the reference from the trainer.
 2. In OT Studio, tap the **LoRA library** icon, then **Import file**. Choose the file.
 3. Check the name, reference, trigger word, and scale in the review form. Tap **Save**.
 4. Tap **Image**, then **API CALL**. Under **Saved models**, choose `black-forest-labs/flux-dev-lora`.

@@ -1,5 +1,11 @@
 # Train and use a LoRA
 
+## The desktop trainer
+
+`OT-Studio-LoRA-Trainer.exe` (on the Releases page; built by `scripts/build-trainer.ps1`) is a standalone Windows program for the steps below. It needs no Python. The user pastes the Replicate token, which stays in memory only; chooses 10 to 20 photos; names the LoRA; and agrees to the upload and the charge. The trainer then finds the account name (`GET /v1/account`), creates or reuses a private destination model named `lora-<name>` (`POST /v1/models` with hardware `cpu`, which is free), prepares the ZIP, uploads it, starts training, checks every 30 seconds, and saves the weights and `trained.otstudio-lora.json` in `Documents\OT Studio LoRA\<job>`. A public model with the same name is refused. Resume a job picks up a job folder after the window was closed. Cancel training cancels only the saved training ID. Windows SmartScreen may warn about the unsigned program; More info, then Run anyway, starts it.
+
+The trainer uses `train_lora.py` underneath, so every rule below applies to it as well. The command line remains for other systems and for scripted use.
+
 The correct trainer is **ostris/flux-dev-lora-trainer**. This workflow trains a FLUX dev LoRA, saves its weights on your computer, and creates a library file for OT Studio's **black-forest-labs/flux-dev-lora** dropdown. Training runs on Replicate.
 
 The script uses Python 3.11 or later and the standard library only. It was tested with Python 3.12. No ADB, emulator, Windows installer, or extra Python package is required by the script.
@@ -8,7 +14,7 @@ The script uses Python 3.11 or later and the standard library only. It was teste
 
 Extract the trainer ZIP and put 1-20 JPG, PNG, or WebP photos in one folder. The provider recommends at least 10. Each photo must be at most 20 MiB; the combined ZIP must fit within 95 MiB. Subfolders are not included. Optional UTF-8 captions go beside matching photos, such as `photo.jpg` and `photo.txt`. Autocaptioning is enabled.
 
-Create an empty private destination model in your Replicate account, or use an existing private model intended for this training. Note its `owner/model` ID. The script checks it before uploading; it does not create models or change visibility.
+Create an empty private destination model in your Replicate account, or use an existing private model intended for this training. Note its `owner/model` ID. The script checks it before uploading; it never changes a model's visibility. (The desktop trainer creates the private model itself.)
 
 Open PowerShell in the extracted script folder and replace the example folder and destination:
 

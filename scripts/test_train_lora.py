@@ -19,9 +19,17 @@ class FakeApi:
         self.fail_post = False
         self.fail_download = False
         self.response = {"id": "training1", "status": "processing"}
+        self.models = {}
 
-    def request(self, method, path, body=None):
+    def request(self, method, path, body=None, allow_missing=False):
         self.calls.append((method, path, body))
+        if path == "/v1/account":
+            return {"type": "user", "username": "owner"}
+        if method == "GET" and path.startswith("/v1/models/owner/lora-"):
+            return self.models.get(path.rsplit("/", 1)[-1]) if allow_missing else self.models[path.rsplit("/", 1)[-1]]
+        if method == "POST" and path == "/v1/models":
+            self.models[body["name"]] = dict(body)
+            return dict(body)
         if method == "GET" and path == "/v1/models/owner/style":
             return {"owner": "owner", "name": "style", "visibility": self.visibility}
         if method == "POST" and path.endswith("/trainings") and self.fail_post:
@@ -306,6 +314,34 @@ class TrainerTests(unittest.TestCase):
             with self.assertRaises(train.TrainingError):
                 train.ReplicateApi("synthetic-test-only").upload(self.job / "photos.zip")
             self.assertEqual(1, factory.call_count)
+
+    def test_destination_is_created_private_once_and_public_models_are_refused(self):
+        api = FakeApi()
+        self.assertEqual("owner", train.account_username(api))
+        self.assertEqual("lora-mark-s-face-2026", train.destination_slug("  Mark's Face 2026! "))
+        with self.assertRaises(train.TrainingError):
+            train.destination_slug("!!!")
+        self.assertEqual("owner/lora-mark", train.ensure_destination(api, "owner", "lora-mark"))
+        self.assertEqual(1, sum(1 for c in api.calls if c[0] == "POST" and c[1] == "/v1/models"))
+        created = [c[2] for c in api.calls if c[1] == "/v1/models"][0]
+        self.assertEqual(("private", "cpu"), (created["visibility"], created["hardware"]))
+        # A second run reuses the private model.
+        self.assertEqual("owner/lora-mark", train.ensure_destination(api, "owner", "lora-mark"))
+        self.assertEqual(1, sum(1 for c in api.calls if c[0] == "POST" and c[1] == "/v1/models"))
+        api.models["lora-open"] = {"owner": "owner", "name": "lora-open", "visibility": "public"}
+        with self.assertRaises(train.TrainingError):
+            train.ensure_destination(api, "owner", "lora-open")
+
+    def test_chosen_photo_files_from_several_folders_can_be_prepared(self):
+        first, second = self.root / "a", self.root / "b"
+        first.mkdir(); second.mkdir()
+        one, two = first / "one.jpg", second / "two.png"
+        one.write_bytes(b"\xff\xd8\xff" + b"x" * 20)
+        two.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 20)
+        job = train.prepare([one, two], self.root / "listjob", "List", "owner/style")
+        self.assertEqual(2, job["photo_count"])
+        with self.assertRaises(train.TrainingError):
+            train.prepare([one, one], self.root / "dupjob", "Dup", "owner/style")
 
     def test_modified_training_settings_are_validated_before_network(self):
         job = self.prepared()
