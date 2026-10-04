@@ -8,6 +8,24 @@ This log lists the main changes from one version to the next. It records what a 
 
 The first release under the OT Studio name. It is a beta, shared with a small group of testers. The [Roadmap](Roadmap.md) lists what may come next.
 
+**Chat on the phone.** Chat can run on the phone itself with a downloaded model, offline and at no cost per message. A new [Model Manager](Design-Model-Manager.md) downloads, checks, and deletes models from Hugging Face. The suggested model is Qwen3 4B Instruct, abliterated. On recent phones the app picks a faster engine build that reads messages about three times faster. Replies stream word by word, Stop ends one at once, and a short line reports the speed. A new install asks where Chat should run.
+
+**Create by chatting.** Ask in plain words for a picture, an edit, or a video. The chat answers with a [job card](Design-Job-Card.md) that shows the exact prompt, the model, and the likely cost, and nothing is paid for until Generate. Results appear in the chat, and the next request can build on them, such as "turn that picture into a video".
+
+**Edit an image.** Image cards gained Edit..., which changes one thing in a picture from a plain instruction. Nine Replicate editing models are offered, with FLUX Kontext dev first.
+
+**Memory.** A new [Memory](Design-Memory.md) page holds standing instructions that open every chat.
+
+**Web search.** The chat can look up current facts on Wikipedia, or on the whole web with a free Tavily key, and lists its sources under the reply.
+
+**Chat history choice.** Save chat history can be switched off for chats that vanish when the app closes. Clear chat history deletes every chat message.
+
+**Thinking.** Models that think before answering can show that thinking in a separate, folded block.
+
+**Plain summaries.** Setup and job cards describe settings in words, such as "Image, square", instead of raw setting names.
+
+**Default chat model.** New installs use Mistral Nemo through OpenRouter, which follows the job-plan format reliably. MythoMax stays in the list.
+
 **New look.** Every screen moved to Google's Material 3 components on a black canvas, in the tiger orange and logo blue of the OT Studio brand. Chat replies appear as bubbles. Image and video results appear as cards with colored status labels.
 
 **Splash screen and icon.** The app opens on the full OTStudio logo, and the launcher shows the tiger.

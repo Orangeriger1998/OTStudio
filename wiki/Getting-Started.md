@@ -2,7 +2,7 @@
 
 # Getting Started
 
-This page takes you from an empty phone to your first image. Plan on about fifteen minutes, most of it spent creating the two provider accounts.
+This page takes you from an empty phone to your first image. Plan on about fifteen minutes, most of it spent creating the provider accounts.
 
 ## Install the app
 
@@ -14,9 +14,9 @@ OT Studio needs Android 10 or later. The Play Store does not list it, so updates
 
 ## Get your keys
 
-OT Studio uses two providers, and each one needs its own key.
+Chat can run on the phone with no key at all ([Procedure 7](Procedure-Install-a-Local-Model.md)). Images, edits, and video need a Replicate key. An OpenRouter key adds larger online chat models, and a free Tavily key widens web search beyond Wikipedia. Each key works only with its own provider.
 
-**OpenRouter** runs the chat models.
+**OpenRouter** runs the online chat models. It is optional.
 
 1. Create an account at [openrouter.ai](https://openrouter.ai/sign-up).
 2. Buy credit on the [Credits](https://openrouter.ai/settings/credits) page. The smallest purchase is $5. Card payments carry a fee of 5.5 percent, with an 80 cent minimum.
@@ -29,11 +29,14 @@ OT Studio uses two providers, and each one needs its own key.
 2. Open [Billing](https://replicate.com/account/billing), add a payment method, and buy credit. Replicate bills in advance. Its credit stays valid for one year.
 3. Open [API tokens](https://replicate.com/account/api-tokens). Your account already has a default token. It starts with `r8_`.
 
+**Tavily** searches the web for the chat. It is optional. Sign up at [tavily.com](https://app.tavily.com/home) for a free key with 1,000 searches a month. The key starts with `tvly-`.
+
 ## Put the keys in OT Studio
 
 1. Tap the gear at the top right to open Settings.
-2. With Chat selected, paste the OpenRouter key into the API key field. Tap Save chat settings.
-3. Tap Image, paste the Replicate key, and tap Save image settings.
+2. With Chat selected, choose where chat runs. For chat on the phone, tap On this phone and download a model under Manage models. For OpenRouter, paste the OpenRouter key into the API key field and tap Save chat settings.
+3. To widen web search, paste the Tavily key in the Web search card under Chat and tap Save key.
+4. Tap Image, paste the Replicate key, and tap Save image settings.
 
 Video reuses the image key by default, so it needs no key of its own. The key field empties after each save, and a line under it confirms that the key is saved. Settings also blocks screenshots, so a key never ends up in a screen capture.
 
@@ -52,6 +55,8 @@ Each provider charges per request. These figures come from the providers' own pr
 | FLUX schnell image | $0.003 each | [Replicate](https://replicate.com/black-forest-labs/flux-schnell) |
 | FLUX dev image | $0.025 each | [Replicate](https://replicate.com/black-forest-labs/flux-dev) |
 | FLUX dev LoRA image | $0.032 each | [Replicate](https://replicate.com/black-forest-labs/flux-dev-lora) |
+| Edit of an image | $0.01 to $0.04 each, FLUX Kontext dev $0.025 | [Replicate](https://replicate.com/black-forest-labs/flux-kontext-dev) |
+| Web search | Free on Wikipedia; Tavily's free plan covers 1,000 searches a month | [Tavily](https://www.tavily.com/pricing) |
 | Upscale 2x (Real-ESRGAN) | $0.002 each | [Replicate](https://replicate.com/nightmareai/real-esrgan) |
 | LoRA training run | about $1.50 to $2 | [Replicate](https://replicate.com/ostris/flux-dev-lora-trainer) |
 | WAN 2.7 video from an image | $0.10 per second at 720p, $0.15 at 1080p | [Replicate](https://replicate.com/wan-video/wan-2.7-i2v) |

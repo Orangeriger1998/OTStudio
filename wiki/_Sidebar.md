@@ -27,3 +27,6 @@
 - [Train and Use a LoRA](Procedure-Train-and-Use-a-LoRA)
 - [Frames to Video](Procedure-Frames-to-Video)
 - [Consistent Face Video](Procedure-Consistent-Face-Video)
+- [Install a Local Model](Procedure-Install-a-Local-Model)
+- [Create by Chatting](Procedure-Create-by-Chatting)
+- [Edit an Image](Procedure-Edit-an-Image)

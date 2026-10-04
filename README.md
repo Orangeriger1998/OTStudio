@@ -2,7 +2,7 @@
 
 # OT Studio
 
-OT Studio is an Android app for chat, images, and video. It connects your phone straight to AI models at OpenRouter and Replicate. You bring your own keys. Each provider bills you directly, so you pay only for what you make.
+OT Studio is an Android app for chat, images, and video. Chat runs on the phone with a free downloaded model, or through OpenRouter. Images, edits, and video come from Replicate. You bring your own keys. Each provider bills you directly, so you pay only for what you make.
 
 <p align="center">
 <img src="docs/images/screen-main.png" width="200" alt="Main screen">
@@ -15,7 +15,10 @@ The full guide lives in the **[OT Studio wiki](wiki/Home.md)**. It explains ever
 
 ## What it does
 
-- **Chat** with OpenRouter models such as MythoMax 13B and Qwen3 8B, with conversation history.
+- **Chat on the phone** with a downloaded model, offline and free per message, or with OpenRouter models such as Mistral Nemo.
+- **Create by chatting.** Ask for a picture, an edit, or a video in plain words. A job card shows the exact prompt, the model, and the likely cost before you tap Generate.
+- **Edit an image** from a plain instruction with Replicate editing models.
+- **Memory** for standing instructions, and **web search** on Wikipedia or with a free Tavily key.
 - **Images** with FLUX schnell, FLUX dev, FLUX 1.1 Pro, and FLUX dev with your own LoRA.
 - **Video** with WAN 2.7 and WAN 2.2, from text or from starting and ending frames.
 - **Photos as inputs.** Pick a photo from the phone as a reference or a video frame. A finished image can become the next reference or frame in one tap.
@@ -25,7 +28,7 @@ The full guide lives in the **[OT Studio wiki](wiki/Home.md)**. It explains ever
 
 ## Requirements
 
-OT Studio needs Android 10 or later and an internet connection. Most phones sold since 2019 qualify. You also need two accounts: OpenRouter for chat, and Replicate for images and video. Both bill in advance, so add a little credit to each before the first request.
+OT Studio needs Android 10 or later and an internet connection. Most phones sold since 2019 qualify. Chat on the phone works best with 8 GB of memory and needs about 2.4 GB of space for the model. Images and video need a Replicate account with a little credit. OpenRouter is optional, for larger online chat models.
 
 ## Install
 
@@ -47,7 +50,7 @@ In OT Studio, tap the gear to open Settings. Paste the OpenRouter key under Chat
 
 These typical figures come from the providers' price pages in October 2026. Prices change, so check the providers before a large project. The wiki's [Getting Started](wiki/Getting-Started.md) page lists every price with its source.
 
-**A chat message** costs about a hundredth of a cent with MythoMax 13B.
+**A chat message** costs nothing on the phone, and well under a hundredth of a cent with Mistral Nemo through OpenRouter. **An edit** costs 1 to 4 cents.
 
 **Ten matching photos at about 2K.** Matching photos need a LoRA, a small add-on model trained on your own pictures. One training run costs about $1.50 to $2. Each LoRA photo then costs about three cents at 1024 by 1024, and upscaling it to 2048 by 2048 adds a fifth of a cent. The first set of ten comes to about $2.20. After that, a new set of ten costs about 35 cents.
 
@@ -65,7 +68,7 @@ The app has no cloud backup. Removing it deletes your history, your saved keys, 
 
 ## Privacy and security
 
-OT Studio has no server of its own and collects no analytics. Keys are encrypted with the Android Keystore and never leave the phone except to the provider they belong to. Settings blocks screenshots in release builds. The app never sends a key to a storage host, and it never retries a paid request on its own. [docs/PRIVACY.md](docs/PRIVACY.md) covers the details.
+OT Studio has no server of its own and collects no analytics. Chat on the phone keeps messages on the phone; only web search words leave it, and Allow web search turns that off. Keys are encrypted with the Android Keystore and never leave the phone except to the provider they belong to. Settings blocks screenshots in release builds. The app never sends a key to a storage host, and it never retries a paid request on its own. [docs/PRIVACY.md](docs/PRIVACY.md) covers the details.
 
 ## Build from source
 

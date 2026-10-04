@@ -2,13 +2,13 @@
 
 # OT Studio
 
-OT Studio is an Android app for chat, images, and video. It connects your phone straight to AI models at two providers. OpenRouter serves the chat models, while images and video come from Replicate. You bring your own keys. Each provider bills you directly for what you use.
+OT Studio is an Android app for chat, images, and video. Chat runs on the phone with a free downloaded model, or through OpenRouter. Images, edits, and video come from Replicate. Ask for a picture or a clip in plain words, and the chat prepares the job for you to check and start. You bring your own keys, and each provider bills you directly for what you use.
 
 The app keeps your keys encrypted on the phone. Each key goes only to the provider it belongs to. OT Studio has no server of its own. It collects no analytics.
 
 ## Requirements
 
-OT Studio needs Android 10 or later and an internet connection. Most phones sold since 2019 qualify. You also need an OpenRouter account for chat and a Replicate account for images and video. Both bill in advance, so each needs a small amount of credit before the first request.
+OT Studio needs Android 10 or later and an internet connection. Most phones sold since 2019 qualify. Chat on the phone works best with 8 GB of memory and needs about 2.4 GB of space. Images and video need a Replicate account with a little credit. An OpenRouter account is optional, for chat with larger online models.
 
 ## Start here
 
@@ -40,6 +40,9 @@ Each procedure walks through one workflow, tap by tap.
 4. [Train a LoRA and Use It](Procedure-Train-and-Use-a-LoRA.md)
 5. [Turn Frames Into Video](Procedure-Frames-to-Video.md)
 6. [Keep a Face Consistent Through a Video](Procedure-Consistent-Face-Video.md)
+7. [Install a Local Model](Procedure-Install-a-Local-Model.md)
+8. [Create by Chatting](Procedure-Create-by-Chatting.md)
+9. [Edit an Image](Procedure-Edit-an-Image.md)
 
 ## Releases
 
