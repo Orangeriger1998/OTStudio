@@ -22,7 +22,7 @@ class ModelsScreen(private val activity: MainActivity, private val ui: Ui, priva
         val content = ui.column()
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        content.addView(ui.text("Models download from Hugging Face into this app's private storage. Chat with them works offline, and nothing you type leaves the phone. Each download is large, so use Wi-Fi.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, ui.dp(4)) })
+        content.addView(ui.text("Models download from Hugging Face into this app's private storage. Chat with them works offline, and your messages stay on the phone. Each download is large, so use Wi-Fi.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, ui.dp(4)) })
         space = ui.text("", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, ui.dp(10)) }
         content.addView(space)
         list = ui.column()

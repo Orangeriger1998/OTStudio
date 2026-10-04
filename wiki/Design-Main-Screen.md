@@ -31,7 +31,7 @@ Each mode keeps its own model, options, key, history, and unsent prompt. Switchi
 | Box | What it holds | Why |
 |---|---|---|
 | Model ID | The exact model the next request will use, such as `black-forest-labs/flux-schnell` | Image and video requests cost money. The user should see the model before tapping send, not after. |
-| Option summary | Plain words for the settings, such as "Image, square, safety checker off" or "5-second clip, wide, 720p" | Shows what will change the result or the price without raw setting names. It reads "Working..." while a request runs. |
+| Option summary | Plain words for the settings, such as "Image, square, safety checker off" or "5-second clip, wide, 720p". Chat through OpenRouter reads "Online chat through OpenRouter". | Shows what will change the result or the price without raw setting names. It reads "Working..." while a request runs. |
 | API CALL button | Opens the [API CALL Panel](Design-API-CALL-Panel.md) | Changing the model or its inputs is the most common adjustment, so its button sits beside the summary it changes |
 
 The model ID shortens in the middle when it is too long, so both the owner and the model name stay visible.

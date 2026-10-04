@@ -2,6 +2,8 @@
 
 # Job Card
 
+<img src="images/panel-job-card.png" width="260" alt="A job card for a wide picture of a lighthouse">
+
 With Create from chat on, the user can ask for a picture, an edit, or a video in plain words. The chat model turns the request into a plan, and the plan appears under its reply as a job card. Nothing is paid for until the user taps Generate on the card.
 
 ## How a plan is made

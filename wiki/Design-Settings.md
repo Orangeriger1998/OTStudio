@@ -2,7 +2,7 @@
 
 # Settings
 
-<img src="images/panel-settings-1.png" width="260" alt="Settings showing the provider and key cards"> <img src="images/panel-settings-2.png" width="260" alt="Settings showing the save folder and About cards">
+<img src="images/panel-settings-chat-1.png" width="260" alt="Settings for Chat with On this phone selected"> <img src="images/panel-settings-chat-2.png" width="260" alt="Settings for Chat showing memory, history, and web search"> <img src="images/panel-settings-1.png" width="260" alt="Settings showing the provider and key cards"> <img src="images/panel-settings-2.png" width="260" alt="Settings showing the save folder and About cards">
 
 Settings holds what changes rarely: where chat runs, the provider address, the default model, the key, and the save folder. Release builds block screenshots and screen recording on this screen, so a key never lands in a capture.
 
@@ -56,7 +56,7 @@ This card appears only under Chat.
 | Allow web search | A checkbox, on by default | Lets the chat look up current facts before it answers. Off keeps every message on the phone. |
 | Note | Says that search words leave the phone and that replies list their searches | The user knows what is sent and where |
 | Tavily API key | A password field, optional, with a status line | Without a key the chat searches Wikipedia. A free Tavily key searches the whole web. The key is encrypted and goes only to Tavily. |
-| Save key, Remove key, Get a free key | Buttons | Get a free key opens Tavily's sign-up page in the browser |
+| Save key, Remove key, Get a key | Buttons | Get a key opens Tavily's sign-up page in the browser |
 
 ## Memory and history card
 

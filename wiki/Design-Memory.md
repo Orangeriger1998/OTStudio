@@ -2,6 +2,8 @@
 
 # Memory
 
+<img src="images/panel-memory.png" width="260" alt="Memory with two instructions switched on">
+
 Memory holds standing instructions that open every chat. A user writes each one once, such as a name to use or a writing rule, and never has to repeat it. Open Memory from [Settings](Design-Settings.md), under Chat, with Edit memory.
 
 ## Top bar

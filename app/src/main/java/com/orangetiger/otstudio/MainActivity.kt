@@ -309,7 +309,7 @@ class MainActivity : AppCompatActivity() {
             setupTitle.text = s.model
             setupSummary.text = when {
                 app.isBusy() -> "Working..."
-                mode == Mode.CHAT -> ModelOptions.summary(s.model, s.options).ifBlank { "Provider defaults" }
+                mode == Mode.CHAT -> "Online chat through OpenRouter"
                 else -> PlainSummary.describe(mode, s.model, s.options)
             }
         }
@@ -438,8 +438,10 @@ class MainActivity : AppCompatActivity() {
         meta.addView(statePill(e.state)); meta.addView(ui.text("  ${e.model}", Ui.Type.CAPTION, ui.muted), ui.weight())
         if (plan == null && app.createFromChat && e.state == "succeeded") meta.addView(ui.textButton("Use my words") { ownWordsChoice(e) })
         meta.addView(ui.textButton("Use prompt") { prompt.setText(e.prompt); prompt.requestFocus() })
-        feed.addView(meta, ui.matchWrap(if (e.requestSummary.isEmpty()) 14 else 2))
-        if (e.requestSummary.isNotEmpty()) feed.addView(ui.text(e.requestSummary, Ui.Type.CAPTION, ui.muted), ui.matchWrap(14))
+        // On-device replies carry a speed line; online replies would only repeat raw settings, so they show none.
+        val speed = e.requestSummary.takeIf { e.baseUrl == History.LOCAL_BASE && it.isNotEmpty() }
+        feed.addView(meta, ui.matchWrap(if (speed == null) 14 else 2))
+        if (speed != null) feed.addView(ui.text(speed, Ui.Type.CAPTION, ui.muted), ui.matchWrap(14))
     }
 
     /** The web searches behind a reply: each query, its service, and links the user can open. */
@@ -701,7 +703,7 @@ class MainActivity : AppCompatActivity() {
         card.addView(actionRow(
             ui.tonal("Save key") { try { if (key.text.toString().isNotBlank()) { app.settings.saveSearchKey(key.text.toString()); key.setText(""); ui.layoutOf(key)?.helperText = helper(); note.text = "Saved." } } catch (e: UserError) { note.text = e.message } },
             ui.danger("Remove key", R.drawable.ic_delete) { try { app.settings.saveSearchKey(""); ui.layoutOf(key)?.helperText = helper(); note.text = "Key removed." } catch (e: UserError) { note.text = e.message } },
-            ui.textButton("Get a free key", R.drawable.ic_open_in_new) { openLink(TAVILY_SIGNUP) }
+            ui.textButton("Get a key", R.drawable.ic_open_in_new) { openLink(TAVILY_SIGNUP) }
         ))
         card.addView(note)
     }

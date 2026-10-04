@@ -2,6 +2,8 @@
 
 # Model Manager
 
+<img src="images/panel-model-manager.png" width="260" alt="The model manager with the suggested models">
+
 The model manager downloads chat models onto the phone. Chat can then run with no key and no cost per message. Open it from Settings, under Chat, with Manage models. The Models button on the main screen opens it too while Chat runs on the phone.
 
 Model files come from Hugging Face. OT Studio never ships one inside the app. Each file stays in the app's private storage, and Android backup skips it.

@@ -28,6 +28,8 @@ The upload goes to the user's own Replicate account through Replicate's Files AP
 
 ### The Edit dialog
 
+<img src="images/action-edit.png" width="260" alt="The Edit this image dialog with an instruction and FLUX Kontext dev">
+
 | Box | What it holds | Why |
 |---|---|---|
 | What should change? | A text field for a plain instruction, with an example under it | Editing models follow short, direct instructions best, such as "change the orange border to black" |
