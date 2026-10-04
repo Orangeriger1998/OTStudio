@@ -68,6 +68,10 @@ class MainActivity : AppCompatActivity() {
     private var streamId = -1L
     private var streamView: TextView? = null
     private var streamThinking: TextView? = null
+    // Job cards keep the user's prompt edits and model choice across redraws of the feed.
+    private val cardPrompts = mutableMapOf<Long, String>()
+    private val cardModels = mutableMapOf<Long, String>()
+    private lateinit var selectionRow: LinearLayout
     private var lastSent = ""
     private val drafts = mutableMapOf<Mode, String>()
     private val handler = Handler(Looper.getMainLooper())
@@ -238,6 +242,8 @@ class MainActivity : AppCompatActivity() {
         feed = ui.column()
         scroller.addView(feed)
         root.addView(scroller, LinearLayout.LayoutParams(-1, 0, 1f))
+        selectionRow = ui.row()
+        root.addView(selectionRow)
         val composer = ui.row().apply { setPadding(0, dp(8), 0, 0); gravity = Gravity.BOTTOM }
         val field = ui.column()
         prompt = ui.field(field, when (mode) { Mode.CHAT -> "Message"; Mode.IMAGE -> "Describe an image"; Mode.VIDEO -> "Describe the scene and its motion" }, drafts[mode].orEmpty(), multiline = true)
@@ -300,7 +306,11 @@ class MainActivity : AppCompatActivity() {
             setupSummary.text = localStatus()
         } else {
             setupTitle.text = s.model
-            setupSummary.text = if (app.isBusy()) "Working..." else ModelOptions.summary(s.model, s.options).ifBlank { "Provider defaults" }
+            setupSummary.text = when {
+                app.isBusy() -> "Working..."
+                mode == Mode.CHAT -> ModelOptions.summary(s.model, s.options).ifBlank { "Provider defaults" }
+                else -> PlainSummary.describe(mode, s.model, s.options)
+            }
         }
         send.isEnabled = !app.isBusy()
         if (!app.isBusy() && lastSent.isNotEmpty() && entries.lastOrNull()?.let { it.prompt == lastSent && it.state in listOf("succeeded", "processing", "download") } == true) {
@@ -319,7 +329,16 @@ class MainActivity : AppCompatActivity() {
         feed.removeAllViews()
         if (entries.isEmpty()) emptyState()
         val prompts = entries.associate { it.id to it.prompt }
-        entries.forEach { e -> if (e.mode == Mode.CHAT) chatEntry(e) else mediaEntry(e, outputMap[e.id].orEmpty(), entries.takeLast(3).any { it.id == e.id }, generation, prompts[e.parentId]) }
+        selectionRow.removeAllViews()
+        if (mode == Mode.CHAT) app.selectedImage?.let { id ->
+            val picked = app.history.entry(id)
+            if (picked == null) app.selectedImage = null
+            else {
+                selectionRow.addView(ui.text("Talking about: ${picked.prompt.take(60)}", Ui.Type.SMALL, ui.orange).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, ui.weight())
+                selectionRow.addView(ui.textButton("Clear") { app.selectedImage = null; renderFeed() })
+            }
+        }
+        entries.forEach { e -> if (e.mode == Mode.CHAT) chatEntry(e, generation) else mediaEntry(e, outputMap[e.id].orEmpty(), entries.takeLast(3).any { it.id == e.id }, generation, prompts[e.parentId]) }
         val toEnd = scrollToEnd || lastSent.isNotEmpty() || atEnd
         scrollToEnd = false
         scroller.post { if (toEnd) scroller.fullScroll(View.FOCUS_DOWN) else scroller.scrollTo(0, previousY) }
@@ -386,7 +405,7 @@ class MainActivity : AppCompatActivity() {
         return box
     }
 
-    private fun chatEntry(e: Entry) {
+    private fun chatEntry(e: Entry, generation: Int) {
         feed.addView(bubble(e.prompt, mine = true), ui.matchWrap(6))
         val failed = e.state in listOf("failed", "uncertain", "interrupted")
         val thought = ReplyText.thinking(e.response)
@@ -403,11 +422,84 @@ class MainActivity : AppCompatActivity() {
             streamThinking = (block as LinearLayout).getChildAt(1) as TextView
             feed.addView(holder, ui.matchWrap(4))
         }
+        val plan = JobPlan.fromJson(e.plan)
+        when {
+            plan == null -> { }
+            plan.action == "invalid" -> ownWordsCard(e, "No usable plan came back. ${plan.reply}")
+            e.jobEntry == 0L -> jobCard(e, plan)
+            e.jobEntry < 0 -> feed.addView(ui.text("Plan canceled. Nothing was sent.", Ui.Type.CAPTION, ui.muted), ui.matchWrap(6))
+            else -> app.history.entry(e.jobEntry)?.let { job ->
+                mediaEntry(job, app.history.outputs(listOf(job.id))[job.id].orEmpty(), true, generation, job.parentId.takeIf { it > 0 }?.let { app.history.entry(it)?.prompt })
+            }
+        }
         val meta = ui.row()
         meta.addView(statePill(e.state)); meta.addView(ui.text("  ${e.model}", Ui.Type.CAPTION, ui.muted), ui.weight())
+        if (plan == null && app.createFromChat && e.state == "succeeded") meta.addView(ui.textButton("Use my words") { ownWordsChoice(e) })
         meta.addView(ui.textButton("Use prompt") { prompt.setText(e.prompt); prompt.requestFocus() })
         feed.addView(meta, ui.matchWrap(if (e.requestSummary.isEmpty()) 14 else 2))
         if (e.requestSummary.isNotEmpty()) feed.addView(ui.text(e.requestSummary, Ui.Type.CAPTION, ui.muted), ui.matchWrap(14))
+    }
+
+    /** Offers to send the user's own message, as typed, to an image or video model. Only a job card follows; nothing is paid yet. */
+    private fun ownWordsChoice(e: Entry) {
+        MaterialAlertDialogBuilder(this).setTitle("Use your own words").setMessage("Make a job card that sends your message exactly as you typed it. You still review it and tap Generate.")
+            .setPositiveButton("Picture") { _, _ -> try { app.planFromWords(e, "image") } catch (ex: UserError) { showError(ex.message.orEmpty()) } }
+            .setNeutralButton("Video") { _, _ -> try { app.planFromWords(e, "video") } catch (ex: UserError) { showError(ex.message.orEmpty()) } }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun ownWordsCard(e: Entry, reason: String) {
+        val card = ui.card(feed, 14, R.color.ot_surface_high, 6)
+        card.addView(ui.text(reason, Ui.Type.BODY))
+        card.addView(ui.text("You can still use your own words, exactly as you typed them.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(4), 0, 0) })
+        card.addView(actionRow(
+            ui.tonal("Picture from my words", R.drawable.ic_image) { try { app.planFromWords(e, "image") } catch (ex: UserError) { showError(ex.message.orEmpty()) } },
+            ui.textButton("Video from my words", R.drawable.ic_movie) { try { app.planFromWords(e, "video") } catch (ex: UserError) { showError(ex.message.orEmpty()) } }
+        ))
+    }
+
+    /**
+     * A job card: what the plan will make, in plain words, with the exact prompt (editable), the model, and the likely cost.
+     * Generate is the only way a plan becomes a paid request.
+     */
+    private fun jobCard(e: Entry, plan: JobPlan) {
+        val card = ui.card(feed, 14, R.color.ot_surface_container, 6)
+        val models = app.planModels(plan)
+        var modelId = cardModels[e.id]?.takeIf { it in models } ?: app.defaultPlanModel(plan)
+        val title = ui.bold(ui.text("", Ui.Type.SUBTITLE))
+        card.addView(title)
+        plan.reference?.let { id -> app.history.entry(id)?.let { ref ->
+            card.addView(ui.text("${if (plan.action == "edit") "Edits" else "Starts from"} the picture: ${app.describe(ref).take(120)}", Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(2), 0, dp(6)) })
+            if (plan.action == "video") card.addView(ui.textButton("Without the picture") { cardModels.remove(e.id); app.dropPlanPicture(e, plan) }, LinearLayout.LayoutParams(-2, -2))
+        } }
+        ui.gap(card, 6)
+        val field = ui.field(card, if (plan.action == "edit") "Instruction" else "Prompt the model receives", cardPrompts[e.id] ?: plan.prompt, multiline = true)
+        field.maxLines = 8
+        field.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) { }
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) { }
+            override fun afterTextChanged(s: android.text.Editable?) { cardPrompts[e.id] = s.toString() }
+        })
+        val details = ui.text("", Ui.Type.SMALL, ui.muted)
+        fun refresh() {
+            try {
+                val (s, notes) = app.planSettings(plan, modelId)
+                title.text = PlainSummary.describe(if (plan.action == "video") Mode.VIDEO else Mode.IMAGE, s.model, s.options)
+                details.text = (listOf("Model: ${s.model}", "Likely cost: ${Prices.estimate(s.model, s.options) ?: "see the model's page at Replicate"}") + notes).joinToString("\n")
+            } catch (ex: UserError) { title.text = "This plan cannot run with this model"; details.text = ex.message }
+        }
+        if (models.isNotEmpty()) ui.dropdown(card, "Model", models, modelId) { modelId = it; cardModels[e.id] = it; refresh() }
+        card.addView(details)
+        refresh()
+        val busy = app.isBusy()
+        card.addView(actionRow(
+            ui.filled("Generate", R.drawable.ic_send) {
+                try {
+                    if (app.runPlan(e, plan, field.text.toString(), modelId)) { cardPrompts.remove(e.id); cardModels.remove(e.id); snack("Started. The result appears under this plan."); renderFeed() }
+                } catch (ex: UserError) { showError(ex.message.orEmpty()) }
+            }.apply { isEnabled = !busy },
+            ui.textButton("Cancel") { app.cancelPlan(e) }
+        ).also { (it as View).setPadding(0, dp(8), 0, 0) })
     }
 
     private fun mediaEntry(e: Entry, outputs: List<MediaOutput>, recent: Boolean, generation: Int, parentPrompt: String? = null) {
@@ -446,6 +538,7 @@ class MainActivity : AppCompatActivity() {
                 if (e.mode == Mode.IMAGE) ui.textButton("View", R.drawable.ic_visibility) { previewImage(file) } else ui.textButton("Play", R.drawable.ic_play_arrow) { previewVideo(file) },
                 ui.textButton("Save", R.drawable.ic_download) { saveMedia(mediaEntry) },
                 ui.textButton("Share", R.drawable.ic_share) { shareMedia(mediaEntry) },
+                if (e.mode == Mode.IMAGE && mode == Mode.CHAT) ui.textButton("Talk about this", R.drawable.ic_chat) { app.selectedImage = e.id; renderFeed(); prompt.requestFocus() } else null,
                 if (e.mode == Mode.IMAGE) ui.textButton("Edit...", R.drawable.ic_edit) { editImage(e, file) } else null,
                 if (e.mode == Mode.IMAGE) ui.textButton("Use as...", R.drawable.ic_auto_awesome) { useAs(file) } else null,
                 if (e.mode == Mode.IMAGE) ui.textButton("Upscale 2x", R.drawable.ic_zoom_in) { upscale(e, file) } else null
@@ -491,7 +584,7 @@ class MainActivity : AppCompatActivity() {
         val provider = ui.card(content)
         ui.sectionTitle(provider, if (selected == Mode.CHAT) "OpenRouter, Chat Completions" else "Replicate, Predictions", "A new provider must speak this API protocol. Changing a URL alone does not add a different protocol.")
         val url = ui.field(provider, "API base URL", s.baseUrl)
-        val model = ui.field(provider, "Model ID", s.model, helper = if (selected == Mode.CHAT) "Default: gryphe/mythomax-l2-13b. Enter the exact provider ID for another model." else null)
+        val model = ui.field(provider, "Model ID", s.model, helper = if (selected == Mode.CHAT) "Default: mistralai/mistral-nemo. Enter the exact provider ID for another model." else null)
         ui.dropdown(provider, "Saved models", listOf("Keep current") + app.settings.models(selected, s.baseUrl).map { it.model }, "Keep current") { if (it != "Keep current") model.setText(it) }
         val keyCard = ui.card(content)
         ui.sectionTitle(keyCard, "API key", "OpenRouter and Replicate keys are different. Reuse works only when the API origins match.")
@@ -578,6 +671,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun memoryCard(content: LinearLayout) {
+        val create = ui.card(content)
+        ui.sectionTitle(create, "Create from chat", "Ask for a picture, an edit, or a video in plain words. The chat answers with a job card that shows the exact prompt, the model, and the likely cost. Nothing is paid for until you tap Generate on the card.")
+        create.addView(ui.checkbox("Create images and videos from chat", app.createFromChat).apply { setOnCheckedChangeListener { _, on -> app.createFromChat = on } })
+        create.addView(ui.text("While this is on, the model's thinking is not shown, because each reply must be a plan.", Ui.Type.SMALL, ui.muted))
         val card = ui.card(content)
         val lines = app.history.memory.lines()
         ui.sectionTitle(card, "Memory and history", if (lines.isEmpty()) "No memory instructions yet." else "${lines.count { it.enabled }} of ${lines.size} memory instructions are on.")
@@ -710,7 +807,7 @@ class MainActivity : AppCompatActivity() {
         dialog.setOnShowListener { dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val mime = when (file.extension) { "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"; else -> "image/webp" }
             try {
-                if (app.edit(e, instruction.text.toString(), chosen.model) { Triple(file.inputStream().use { readLimited(it) }, mime, file.name) }) {
+                if (app.edit(e, instruction.text.toString(), chosen.model, { Triple(file.inputStream().use { readLimited(it) }, mime, file.name) })) {
                     dialog.dismiss(); snack("Editing with ${chosen.title}. The result appears as a new card."); renderFeed()
                 } else ui.layoutOf(instruction)?.error = "Wait for the current operation to finish."
             } catch (ex: UserError) { ui.layoutOf(instruction)?.error = ex.message }

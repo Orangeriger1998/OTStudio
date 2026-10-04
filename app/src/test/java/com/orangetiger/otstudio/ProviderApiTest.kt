@@ -13,7 +13,7 @@ class ProviderApiTest {
             assertEquals("POST", method); assertEquals("https://openrouter.ai/api/v1/chat/completions", url)
             assertEquals("synthetic-test-key", key)
             val request = JSONObject(body!!)
-            assertEquals("gryphe/mythomax-l2-13b", request.getString("model"))
+            assertEquals("mistralai/mistral-nemo", request.getString("model"))
             assertFalse(request.getBoolean("stream"))
             assertEquals("hello", request.getJSONArray("messages").getJSONObject(0).getString("content"))
             HttpReply(200, """{"choices":[{"message":{"content":"Synthetic reply"}}]}""")

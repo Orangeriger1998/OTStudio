@@ -4,13 +4,30 @@ Examined in the Codex in-app Browser on 2026-10-02. These are schema/catalog che
 
 ## Defaults
 
-Chat: OpenRouter `gryphe/mythomax-l2-13b`, with `qwen/qwen3-8b` also offered. The exact `qwen-3.1-8b-abliterated` identifier was not found in the checked OpenRouter search. Qwen3 8B is a separate option, not the requested abliterated variant. Model IDs remain editable and are remembered when saved.
+Chat: OpenRouter `mistralai/mistral-nemo`, with `qwen/qwen3-30b-a3b-instruct-2507`, `gryphe/mythomax-l2-13b`, and `qwen/qwen3-8b` also offered. The default moved from MythoMax to Mistral Nemo on 2026-10-03, because MythoMax often ignored the job-plan format (see Chat-led creation below). Chat can also run on the phone with a downloaded model. Model IDs remain editable and are remembered when saved.
 
 Image: Replicate `black-forest-labs/flux-schnell`, one output, 1:1. Video: `wan-video/wan-2.7-t2v`, five seconds, 720p, 16:9. OT Studio explicitly chooses 720p instead of the provider's 1080p default. These defaults fill non-secret settings; owners supply their keys.
 
 Text uses Chat Completions, stream=false, no automatic tool execution. max_tokens defaults to 1024, with an app ceiling of 8192. Optional common controls are temperature, top_p, frequency/presence penalties, and seed. Support can vary by text model. Context includes at most 12 prior completed turns and 8000 characters including the prompt.
 
-Sources: [MythoMax](https://openrouter.ai/models?q=mythomax), [Qwen](https://openrouter.ai/models?q=qwen3-8b).
+Sources: [Mistral Nemo](https://openrouter.ai/mistralai/mistral-nemo), [Qwen3 30B-A3B](https://openrouter.ai/qwen/qwen3-30b-a3b-instruct-2507), [MythoMax](https://openrouter.ai/models?q=mythomax), [Qwen3 8B](https://openrouter.ai/models?q=qwen3-8b).
+
+## Chat-led creation
+
+With Create from chat on, every chat request asks for a job plan through `response_format` with a strict JSON schema: `action` (answer, image, edit, or video), `reply`, `prompt`, `reference` (none, last_image, or one listed picture), `shape`, and `seconds`. The properties are written in that order, because constrained decoding follows it, and the model should choose the action before anything else. With an early test order that put `reference`, `seconds`, and `shape` first, the stock Qwen3 4B turned most questions into videos.
+
+On the phone, llama.cpp turns the schema into a grammar, so every reply is valid JSON. Through OpenRouter, the request also sends `provider.require_parameters: true`, so only providers that honor `response_format` serve it. Some still return prose; the app then treats the prose as an ordinary answer.
+
+The model never chooses a provider model or a URL, and never starts a job. The app maps the plan onto the user's models, drops picture inputs saved in model profiles, attaches only the picture the plan names, and validates everything with the manual rules. Generate on the job card is the only way a plan becomes a request.
+
+Test results on 2026-10-03 (26 requests in `OTStudio-private/tools/planner-bench`: questions, new pictures with shapes, edits that must pick the right picture, videos from a picture, follow-ups, small talk):
+
+| Planner | Result |
+|---|---|
+| Huihui Qwen3 4B Instruct abliterated, i1-Q4_0 (on-device default) | 26 of 26 correct |
+| Mistral Nemo through OpenRouter (8 of the requests, on the emulator) | 7 of 8 correct; the mixed request got a prose answer |
+| Qwen3 30B-A3B Instruct through OpenRouter (same 8) | 8 of 8 correct |
+| MythoMax 13B through OpenRouter (same 8) | about half; it often ignored the format and once invented an image address |
 
 ## Image models
 

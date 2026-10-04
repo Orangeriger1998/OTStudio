@@ -106,6 +106,32 @@ class StudioApp : Application() {
             changed()
         }
 
+    /** Create images and videos from chat (default on): every chat reply is a job plan, shown as a job card when it describes media. */
+    var createFromChat: Boolean
+        get() = chatPrefs.getBoolean("create", true)
+        set(v) { chatPrefs.edit().putBoolean("create", v).apply(); changed() }
+
+    /** The picture the user pointed at with "Talk about this". "That picture" in the next message means it. */
+    @Volatile var selectedImage: Long? = null
+
+    /** Finished pictures the chat may refer to, newest first, with the selected one always included. */
+    fun imageRefs(): List<ImageRef> {
+        val done = history.list(Mode.IMAGE).filter { it.state == "succeeded" && it.localFile.isNotEmpty() }.asReversed()
+        val selected = selectedImage?.let { id -> done.firstOrNull { it.id == id } }
+        return (listOfNotNull(selected) + done.filter { it.id != selected?.id }).take(Planner.MAX_IMAGES).map { ImageRef(it.id, describe(it)) }
+    }
+
+    /** What a picture shows, in words. An edit's own prompt is only its instruction, so it is its source plus that instruction. */
+    fun describe(e: Entry): String = if (e.parentId > 0) (history.entry(e.parentId)?.let { "${describe(it)}, edited: ${e.prompt}" } ?: e.prompt) else e.prompt
+
+    /** Stores a model's reply as a plan, an answer, or an invalid plan the user can replace with their own words. */
+    private fun storePlan(id: Long, raw: String, refs: List<ImageRef>, selected: Long?, summary: String? = null) {
+        when (val r = Planner.parse(raw, refs, selected)) {
+            is PlanResult.Ok -> history.update(id, "succeeded", r.plan.reply, summary = summary, plan = if (r.plan.action == "answer") null else r.plan.toJson())
+            is PlanResult.Invalid -> history.update(id, "succeeded", r.reply.ifEmpty { "No plan came back." }, summary = summary, plan = JobPlan("invalid", r.reason).toJson())
+        }
+    }
+
     /** Enabled memory lines, as the start of every chat's system prompt. */
     fun memoryPrompt(): String = MemoryPrompt.build(history.memory.lines())
 
@@ -146,11 +172,18 @@ class StudioApp : Application() {
         run {
             // Memory goes first. With OpenRouter chat, these lines are sent to OpenRouter with each message.
             val memory = if (mode == Mode.CHAT) memoryPrompt() else ""
-            val turns = if (mode == Mode.CHAT) (if (memory.isEmpty()) emptyList() else listOf(Turn("system", memory))) + Rules.boundedTurns(history.turns(), p) else emptyList()
+            val plan = mode == Mode.CHAT && createFromChat
+            val refs = if (plan) imageRefs() else emptyList()
+            val selected = selectedImage
+            val system = if (plan) Planner.systemPrompt(memory, refs, selected) else memory
+            val turns = if (mode == Mode.CHAT) (if (system.isEmpty()) emptyList() else listOf(Turn("system", system))) + Rules.boundedTurns(history.turns(), p) else emptyList()
             val id = history.insert(mode, p, model)
             changed()
             if (mode == Mode.CHAT) {
-                try { history.update(id, "succeeded", api.chat(model, turns)) }
+                try {
+                    if (plan) storePlan(id, api.chat(model, turns, Planner.responseFormat(refs)), refs, selected)
+                    else history.update(id, "succeeded", api.chat(model, turns))
+                }
                 catch (e: Exception) { history.update(id, "failed", friendly(e)) }
             } else {
                 try { applyPrediction(id, mode, api.create(model, p)) }
@@ -194,6 +227,20 @@ class StudioApp : Application() {
                 }
                 localState = "ready"; changed()
                 if (stopRequested) { history.update(id, "canceled", "Stopped before the reply began."); return@run }
+                if (createFromChat) {
+                    // Planning: the grammar from the plan's JSON schema shapes every token, and thinking stays off.
+                    val refs = imageRefs()
+                    val selected = selectedImage
+                    val messages = ChatWindow.fit(Planner.systemPrompt(memoryPrompt(), refs, selected), turns, p, local.contextTokens, Planner.REPLY_TOKENS, engine::countTokens)
+                    streaming = id to ""
+                    val raw = engine.chat(messages, Planner.REPLY_TOKENS, Planner.responseFormat(refs), false) { postStream(id, Planner.streamingReply(it)) }
+                    val stats = engine.lastStats?.summary()
+                    if (raw.isNotBlank() && history.saveChat) engine.saveState()
+                    if (stopRequested) history.update(id, if (raw.isBlank()) "canceled" else "stopped", Planner.streamingReply(raw).ifEmpty { "Stopped before the reply began." }, summary = stats)
+                    else if (raw.isBlank()) history.update(id, "failed", "The model returned no text. Try again or choose another model.", summary = stats)
+                    else storePlan(id, raw, refs, selected, stats)
+                    return@run
+                }
                 val messages = ChatWindow.fit(memoryPrompt(), turns, p, local.contextTokens, LOCAL_REPLY_TOKENS, engine::countTokens)
                 streaming = id to ""
                 val thinking = local.showThinking
@@ -276,7 +323,7 @@ class StudioApp : Application() {
      * on [editModel] with the image in that model's image input. The result appears as a new Image entry linked to [source].
      * The user's tap on Edit in the dialog is the confirmation for this paid request. No automatic retry.
      */
-    fun edit(source: Entry, instruction: String, editModel: String, read: () -> Triple<ByteArray, String, String>): Boolean {
+    fun edit(source: Entry, instruction: String, editModel: String, read: () -> Triple<ByteArray, String, String>, chatId: Long = 0): Boolean {
         if (busy.get()) return false
         val text = Rules.prompt(instruction)
         val preset = ModelCatalog.edit(editModel) ?: throw UserError("Choose an editing model.")
@@ -291,12 +338,112 @@ class StudioApp : Application() {
             val url = api.uploadFile(image.settings.baseUrl, image.key, name, mime, bytes)
             val model = image.copy(settings = chosen.copy(options = chosen.options.filter { it.name != preset.imageField } + InputValue(preset.imageField, InputKind.TEXT, url)))
             val id = history.insert(Mode.IMAGE, text, model, parentId = source.id)
+            if (chatId != 0L) history.setJob(chatId, id)
             changed()
             try { applyPrediction(id, Mode.IMAGE, api.create(model, text)) }
             catch (e: ProviderRejected) { history.update(id, "failed", "${e.message} No job was created.") }
             catch (e: Exception) { history.update(id, "uncertain", "${friendly(e)} No job ID was saved. The provider may have accepted the request; inspect its dashboard before retrying.") }
         }
         return true
+    }
+
+    /** A placeholder that passes URL checks, for validating settings before the real upload exists. */
+    private val uploadCheck = "https://api.replicate.com/v1/files/check"
+
+    /** Reads a finished image's first output from private storage: bytes, MIME type, and file name. */
+    fun mediaBytes(entry: Entry): Triple<ByteArray, String, String> {
+        val name = history.outputs(listOf(entry.id))[entry.id]?.firstOrNull { it.localFile.isNotEmpty() }?.localFile ?: entry.localFile
+        val folder = File(filesDir, "media")
+        val file = File(folder, name)
+        if (name.isEmpty() || file.parentFile?.canonicalPath != folder.canonicalPath || !file.isFile) throw UserError("The picture's file is missing on this phone.")
+        if (file.length() > Rules.MAX_UPLOAD_BYTES) throw UserError("Pictures must be smaller than 20 MB to upload.")
+        val mime = when (file.extension) { "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"; else -> "image/webp" }
+        return Triple(file.readBytes(), mime, file.name)
+    }
+
+    /** Models a plan may use: edits use editing models; a video from a picture needs a starting-frame model. */
+    fun planModels(plan: JobPlan): List<String> = when (plan.action) {
+        "edit" -> ModelCatalog.edits.map { it.model }
+        "video" -> settings.models(Mode.VIDEO, settings.get(Mode.VIDEO).baseUrl)
+            .filter { if (plan.reference != null) ModelOptions.supports(it, setOf("Starting frame")) else !ModelCatalog.needsStartPicture(it.model) && it.schema.fields.none { f -> f.required && f.uri } }.map { it.model }
+        else -> settings.models(Mode.IMAGE, settings.get(Mode.IMAGE).baseUrl).filter { ModelCatalog.edit(it.model) == null }.map { it.model }
+    }
+
+    /** The model a plan's card starts with: the user's current one when it fits, else the first that does. */
+    fun defaultPlanModel(plan: JobPlan): String {
+        val allowed = planModels(plan)
+        val current = when (plan.action) { "edit" -> settings.editModel; "video" -> settings.get(Mode.VIDEO).model; else -> settings.get(Mode.IMAGE).model }
+        return current.takeIf { it in allowed } ?: allowed.firstOrNull() ?: current
+    }
+
+    /**
+     * The settings a plan's job would use with [modelId], as the card shows them. A picture to start from or edit
+     * is a placeholder here; the real upload happens on Generate.
+     */
+    fun planSettings(plan: JobPlan, modelId: String): Pair<ModelSettings, List<String>> {
+        val mode = if (plan.action == "video") Mode.VIDEO else Mode.IMAGE
+        val current = settings.get(mode)
+        // A plan attaches only the picture it names. Pictures saved in a model's profile (a reference, frames, a clip) stay out.
+        fun withoutPictures(s: ModelSettings) = s.copy(options = s.options.filter { o -> s.schema?.fields?.firstOrNull { it.name == o.name }?.uri != true })
+        val chosen = withoutPictures(if (modelId == current.model) current else settings.forModel(current, modelId))
+        val withPicture = when {
+            plan.action == "edit" -> ModelCatalog.edit(modelId)?.let { e -> chosen.copy(options = chosen.options.filter { it.name != e.imageField } + InputValue(e.imageField, InputKind.TEXT, uploadCheck)) } ?: chosen
+            plan.action == "video" && plan.reference != null -> MediaRole.START_FRAME.apply(chosen, uploadCheck) { withoutPictures(settings.forModel(chosen, it)) }
+            else -> chosen
+        }
+        return JobBuilder.apply(withPicture, plan)
+    }
+
+    /**
+     * Starts the job a chat plan describes. Called only from the Generate button on its job card, which is the user's
+     * confirmation for this one paid request. [prompt] is the card's prompt, which the user may have changed.
+     */
+    fun runPlan(chat: Entry, plan: JobPlan, prompt: String, modelId: String): Boolean {
+        if (busy.get()) return false
+        if (chat.jobEntry != 0L) throw UserError("This plan already ran or was canceled.")
+        val text = Rules.prompt(prompt)
+        if (modelId !in planModels(plan)) throw UserError("Choose a model from the list on the card.")
+        if (history.list(pendingOnly = true).any { it.mode != Mode.CHAT }) throw UserError("Finish or cancel the pending media job before starting another.")
+        val source = plan.reference?.let { history.entry(it) }
+        if (plan.reference != null && source == null) throw UserError("The picture this plan uses is gone.")
+        if (plan.action == "edit") return edit(source ?: throw UserError("This edit has no picture."), text, modelId, { mediaBytes(source) }, chat.id)
+        val mode = if (plan.action == "video") Mode.VIDEO else Mode.IMAGE
+        val (planned, _) = planSettings(plan, modelId)
+        val resolved = Rules.resolve(mode, { if (it == mode) planned else settings.get(it) }, settings::key)
+        ModelOptions.validateForModel(planned.model, planned.schema ?: throw UserError("Load this model's inputs in API CALL first."), planned.options)
+        run {
+            var model = resolved
+            if (mode == Mode.VIDEO && source != null) {
+                val (bytes, mime, name) = mediaBytes(source)
+                val url = api.uploadFile(resolved.settings.baseUrl, resolved.key, name, mime, bytes)
+                model = resolved.copy(settings = MediaRole.START_FRAME.apply(resolved.settings, url) { error("The planned model already starts from a picture.") })
+            }
+            val id = history.insert(mode, text, model, parentId = source?.id ?: 0)
+            history.setJob(chat.id, id)
+            changed()
+            try { applyPrediction(id, mode, api.create(model, text)) }
+            catch (e: ProviderRejected) { history.update(id, "failed", "${e.message} No job was created.") }
+            catch (e: Exception) { history.update(id, "uncertain", "${friendly(e)} No job ID was saved. The provider may have accepted the request; inspect its dashboard before retrying.") }
+        }
+        return true
+    }
+
+    /** Makes a video plan start without its picture, when the model attached one the user did not want. */
+    fun dropPlanPicture(chat: Entry, plan: JobPlan) {
+        if (chat.jobEntry != 0L || plan.action != "video") return
+        history.update(chat.id, chat.state, plan = plan.copy(reference = null).toJson())
+        changed()
+    }
+
+    fun cancelPlan(chat: Entry) { if (chat.jobEntry == 0L) { history.setJob(chat.id, -1); changed() } }
+
+    /** Replaces a missing or declined plan with the user's own words, as typed, for [action] "image" or "video". */
+    fun planFromWords(chat: Entry, action: String) {
+        if (busy.get()) throw UserError("Wait for the current reply to finish.")
+        val reference = if (action == "video") selectedImage ?: imageRefs().firstOrNull()?.id else null
+        history.update(chat.id, chat.state, plan = JobPlan(action, "Your own words, as you typed them.", chat.prompt, reference).toJson())
+        history.setJob(chat.id, 0)
+        changed()
     }
 
     /**

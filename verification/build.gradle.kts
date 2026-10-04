@@ -4,7 +4,7 @@ kotlin { jvmToolchain(17) }
 sourceSets {
     main {
         kotlin.srcDir("../app/src/main/java")
-        kotlin.include("com/orangetiger/otstudio/Domain.kt", "com/orangetiger/otstudio/Api.kt", "com/orangetiger/otstudio/ModelOptions.kt", "com/orangetiger/otstudio/SchemaCodec.kt", "com/orangetiger/otstudio/LoraCodec.kt", "com/orangetiger/otstudio/LocalModels.kt", "com/orangetiger/otstudio/ModelDownloader.kt", "com/orangetiger/otstudio/Memory.kt")
+        kotlin.include("com/orangetiger/otstudio/Domain.kt", "com/orangetiger/otstudio/Api.kt", "com/orangetiger/otstudio/ModelOptions.kt", "com/orangetiger/otstudio/SchemaCodec.kt", "com/orangetiger/otstudio/LoraCodec.kt", "com/orangetiger/otstudio/LocalModels.kt", "com/orangetiger/otstudio/ModelDownloader.kt", "com/orangetiger/otstudio/Memory.kt", "com/orangetiger/otstudio/Planner.kt")
     }
     test { kotlin.srcDir("../app/src/test/java"); kotlin.exclude("com/orangetiger/otstudio/AndroidFlowTest.kt", "com/orangetiger/otstudio/NativeEngineTest.kt") }
 }

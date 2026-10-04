@@ -47,7 +47,8 @@ Each provider charges per request. These figures come from the providers' own pr
 
 | Item | Typical price | Source |
 |---|---|---|
-| Chat with MythoMax 13B | $0.08 per million words in, $0.11 per million out (about a hundredth of a cent per message) | [OpenRouter](https://openrouter.ai/gryphe/mythomax-l2-13b) |
+| Chat with Mistral Nemo | $0.02 per million tokens in, $0.03 per million out (well under a hundredth of a cent per message) | [OpenRouter](https://openrouter.ai/mistralai/mistral-nemo) |
+| Chat on the phone | Free after the model download | Hugging Face |
 | FLUX schnell image | $0.003 each | [Replicate](https://replicate.com/black-forest-labs/flux-schnell) |
 | FLUX dev image | $0.025 each | [Replicate](https://replicate.com/black-forest-labs/flux-dev) |
 | FLUX dev LoRA image | $0.032 each | [Replicate](https://replicate.com/black-forest-labs/flux-dev-lora) |

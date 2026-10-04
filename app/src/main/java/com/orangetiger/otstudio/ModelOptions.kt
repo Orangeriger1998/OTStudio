@@ -200,6 +200,8 @@ object ModelCatalog {
         EditModel("prunaai/p-image-edit", "P-Image Edit", "images", "about 1 cent")
     )
     fun edit(model: String): EditModel? = edits.firstOrNull { it.model == model }
+    /** Video models that cannot run without a starting picture or clip (see validateForModel). */
+    fun needsStartPicture(model: String) = model in setOf("wan-video/wan-2.7-i2v", "wan-video/wan-2.2-i2v-fast")
     val defaultEdit get() = edits.first()
 
     private val editPresets = listOf(
@@ -224,6 +226,8 @@ object ModelCatalog {
     )
 
     private val basePresets: List<ModelPreset> = listOf(
+        // Mistral Nemo and Qwen3 30B-A3B returned valid job plans in testing (2026-10-03); MythoMax often did not.
+        ModelPreset(Mode.CHAT, "mistralai/mistral-nemo", chatSchema), ModelPreset(Mode.CHAT, "qwen/qwen3-30b-a3b-instruct-2507", chatSchema),
         ModelPreset(Mode.CHAT, "gryphe/mythomax-l2-13b", chatSchema), ModelPreset(Mode.CHAT, "qwen/qwen3-8b", chatSchema),
         ModelPreset(Mode.IMAGE, "black-forest-labs/flux-schnell", flux(false)), ModelPreset(Mode.IMAGE, "black-forest-labs/flux-dev", flux(true)),
         ModelPreset(Mode.IMAGE, "black-forest-labs/flux-dev-lora", loraSchema),

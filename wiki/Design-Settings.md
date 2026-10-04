@@ -38,6 +38,15 @@ This card appears only under Chat.
 
 The model name, Manage models, and the two dropdowns appear only while On this phone is selected. A note under the card says that the OpenRouter settings below stay saved, because Suggest setup in API CALL still uses them.
 
+## Create from chat card
+
+This card appears only under Chat.
+
+| Box | What it holds | Why |
+|---|---|---|
+| Create images and videos from chat | A checkbox, on by default | Turns each chat reply into a plan. A plan for a picture, an edit, or a video shows as a [job card](Design-Job-Card.md). Off brings back plain chat. |
+| Note | Says that thinking is not shown while this is on | A plan must be a structured reply, so the model cannot think out loud first |
+
 ## Memory and history card
 
 This card also appears only under Chat.

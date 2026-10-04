@@ -26,6 +26,7 @@ Every screen has a design page. Each one explains what every box on that screen 
 - [Settings](Design-Settings.md): providers, keys, the save folder, and About
 - [Model Manager](Design-Model-Manager.md): chat models that run on the phone
 - [Memory](Design-Memory.md): standing instructions and chat history
+- [Job Card](Design-Job-Card.md): pictures, edits, and videos planned in chat
 - [Help Screen](Design-Help-Screen.md)
 - [LoRA Library](Design-LoRA-Library.md)
 

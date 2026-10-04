@@ -105,11 +105,17 @@ class ProviderApi(private val transport: Transport) {
         return try { JSONObject(r.body) } catch (_: Exception) { throw UserError("The provider returned malformed JSON.") }
     }
 
-    fun chat(model: ResolvedModel, turns: List<Turn>): String {
+    /** [responseFormat] is an OpenAI response_format object, used by chat-led creation to ask for a job plan. */
+    fun chat(model: ResolvedModel, turns: List<Turn>, responseFormat: String? = null): String {
         val messages = JSONArray()
         turns.forEach { messages.put(JSONObject().put("role", it.role).put("content", it.content)) }
         val body = JSONObject().put("model", model.settings.model).put("messages", messages).put("max_tokens", 1024).put("stream", false)
         SchemaCodec.append(body, model.settings.schema ?: ModelCatalog.chatSchema, model.settings.options)
+        if (responseFormat != null) {
+            body.put("response_format", JSONObject(responseFormat))
+            // OpenRouter otherwise may route to a provider that ignores the format. This keeps only providers that honor it.
+            body.put("provider", JSONObject().put("require_parameters", true))
+        }
         val root = checked(transport.request("POST", "${model.settings.baseUrl.trimEnd('/')}/chat/completions", model.key, body.toString()))
         val content = root.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.opt("content")
         if (content !is String || content.isBlank() || content.length > 100_000) throw UserError("The text provider did not return a usable text response.")

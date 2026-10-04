@@ -16,6 +16,7 @@
 - [Settings](Design-Settings)
 - [Model Manager](Design-Model-Manager)
 - [Memory](Design-Memory)
+- [Job Card](Design-Job-Card)
 - [Help Screen](Design-Help-Screen)
 - [LoRA Library](Design-LoRA-Library)
 

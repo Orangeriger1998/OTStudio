@@ -25,7 +25,11 @@ data class Entry(
     val remoteId: String, val outputUrl: String, val localFile: String, val created: Long,
     val requestSummary: String = "",
     /** For an edit, the entry it was made from. 0 when the entry has no source. */
-    val parentId: Long = 0
+    val parentId: Long = 0,
+    /** For a chat turn: the job plan as JSON, or empty. */
+    val plan: String = "",
+    /** For a chat turn with a plan: the media entry it started, -1 when the user canceled it, 0 while it waits. */
+    val jobEntry: Long = 0
 )
 data class MediaOutput(val position: Int, val url: String, val localFile: String)
 
@@ -45,7 +49,7 @@ object Rules {
     private val predictionId = Regex("[A-Za-z0-9_-]{1,160}")
 
     fun defaults(mode: Mode): ModelSettings = when (mode) {
-        Mode.CHAT -> ModelSettings(mode, Protocol.CHAT_COMPLETIONS, "https://openrouter.ai/api/v1", "gryphe/mythomax-l2-13b")
+        Mode.CHAT -> ModelSettings(mode, Protocol.CHAT_COMPLETIONS, "https://openrouter.ai/api/v1", "mistralai/mistral-nemo")
         Mode.IMAGE -> ModelSettings(mode, Protocol.REPLICATE, "https://api.replicate.com/v1", "black-forest-labs/flux-schnell")
         Mode.VIDEO -> ModelSettings(mode, Protocol.REPLICATE, "https://api.replicate.com/v1", "wan-video/wan-2.7-t2v", KeySource.IMAGE)
     }

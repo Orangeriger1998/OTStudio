@@ -152,6 +152,38 @@ class AndroidFlowTest {
         controller.pause().stop().destroy()
     }
 
+    @Test fun aPlanShowsAJobCardAndNothingRunsWithoutGenerate() {
+        val app = RuntimeEnvironment.getApplication() as StudioApp
+        val chatId = app.history.insertLocal("make me a square fox picture", "test model")
+        app.history.update(chatId, "succeeded", "Here is a square fox.", plan = JobPlan("image", "Here is a square fox.", "a red fox in snow, soft light", shape = "square").toJson())
+        val bad = app.history.insertLocal("do the thing", "test model")
+        app.history.update(bad, "succeeded", "", plan = JobPlan("invalid", "The model did not return a plan.").toJson())
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val activity = controller.get()
+        val texts = views(activity.window.decorView).filterIsInstance<TextView>().map { it.text.toString() }
+        assertTrue(texts.contains("Image, square"))
+        assertTrue(texts.any { it.startsWith("Model: black-forest-labs/flux-schnell") && it.contains("Likely cost: less than 1 cent") })
+        assertTrue(views(activity.window.decorView).filterIsInstance<EditText>().any { it.text.toString() == "a red fox in snow, soft light" })
+        assertTrue(views(activity.window.decorView).filterIsInstance<Button>().any { it.text.toString() == "Picture from my words" })
+        // Without a Replicate key, Generate explains instead of sending anything.
+        click(activity, "Generate")
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0L, app.history.entry(chatId)!!.jobEntry)
+        assertTrue(app.history.list(Mode.IMAGE).isEmpty())
+        // Cancel keeps a record and sends nothing.
+        ShadowDialog.getLatestDialog()?.dismiss()
+        click(activity, "Cancel")
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(-1L, app.history.entry(chatId)!!.jobEntry)
+        assertTrue(views(activity.window.decorView).filterIsInstance<TextView>().any { it.text.toString() == "Plan canceled. Nothing was sent." })
+        // The own-words fallback turns the user's text into a card, still unpaid.
+        click(activity, "Picture from my words")
+        shadowOf(Looper.getMainLooper()).idle()
+        val replaced = JobPlan.fromJson(app.history.entry(bad)!!.plan)!!
+        assertEquals("image", replaced.action); assertEquals("do the thing", replaced.prompt)
+        controller.pause().stop().destroy()
+    }
+
     @Test fun repliesShowBasicMarkdown() {
         val styled = Markdown.styled("## Facts\n1. **Bold** and *soft* with `code`\n* item\n2 * 3 = 6") as android.text.Spanned
         assertEquals("Facts\n1. Bold and soft with code\n• item\n2 * 3 = 6", styled.toString())

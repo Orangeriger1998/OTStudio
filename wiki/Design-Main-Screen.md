@@ -31,7 +31,7 @@ Each mode keeps its own model, options, key, history, and unsent prompt. Switchi
 | Box | What it holds | Why |
 |---|---|---|
 | Model ID | The exact model the next request will use, such as `black-forest-labs/flux-schnell` | Image and video requests cost money. The user should see the model before tapping send, not after. |
-| Option summary | The overridden inputs, such as `aspect_ratio=1:1; num_outputs=1`, or "Provider defaults" | Shows what will change the result or the price. It reads "Working..." while a request runs. |
+| Option summary | Plain words for the settings, such as "Image, square, safety checker off" or "5-second clip, wide, 720p" | Shows what will change the result or the price without raw setting names. It reads "Working..." while a request runs. |
 | API CALL button | Opens the [API CALL Panel](Design-API-CALL-Panel.md) | Changing the model or its inputs is the most common adjustment, so its button sits beside the summary it changes |
 
 The model ID shortens in the middle when it is too long, so both the owner and the model name stay visible.
@@ -58,6 +58,8 @@ This area appears only when needed.
 The feed lists this mode's history, oldest at the top. It keeps its scroll position while results refresh, and it jumps to the bottom after a new send.
 
 **Chat entries** appear as two bubbles. The user's prompt sits on the right in orange. The model's reply sits on the left in gray. A failed reply turns red. An on-device reply appears word by word as the phone writes it. Replies show simple formatting, such as bold words, headings, and bullet points. Under an on-device reply, a small line reports how long the first word took and how many tokens per second followed.
+
+With Create from chat on, a reply that describes a picture, an edit, or a video carries a [job card](Design-Job-Card.md) under it. After Generate, the result card takes the job card's place. Pictures in the chat carry Talk about this, which marks one picture for the next message. A line above the message bar then reads "Talking about:" with a Clear button.
 
 When Show the model's thinking is on, a model that thinks first shows that thinking in a separate block above its answer. The block uses small gray italic type under the label "Thinking", so it never reads as the answer. It stays open while the model writes. Afterward it folds to one line, "Thinking, tap to show". Under each pair, a status label and the model name show what happened, and Use prompt copies the prompt back into the message bar.
 

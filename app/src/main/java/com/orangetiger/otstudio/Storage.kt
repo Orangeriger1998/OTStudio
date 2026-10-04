@@ -127,7 +127,7 @@ class SettingsStore(private val context: Context) {
     }
 }
 
-class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 4) {
+class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 5) {
     companion object { const val LOCAL_BASE = "on-device" }
     /**
      * When false, new chat turns live only in this list and vanish when the app process ends.
@@ -143,7 +143,7 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 4
             model TEXT NOT NULL, base_url TEXT NOT NULL, credential_mode TEXT NOT NULL,
             remote_id TEXT NOT NULL DEFAULT '', output_url TEXT NOT NULL DEFAULT '',
             local_file TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, request_summary TEXT NOT NULL DEFAULT '',
-            parent_id INTEGER NOT NULL DEFAULT 0)""")
+            parent_id INTEGER NOT NULL DEFAULT 0, plan TEXT NOT NULL DEFAULT '', job_entry INTEGER NOT NULL DEFAULT 0)""")
         db.execSQL("CREATE INDEX entries_mode_id ON entries(mode,id)")
         createDetails(db)
         createMemory(db)
@@ -157,7 +157,7 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 4
     }
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 1 || newVersion != 4) error("Unsupported history schema upgrade.")
+        if (oldVersion < 1 || newVersion != 5) error("Unsupported history schema upgrade.")
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE entries ADD COLUMN request_summary TEXT NOT NULL DEFAULT ''")
             createDetails(db)
@@ -165,6 +165,10 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 4
         }
         if (oldVersion < 3) createMemory(db)
         if (oldVersion < 4) db.execSQL("ALTER TABLE entries ADD COLUMN parent_id INTEGER NOT NULL DEFAULT 0")
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE entries ADD COLUMN plan TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE entries ADD COLUMN job_entry INTEGER NOT NULL DEFAULT 0")
+        }
     }
 
     private fun unsavedChat(prompt: String, model: String, baseUrl: String): Long {
@@ -197,15 +201,15 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 4
         put("credential_mode", Mode.CHAT.name); put("created", System.currentTimeMillis())
     })
 
-    @Synchronized fun update(id: Long, state: String, response: String? = null, remoteId: String? = null, outputUrl: String? = null, localFile: String? = null, summary: String? = null) {
+    @Synchronized fun update(id: Long, state: String, response: String? = null, remoteId: String? = null, outputUrl: String? = null, localFile: String? = null, summary: String? = null, plan: String? = null) {
         val values = ContentValues().apply {
-            put("state", state); summary?.let { put("request_summary", it) }
+            put("state", state); summary?.let { put("request_summary", it) }; plan?.let { put("plan", it) }
             response?.let { put("response", it) }; remoteId?.let { put("remote_id", it) }
             outputUrl?.let { put("output_url", it) }; localFile?.let { put("local_file", it) }
         }
         if (id < 0) {
             val i = unsaved.indexOfFirst { it.id == id }
-            if (i >= 0) unsaved[i] = unsaved[i].copy(state = state, response = response ?: unsaved[i].response, requestSummary = summary ?: unsaved[i].requestSummary)
+            if (i >= 0) unsaved[i] = unsaved[i].copy(state = state, response = response ?: unsaved[i].response, requestSummary = summary ?: unsaved[i].requestSummary, plan = plan ?: unsaved[i].plan)
             return
         }
         if (writableDatabase.update("entries", values, "id = ?", arrayOf(id.toString())) != 1) throw UserError("Could not persist the request result.")
@@ -217,12 +221,12 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 4
         return if (pendingOnly) stored + unsaved.filter { it.state == "chatting" } else stored
     }
 
-    private fun listStored(mode: Mode?, pendingOnly: Boolean): List<Entry> {
-        val selection = if (pendingOnly) "state IN ('submitting','chatting','processing','canceling','download')" else mode?.let { "mode = ?" }
-        val args = mode?.let { arrayOf(it.name) }
-        val columns = arrayOf("id", "mode", "prompt", "response", "state", "model", "base_url", "credential_mode", "remote_id", "output_url", "local_file", "created", "request_summary", "parent_id")
-        return readableDatabase.query("entries", columns, selection, if (pendingOnly) null else args, null, null, "id DESC", if (pendingOnly) null else "100").use { c ->
-            buildList { while (c.moveToNext()) add(Entry(c.getLong(0), Mode.valueOf(c.getString(1)), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), Mode.valueOf(c.getString(7)), c.getString(8), c.getString(9), c.getString(10), c.getLong(11), c.getString(12), c.getLong(13))) }.reversed()
+    private fun listStored(mode: Mode?, pendingOnly: Boolean, where: String? = null, whereArgs: Array<String>? = null): List<Entry> {
+        val selection = where ?: if (pendingOnly) "state IN ('submitting','chatting','processing','canceling','download')" else mode?.let { "mode = ?" }
+        val args = whereArgs ?: mode?.let { arrayOf(it.name) }
+        val columns = arrayOf("id", "mode", "prompt", "response", "state", "model", "base_url", "credential_mode", "remote_id", "output_url", "local_file", "created", "request_summary", "parent_id", "plan", "job_entry")
+        return readableDatabase.query("entries", columns, selection, if (pendingOnly && where == null) null else args, null, null, "id DESC", if (pendingOnly) null else "100").use { c ->
+            buildList { while (c.moveToNext()) add(Entry(c.getLong(0), Mode.valueOf(c.getString(1)), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), Mode.valueOf(c.getString(7)), c.getString(8), c.getString(9), c.getString(10), c.getLong(11), c.getString(12), c.getLong(13), c.getString(14), c.getLong(15))) }.reversed()
         }
     }
 
@@ -263,6 +267,19 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 4
         }
     }
 
+    /** Links a chat turn's plan to the media entry it started, or -1 when the user canceled the plan. */
+    @Synchronized fun setJob(chatId: Long, jobEntry: Long) {
+        if (chatId < 0) {
+            val i = unsaved.indexOfFirst { it.id == chatId }
+            if (i >= 0) unsaved[i] = unsaved[i].copy(jobEntry = jobEntry)
+            return
+        }
+        if (writableDatabase.update("entries", ContentValues().apply { put("job_entry", jobEntry) }, "id = ?", arrayOf(chatId.toString())) != 1) throw UserError("Could not link the job to the chat.")
+    }
+
+    /** One saved entry by ID, or null. */
+    @Synchronized fun entry(id: Long): Entry? = if (id < 0) unsaved.firstOrNull { it.id == id } else listStored(null, false, "id = ?", arrayOf(id.toString())).firstOrNull()
+
     /** Forgets the unsaved chat, as if the app had closed. */
     @Synchronized fun dropUnsaved() { unsaved.clear() }
 
@@ -299,6 +316,12 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 4
     }
 
     @Synchronized fun turns(): List<Turn> = list(Mode.CHAT).filter { it.state == "succeeded" || (it.state == "stopped" && it.response.isNotBlank()) }
-        // A model's earlier thinking never goes back into the conversation.
-        .flatMap { listOf(Turn("user", it.prompt), Turn("assistant", ReplyText.visible(it.response))) }
+        // A model's earlier thinking never goes back into the conversation. A plan that started a job is followed
+        // by a short note on what the app made, so the model knows which pictures exist.
+        .flatMap { e ->
+            val reply = ReplyText.visible(e.response)
+            val job = if (e.jobEntry > 0) entry(e.jobEntry) else null
+            val note = job?.let { Planner.note(if (it.mode == Mode.VIDEO) "video" else "picture", it.id, it.state, it.prompt) }
+            listOf(Turn("user", e.prompt), Turn("assistant", if (note == null) reply else "$reply\n$note"))
+        }
 }
