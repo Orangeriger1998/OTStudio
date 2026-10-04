@@ -33,7 +33,8 @@ class FakeReplicate:
         if method == "GET" and path == "/v1/trainings/train1":
             self.polls += 1
             if self.polls < 2:
-                return {"id": "train1", "status": "processing"}
+                return {"id": "train1", "status": "processing", "started_at": "2026-10-04T15:31:00.000Z",
+                        "logs": "Caching 20/20 images\nflux_train_replicate:  45%|####5     | 450/1000 [10:01<12:14,  1.33s/it]"}
             return {"id": "train1", "status": "succeeded", "output": {"version": "tester/lora-sam:" + VERSION_HASH, "weights": "https://replicate.delivery/x/trained_model.tar"}}
         raise AssertionError((method, path))
 
@@ -108,6 +109,8 @@ class TrainerAppTests(unittest.TestCase):
         self.assertEqual("", self.app.ready_problem())
         self.app.start_training()
         self.assertTrue(self.spin(lambda: self.app.reference.get() != ""), self.app.status.cget("text"))
+        # The bar showed the real step count from the log.
+        self.assertEqual(45, round(self.app.readings[0][1] * 100))
         self.assertEqual("tester/lora-sam/" + VERSION_HASH, self.app.reference.get())
         folder = self.app.job_folder
         library = json.loads((folder / "trained.otstudio-lora.json").read_text(encoding="utf-8"))

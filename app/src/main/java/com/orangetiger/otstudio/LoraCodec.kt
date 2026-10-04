@@ -6,6 +6,17 @@ import java.net.URI
 data class SavedLora(val name: String, val reference: String, val trigger: String, val scale: Double, val baseModel: String = "flux-dev")
 
 object LoraCodec {
+    const val MODEL = "black-forest-labs/flux-dev-lora"
+
+    /** The saved LoRA whose trigger word appears as a whole word in [text], ignoring case. Short triggers never match. */
+    fun matching(loras: List<SavedLora>, text: String): SavedLora? = loras.firstOrNull { l ->
+        l.trigger.length >= 3 && Regex("(?i)(^|[^A-Za-z0-9_])" + Regex.escape(l.trigger) + "($|[^A-Za-z0-9_])").containsMatchIn(text)
+    }
+
+    /** [settings] for FLUX dev LoRA with [lora] filled in; other inputs stay as they were. */
+    fun apply(settings: ModelSettings, lora: SavedLora): ModelSettings = settings.copy(options = settings.options.filter { it.name !in listOf("lora_weights", "lora_scale") } +
+        InputValue("lora_weights", InputKind.TEXT, lora.reference) + InputValue("lora_scale", InputKind.NUMBER, lora.scale.toString()))
+
     const val MAX_BYTES = 16384
     fun validate(item: SavedLora): SavedLora {
         if (item.name.isBlank() || item.name.length > 80 || item.name.any { it.isISOControl() }) throw UserError("Give the LoRA a name of up to 80 characters.")

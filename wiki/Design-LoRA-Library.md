@@ -17,6 +17,7 @@ The library stores each LoRA's provider reference, not its weights. The weights 
 | LoRA cards | Name, trigger word, default scale, and the provider reference | Enough to tell LoRAs apart and to remember each trigger word |
 | Import file | Opens the phone's file picker for a `.otstudio-lora.json` file | The training script writes this file, so importing avoids typing a long reference |
 | Add manually | Opens an empty form | For a LoRA trained elsewhere on Replicate |
+| Use for pictures | A button on each saved LoRA, and the choice offered right after a save | Switches Image to FLUX dev LoRA with this LoRA and the safety checker off, and starts the prompt with its trigger word |
 | Close | Closes the dialog | Plain exit |
 
 ## Review form

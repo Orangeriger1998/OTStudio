@@ -19,12 +19,25 @@ from tkinter import filedialog, messagebox, ttk
 import webbrowser
 
 import train_lora as train
+from datetime import datetime
 
 # What the trainer takes. It converts every photo to a plain JPEG itself, so a photo's file name and format do not matter.
 ACCEPTED = "JPG, PNG, WebP, HEIC, and most other photo files, each at least 512 pixels on its short side and at most 50 MB"
 MIN_SIDE = 512
 MAX_FILE = 50 * 1024 * 1024
 PHOTO_TYPES = "*.jpg *.jpeg *.png *.webp *.heic *.heif *.avif *.bmp *.gif *.tif *.tiff *.JPG *.JPEG *.PNG *.WEBP *.HEIC *.HEIF"
+
+
+def started_at(result) -> float | None:
+    """When Replicate started (or created) the training, as a Unix time. None when the record does not say."""
+    for key in ("started_at", "created_at"):
+        value = result.get(key)
+        if isinstance(value, str) and value:
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                continue
+    return None
 
 
 def image_module():
@@ -145,8 +158,26 @@ class TrainerApp:
         style.configure("TEntry", foreground=TEXT, insertcolor=TEXT)
         style.configure("Horizontal.TProgressbar", background=ORANGE, troughcolor=SURFACE)
 
-        outer = ttk.Frame(r, padding=16)
-        outer.pack(fill="both", expand=True)
+        # The status bar sits at the bottom of the window, so progress stays visible however small the window is.
+        bar = ttk.Frame(r, style="Card.TFrame", padding=(16, 10))
+        bar.pack(side="bottom", fill="x")
+        self.progress = ttk.Progressbar(bar, mode="indeterminate", maximum=100)
+        self.status = ttk.Label(bar, text="", style="Card.TLabel", wraplength="6.2i")
+        self.status.pack(anchor="w")
+        self.timer = ttk.Label(bar, text="", style="Card.TLabel")
+        self.keep_open = ttk.Label(bar, text="Closing this window does not stop the training or its charge. Resume a job picks it up again later.",
+                                   style="Muted.TLabel", wraplength="6.2i")
+        # Everything else scrolls.
+        canvas = tk.Canvas(r, background=BLACK, highlightthickness=0)
+        scroll = ttk.Scrollbar(r, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        canvas.pack(side="top", fill="both", expand=True)
+        outer = ttk.Frame(canvas, padding=16)
+        inner = canvas.create_window((0, 0), window=outer, anchor="nw")
+        outer.bind("<Configure>", lambda _: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(inner, width=e.width))
+        r.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-e.delta / 120), "units"))
         ttk.Label(outer, text=TITLE, style="Title.TLabel").pack(anchor="w")
         ttk.Label(outer, text="Train a LoRA of one face or style from 10 to 20 photos. Use it afterwards in OT Studio on any device.",
                   wraplength="6.2i").pack(anchor="w", pady=(2, 10))
@@ -176,7 +207,7 @@ class TrainerApp:
         self.photo_count = ttk.Label(row, text="No photos chosen", style="Card.TLabel")
         self.photo_count.pack(side="left", padx=10)
         ttk.Label(c2, text=f"Accepted: {ACCEPTED}. Choosing again adds to the set, up to 20.", style="Muted.TLabel",
-                  wraplength="6i").pack(anchor="w", pady=(6, 0))
+                  wraplength="5.6i").pack(anchor="w", pady=(6, 0))
         self.strip = ttk.Frame(c2, style="Card.TFrame")
         self.strip.pack(fill="x", pady=(8, 0))
 
@@ -202,9 +233,11 @@ class TrainerApp:
         self.resume_button = ttk.Button(row, text="Resume a job...", command=self.resume_job)
         self.resume_button.pack(side="left", padx=8)
         self.cancel_button = ttk.Button(row, text="Cancel training", command=self.cancel_training)
-        self.progress = ttk.Progressbar(c4, mode="indeterminate")
-        self.status = ttk.Label(c4, text="", style="Card.TLabel", wraplength="6i")
-        self.status.pack(anchor="w", pady=(8, 0))
+        # Progress of the current run: when it started, and (time, fraction) readings for the estimate.
+        self.run_started = None
+        self.readings = []
+        self.fraction = None
+        self.tick()
 
         self.result = ttk.Frame(outer, style="Card.TFrame", padding=12)
         ttk.Label(self.result, text="Your LoRA is ready", style="Head.TLabel").pack(anchor="w")
@@ -266,6 +299,8 @@ class TrainerApp:
                     self.set_working(False)
                     self.status.configure(text=value)
                     messagebox.showerror(TITLE, value)
+                elif kind == "progress":
+                    self.show_progress(*value)
                 elif kind == "submitted":
                     # Cancel exists only once Replicate has a training to cancel.
                     if self.working:
@@ -286,9 +321,15 @@ class TrainerApp:
         for button in (self.resume_button, self.check_button):
             button.state(["disabled"] if on else ["!disabled"])
         if on:
-            self.progress.pack(fill="x", pady=(10, 0), before=self.status)
+            self.run_started, self.readings, self.fraction = time.time(), [], None
+            self.progress.configure(mode="indeterminate", value=0)
+            self.progress.pack(fill="x", pady=(0, 6), before=self.status)
             self.progress.start(12)
+            self.timer.pack(anchor="w", pady=(4, 0))
+            self.keep_open.pack(anchor="w", pady=(2, 0))
         else:
+            self.timer.pack_forget()
+            self.keep_open.pack_forget()
             self.progress.stop()
             self.progress.pack_forget()
             self.cancel_button.pack_forget()
@@ -414,18 +455,61 @@ class TrainerApp:
     def watch(self, folder: Path, job):
         if job.get("training_id"):
             self.events.put(("submitted", job["training_id"]))
-        started = time.monotonic()
+        self.say("Replicate is starting the trainer. The first step can take a few minutes.")
         while job["status"] not in train.TERMINAL:
-            minutes = int((time.monotonic() - started) // 60)
-            self.say(f"Training on Replicate: {job['status']}, {minutes} min so far. You can close this window; training keeps running, and Resume a job picks it up later.")
             if self.stop_polling.wait(self.poll_seconds):
                 return
             with train.job_lock(folder):
-                job = train.status(folder, self.api)
+                job, result = train.status_detail(folder, self.api)
+            self.events.put(("progress", (job["status"], train.training_progress(result.get("logs"), job["steps"]), started_at(result))))
         if job["status"] == "succeeded":
             self.events.put(("done", (folder, job)))
         else:
             self.events.put(("ended", f"The training {job['status']}. Nothing else was charged after that. See {DASHBOARD_URL} for details."))
+
+    def show_progress(self, state, fraction, started):
+        """Updates the bar and the status line from one check at Replicate."""
+        if started:
+            self.run_started = started
+        if fraction is None:
+            text = "Replicate is starting the trainer. The first step can take a few minutes." if state == "starting" else "Training has started. Replicate is preparing the photos."
+        else:
+            self.readings.append((time.time(), fraction))
+            if self.fraction is None:
+                self.progress.stop()
+                self.progress.configure(mode="determinate")
+            self.progress.configure(value=fraction * 100)
+            text = ("The training steps are done. Replicate is saving the LoRA." if fraction >= 1
+                    else f"Training: {fraction:.0%} done.")
+        self.fraction = fraction
+        self.status.configure(text=text)
+        self.update_timer()
+
+    def minutes_left(self):
+        """Minutes until the steps finish, from the pace between the first and the newest reading. None while unknown."""
+        moving = [r for r in self.readings if r[1] > 0]
+        if len(moving) < 2 or moving[-1][1] >= 1:
+            return None
+        (t0, f0), (t1, f1) = moving[0], moving[-1]
+        if f1 <= f0 or t1 <= t0:
+            return None
+        return (1 - f1) * (t1 - t0) / (f1 - f0) / 60
+
+    def update_timer(self):
+        if not self.working or not self.run_started:
+            return
+        elapsed = max(0, int(time.time() - self.run_started))
+        text = f"{elapsed // 60}:{elapsed % 60:02d} so far"
+        left = self.minutes_left()
+        if left is not None:
+            text += f", about {max(1, round(left))} min left" if left >= 0.5 else ", less than a minute left"
+        elif self.fraction is None:
+            text += ". A run usually takes 20 to 30 minutes."
+        self.timer.configure(text=text)
+
+    def tick(self):
+        self.update_timer()
+        self.root.after(1000, self.tick)
 
     def resume_job(self):
         if not self.username:

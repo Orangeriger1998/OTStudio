@@ -260,6 +260,18 @@ class MainActivity : AppCompatActivity() {
         send = ui.iconButton(R.drawable.ic_send, if (mode == Mode.CHAT) "Send" else "Generate ${mode.title.lowercase()}", filled = true) {
             try {
                 val value = prompt.text.toString()
+                val lora = if (mode == Mode.IMAGE) LoraCodec.matching(app.loras.list(), value) else null
+                val s = app.settings.get(Mode.IMAGE)
+                if (lora != null && (s.model != LoraCodec.MODEL || s.options.none { it.name == "lora_weights" && it.value == lora.reference })) {
+                    MaterialAlertDialogBuilder(this).setTitle("Use your LoRA?")
+                        .setMessage("This prompt names ${lora.trigger}, but Image is set to ${s.model}, which does not use that LoRA. Switch Image to FLUX dev LoRA with ${lora.name} and generate?")
+                        .setPositiveButton("Switch and generate") { _, _ ->
+                            try { app.useLora(lora); if (app.send(mode, value)) { lastSent = value.trim(); renderFeed() } } catch (e: UserError) { showError(e.message.orEmpty()) }
+                        }
+                        .setNeutralButton("Generate as set") { _, _ -> try { if (app.send(mode, value)) { lastSent = value.trim(); renderFeed() } } catch (e: UserError) { showError(e.message.orEmpty()) } }
+                        .setNegativeButton("Cancel", null).show()
+                    return@iconButton
+                }
                 if (app.send(mode, value)) { lastSent = value.trim(); renderFeed() }
             } catch (e: UserError) { showError(e.message.orEmpty()) }
         }.apply { layoutParams = LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginStart = dp(8); bottomMargin = dp(2) } }
@@ -780,10 +792,26 @@ class MainActivity : AppCompatActivity() {
             c.addView(ui.bold(ui.text(lora.name, Ui.Type.SUBTITLE)))
             c.addView(ui.text("Trigger: ${lora.trigger.ifBlank { "none" }}  |  scale ${lora.scale}", Ui.Type.SMALL, ui.muted))
             c.addView(ui.text(lora.reference, Ui.Type.CAPTION, ui.muted).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.MIDDLE })
+            c.addView(ui.tonal("Use for pictures", R.drawable.ic_image) { library?.dismiss(); useLora(lora) }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
         }
-        MaterialAlertDialogBuilder(this).setTitle("LoRA library (${entries.size})").setView(ScrollView(this).apply { addView(content) })
+        library = MaterialAlertDialogBuilder(this).setTitle("LoRA library (${entries.size})").setView(ScrollView(this).apply { addView(content) })
             .setPositiveButton("Import file") { _, _ -> try { loraPicker.launch(arrayOf("*/*")) } catch (_: Exception) { showError("No Android file picker is available.") } }
             .setNeutralButton("Add manually") { _, _ -> editLora(null) }.setNegativeButton("Close", null).show()
+    }
+    private var library: androidx.appcompat.app.AlertDialog? = null
+
+    /** Switches Image to FLUX dev LoRA with [lora] and starts the prompt with its trigger word. */
+    private fun useLora(lora: SavedLora) {
+        try {
+            app.useLora(lora)
+            drafts[mode] = prompt.text.toString()
+            mode = Mode.IMAGE
+            val draft = drafts[Mode.IMAGE].orEmpty()
+            if (LoraCodec.matching(listOf(lora), draft) == null) drafts[Mode.IMAGE] = "${lora.trigger} " + draft
+            showChat()
+            prompt.setSelection(prompt.text?.length ?: 0); prompt.requestFocus()
+            snack("Image now uses FLUX dev LoRA with ${lora.name}. Describe the picture after ${lora.trigger}, then tap Generate.")
+        } catch (e: UserError) { showError(e.message.orEmpty()) }
     }
 
     private fun editLora(imported: SavedLora?) {
@@ -798,8 +826,11 @@ class MainActivity : AppCompatActivity() {
         dialog.setOnShowListener { dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             try {
                 val parsed = scale.text.toString().replace(',', '.').toDoubleOrNull() ?: throw UserError("Enter a numeric scale.")
-                app.loras.save(SavedLora(name.text.toString().trim(), reference.text.toString().trim(), trigger.text.toString().trim(), parsed))
-                dialog.dismiss(); showLoraLibrary()
+                val saved = SavedLora(name.text.toString().trim(), reference.text.toString().trim(), trigger.text.toString().trim(), parsed)
+                app.loras.save(saved)
+                dialog.dismiss()
+                MaterialAlertDialogBuilder(this).setTitle("LoRA saved").setMessage("Use ${saved.name} for pictures now? Image switches to FLUX dev LoRA, and your prompt starts with ${saved.trigger.ifBlank { "its trigger word" }}.")
+                    .setPositiveButton("Use for pictures") { _, _ -> useLora(saved) }.setNegativeButton("Not now") { _, _ -> showLoraLibrary() }.show()
             } catch (e: Exception) { showError((e as? UserError)?.message ?: "Could not save the library. Check device storage.") }
         } }
         dialog.show()

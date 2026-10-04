@@ -99,6 +99,11 @@ class ProviderApiTest {
         val e2 = try { plain.create(model(Mode.IMAGE), "test"); null } catch (e: ProviderRejected) { e }
         assertTrue(e2!!.message!!.endsWith("Check the model ID, aspect ratio, and duration."))
     }
+    @Test fun aFailedJobKeepsTheProvidersReason() {
+        val api = ProviderApi { _, _, _, _ -> HttpReply(200, """{"id":"job123","status":"failed","output":null,"error":"NSFW content detected.\nTry a different prompt."}""") }
+        val p = api.status("https://api.replicate.com/v1", "test", "job123")
+        assertEquals("failed", p.state); assertEquals("NSFW content detected. Try a different prompt.", p.problem)
+    }
     @Test fun nonTextChatOutputIsNotPresentedAsSuccess() {
         for (body in listOf("{}", """{"choices":[{"message":{"content":null}}]}""", """{"choices":[{"message":{"content":[]}}]}""")) {
             val api = ProviderApi { _, _, _, _ -> HttpReply(200, body) }

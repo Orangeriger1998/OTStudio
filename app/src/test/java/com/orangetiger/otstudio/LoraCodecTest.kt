@@ -26,4 +26,20 @@ class LoraCodecTest {
         listOf("file:///tmp/weights", "http://example.com/lora.safetensors", "https://key@example.com/x", "../model", "owner/model/bad-version").forEach { ref -> rejects { LoraCodec.validate(SavedLora("test", ref, "TOK", 1.0)) } }
         assertEquals("https://example.com/lora.safetensors?signature=test", LoraCodec.validate(SavedLora("test", "https://example.com/lora.safetensors?signature=test", "TOK", 1.0)).reference)
     }
+
+    @Test fun aPromptThatNamesATriggerWordFindsItsLora() {
+        val paola = SavedLora("paolovesmark", "orangeriger1998/lora-paolovesmark/" + "e".repeat(64), "PAOLOVESMARK", 1.0)
+        val tok = SavedLora("short", "o/m/" + "a".repeat(64), "TO", 1.0)
+        val list = listOf(tok, paola)
+        assertEquals(paola, LoraCodec.matching(list, "paolovesmark smiling on a beach"))
+        assertEquals(paola, LoraCodec.matching(list, "A photo of PAOLOVESMARK, at sunset."))
+        assertNull(LoraCodec.matching(list, "PAOLOVESMARKS on a beach"))
+        assertNull(LoraCodec.matching(list, "TO the beach"))
+        val base = ModelSettings(Mode.IMAGE, Protocol.REPLICATE, "https://api.replicate.com/v1", LoraCodec.MODEL, options = listOf(InputValue("lora_scale", InputKind.NUMBER, "0.5"), InputValue("aspect_ratio", InputKind.TEXT, "1:1")))
+        val applied = LoraCodec.apply(base, paola).options.associate { it.name to it.value }
+        assertEquals(mapOf("aspect_ratio" to "1:1", "lora_weights" to paola.reference, "lora_scale" to "1.0"), applied)
+        val prompt = Planner.systemPrompt("", loras = list)
+        assertTrue(prompt.contains("PAOLOVESMARK (paolovesmark)")); assertFalse(prompt.contains("TO (short)"))
+        assertFalse(Planner.systemPrompt("").contains("Saved LoRAs"))
+    }
 }

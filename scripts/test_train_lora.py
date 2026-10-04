@@ -75,6 +75,15 @@ class TrainerTests(unittest.TestCase):
             "version": "owner/style:" + "a" * 64,
             "weights": "https://replicate.delivery/synthetic/weights.safetensors"}}
 
+    def test_progress_comes_only_from_step_counts_of_this_job(self):
+        log = ("Caching 20/20 images\n"
+               "flux_train_replicate:  12%|#2   | 120/1000 [02:01<14:14]\n"
+               "flux_train_replicate:  45%|####5 | 450/1000 [10:01<12:14]")
+        self.assertEqual(0.45, train.training_progress(log, 1000))
+        self.assertIsNone(train.training_progress("Caching 20/20 images", 1000))
+        self.assertIsNone(train.training_progress(None, 1000))
+        self.assertEqual(1.0, train.training_progress("1000/1000", 1000))
+
     def test_prepare_is_local_and_zips_captions_with_matching_names(self):
         self.images(20)
         (self.photos / "source-0.txt").write_text("TOK in a garden", encoding="utf-8")

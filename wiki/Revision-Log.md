@@ -6,7 +6,17 @@ This log lists the main changes from one version to the next. It records what a 
 
 ## LoRA Trainer update (October 2026)
 
+**Real progress.** A bar at the bottom of the window shows how far the training is, from Replicate's own step count, with the time so far and an estimate of the time left. A line there says that closing the window does not stop the training. The rest of the window scrolls, so the bar stays in view.
+
 **Any photo format.** The trainer now accepts JPG, PNG, WebP, HEIC, and most other photo files, and converts them itself, so a photo saved under the wrong file type no longer stops it. Photos it cannot use are left out and named with the reason, and the accepted formats show under Choose photos. Choosing again adds photos, and Clear starts over.
+
+## 1.2.4 (October 2026)
+
+**LoRAs in one tap.** Each saved LoRA, and every new import, offers Use for pictures. It switches Image to FLUX dev LoRA with that LoRA and the safety checker off, and starts the prompt with the trigger word. A prompt in Image that names a saved trigger word on another model offers Switch and generate. In Chat, naming a LoRA's trigger word or name plans the picture on FLUX dev LoRA with it.
+
+**Failures say why.** A job that fails at the provider now shows the provider's own reason. When a safety checker stopped it, the card says so and where to switch it off.
+
+**Chat jobs run with the safety checker off**, on every model that offers the switch, as edits already did.
 
 ## 1.2.2 (October 2026)
 

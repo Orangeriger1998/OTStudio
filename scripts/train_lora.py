@@ -373,7 +373,29 @@ def apply_result(folder, job, result, api):
     return job
 
 
+STEP_COUNT = re.compile(r"(\d{1,6})\s*/\s*(\d{1,6})")
+
+
+def training_progress(logs, steps):
+    """How far training is, from 0 to 1, read from the newest "done/total" step count in the log; None before the first step.
+
+    The log is the provider's text. Only numbers are read from it, and only counts out of the job's own step total."""
+    if not isinstance(logs, str) or not logs:
+        return None
+    found = None
+    for match in STEP_COUNT.finditer(logs[-50000:]):
+        done, total = int(match.group(1)), int(match.group(2))
+        if total == steps and 0 <= done <= total:
+            found = done / total
+    return found
+
+
 def status(folder, api, training_id=None):
+    return status_detail(folder, api, training_id)[0]
+
+
+def status_detail(folder, api, training_id=None):
+    """Like status, but also returns the provider's raw training record, for progress and timing."""
     job = load_job(folder)
     selected_id = training_id or job.get("training_id", "")
     require(isinstance(selected_id, str) and REMOTE_ID.fullmatch(selected_id), "No training ID is saved. Check Replicate's dashboard, then run status --training-id ID for this exact job.")
@@ -385,7 +407,7 @@ def status(folder, api, training_id=None):
         require(result.get("id") == selected_id and result.get("model") == TRAINER and result.get("version") == VERSION and inputs.get("input_images") == job.get("file_url") and inputs.get("trigger_word") == job["trigger_word"], "This training does not match the prepared job. Nothing was attached.")
         job["training_id"] = selected_id
         save_job(folder, job)
-    return apply_result(folder, job, result, api)
+    return apply_result(folder, job, result, api), result
 
 
 def cancel(folder, api):

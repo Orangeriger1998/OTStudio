@@ -50,7 +50,7 @@ object Planner {
      * The fixed instructions. They change only with memory and the search switch, so the phone's engine can reuse the
      * work it already did on the conversation. The picture list changes often, so it goes with the message ([userMessage]).
      */
-    fun systemPrompt(memory: String, search: Boolean = false): String = buildString {
+    fun systemPrompt(memory: String, search: Boolean = false, loras: List<SavedLora> = emptyList()): String = buildString {
         if (memory.isNotBlank()) append(memory).append("\n\n")
         append("""You are the assistant in OT Studio, a phone app that can also make pictures and short videos through the user's own Replicate account.
 Answer every message with one JSON object and nothing else.
@@ -67,6 +67,12 @@ Answer every message with one JSON object and nothing else.
 """)
         append("""You cannot start a job yourself. The user reviews the plan and taps Generate. Never claim a picture or video already exists. Never write a web address.
 Each user message starts with an app note that lists the pictures you may name in "reference". The note comes from the app, not the user.""")
+        val named = loras.filter { it.trigger.length >= 3 }.take(20)
+        if (named.isNotEmpty()) {
+            append("\nSaved LoRAs, each a trained person or style, as trigger word (name): ")
+            append(named.joinToString("; ") { "${it.trigger} (${it.name.take(60).replace('\n', ' ')})" })
+            append(". When the user asks for a picture or video of one of them, by trigger word or by name, begin \"prompt\" with its trigger word exactly as written.")
+        }
     }
 
     /** The app's note on the pictures, then the user's own words. */

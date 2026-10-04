@@ -211,7 +211,7 @@ class StudioApp : Application() {
             val plan = mode == Mode.CHAT && createFromChat
             val refs = if (plan) imageRefs() else emptyList()
             val selected = selectedImage
-            val system = if (plan) Planner.systemPrompt(memory, settings.allowSearch) else memory
+            val system = if (plan) Planner.systemPrompt(memory, settings.allowSearch, loras.list()) else memory
             val bounded = if (mode == Mode.CHAT) Rules.boundedTurns(history.turns(), p) else emptyList()
             // With a plan, the newest message carries the app's note on the pictures.
             val withNote = if (plan && bounded.lastOrNull()?.role == "user") bounded.dropLast(1) + Turn("user", Planner.userMessage(bounded.last().content, refs, selected)) else bounded
@@ -277,7 +277,7 @@ class StudioApp : Application() {
                     // Planning: the grammar from the plan's JSON schema shapes every token, and thinking stays off.
                     val refs = imageRefs()
                     val selected = selectedImage
-                    val messages = ChatWindow.fit(Planner.systemPrompt(memoryPrompt(), settings.allowSearch), turns, Planner.userMessage(p, refs, selected), local.contextTokens, Planner.REPLY_TOKENS, engine::countTokens)
+                    val messages = ChatWindow.fit(Planner.systemPrompt(memoryPrompt(), settings.allowSearch, loras.list()), turns, Planner.userMessage(p, refs, selected), local.contextTokens, Planner.REPLY_TOKENS, engine::countTokens)
                     streaming = id to ""
                     // One round of results takes up to about 1,500 tokens, plus the reply.
                     val fits = { m: List<Turn> -> m.sumOf { engine.countTokens(it.content) + 8 } + 1500 + Planner.REPLY_TOKENS < local.contextTokens }
@@ -430,6 +430,8 @@ class StudioApp : Application() {
     /** The model a plan's card starts with: the user's current one when it fits, else the first that does. */
     fun defaultPlanModel(plan: JobPlan): String {
         val allowed = planModels(plan)
+        // A new picture whose prompt names a saved LoRA starts on the model that can use it.
+        if (plan.action == "image" && LoraCodec.matching(loras.list(), plan.prompt) != null && LoraCodec.MODEL in allowed) return LoraCodec.MODEL
         val current = when (plan.action) { "edit" -> settings.editModel; "video" -> settings.get(Mode.VIDEO).model; else -> settings.get(Mode.IMAGE).model }
         return current.takeIf { it in allowed } ?: allowed.firstOrNull() ?: current
     }
@@ -448,9 +450,10 @@ class StudioApp : Application() {
         val withPicture = when {
             plan.action == "edit" -> ModelCatalog.edit(modelId)?.let { e -> keepShape(chosen).let { k -> k.copy(options = k.options.filter { it.name != e.imageField } + InputValue(e.imageField, InputKind.TEXT, uploadCheck)) } } ?: chosen
             plan.action == "video" && plan.reference != null -> MediaRole.START_FRAME.apply(chosen, uploadCheck) { withoutPictures(settings.forModel(chosen, it)) }
+            plan.action == "image" && modelId == LoraCodec.MODEL -> LoraCodec.matching(loras.list(), plan.prompt)?.let { LoraCodec.apply(chosen, it) } ?: chosen
             else -> chosen
         }
-        return JobBuilder.apply(withPicture, plan)
+        return JobBuilder.apply(safetyOff(withPicture), plan)
     }
 
     /**
@@ -603,6 +606,14 @@ class StudioApp : Application() {
         }
     }
 
+    /** Sets Image to FLUX dev LoRA with [lora], keeping the model's other saved inputs. */
+    fun useLora(lora: SavedLora) {
+        val current = settings.get(Mode.IMAGE)
+        val base = if (current.model == LoraCodec.MODEL) current else settings.forModel(current, LoraCodec.MODEL)
+        settings.save(safetyOff(LoraCodec.apply(base, lora)), null)
+        changed()
+    }
+
     /** Copies a picked photo into private media and adds it to the Image feed. Runs off the main thread. Nothing is uploaded. */
     fun importPhoto(bytes: ByteArray, mime: String): Long {
         val folder = File(filesDir, "media").apply { mkdirs() }
@@ -664,11 +675,30 @@ class StudioApp : Application() {
                 try { downloadAll(id, mode) }
                 catch (e: Exception) { history.update(id, "download", "${friendly(e)} Tap Download again to retry saving this completed output.") }
             }
-            "failed" -> history.update(id, "failed", "Generation failed at the provider. Check its dashboard for the cause. No automatic retry was made.", p.id)
+            "failed" -> history.update(id, "failed", failedText(id, p.problem), p.id)
             "canceled" -> history.update(id, "canceled", "Canceled by the provider.", p.id)
             "unusable" -> history.update(id, "failed", "${p.problem} The job finished, but this app cannot save its output. Check the provider dashboard for it.", p.id)
             else -> history.update(id, "processing", "Generation is ${p.state}. Progress refreshes while this screen is open.", p.id)
         }
+    }
+
+    /** The failure line: the provider's reason when it gave one, and where to look when a safety checker stopped the job. */
+    private fun failedText(id: Long, reason: String): String {
+        if (reason.isEmpty()) return "Generation failed at the provider. Check its dashboard for the cause. No automatic retry was made."
+        val safety = Regex("(?i)nsfw|safety|sensitive|moderat|inappropriate|flagged").containsMatchIn(reason)
+        val checkerOn = history.entry(id)?.requestSummary?.contains("disable_safety_checker=true") != true
+        val hint = when {
+            safety && checkerOn -> " The model's safety checker stopped it. In API CALL, check disable_safety_checker and switch it on, then try again."
+            safety -> " The provider stopped it even with the safety checker off. Try another model."
+            else -> ""
+        }
+        return "The provider said: $reason.$hint No automatic retry was made.".replace("..", ".")
+    }
+
+    /** Turns the model's safety checker off where it offers the switch, as for the editing models. */
+    private fun safetyOff(s: ModelSettings): ModelSettings {
+        if (s.schema?.fields?.none { it.name == "disable_safety_checker" } != false) return s
+        return s.copy(options = s.options.filter { it.name != "disable_safety_checker" } + InputValue("disable_safety_checker", InputKind.BOOLEAN, "true"))
     }
 
     private fun downloadAll(id: Long, mode: Mode) {

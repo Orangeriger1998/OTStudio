@@ -161,7 +161,7 @@ class AndroidFlowTest {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val activity = controller.get()
         val texts = views(activity.window.decorView).filterIsInstance<TextView>().map { it.text.toString() }
-        assertTrue(texts.contains("Image, square"))
+        assertTrue(texts.contains("Image, square, safety checker off"))
         assertTrue(texts.any { it.startsWith("Model: black-forest-labs/flux-schnell") && it.contains("Likely cost: less than 1 cent") })
         assertTrue(views(activity.window.decorView).filterIsInstance<EditText>().any { it.text.toString() == "a red fox in snow, soft light" })
         assertTrue(views(activity.window.decorView).filterIsInstance<Button>().any { it.text.toString() == "Picture from my words" })

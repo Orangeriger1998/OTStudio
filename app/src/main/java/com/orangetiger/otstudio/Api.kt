@@ -170,7 +170,9 @@ class ProviderApi(private val transport: Transport) {
             if (state == "succeeded") return Prediction(id, "unusable", emptyList(), true, e.message.orEmpty()) else emptyList()
         }
         if (state == "succeeded" && urls.isEmpty()) return Prediction(id, "unusable", emptyList(), true, "The completed job has no downloadable output.")
-        return Prediction(id, state, urls, state == "failed")
+        // A failed job's own reason, such as a safety-checker stop. Untrusted text: clipped and stripped of control characters.
+        val reason = if (state == "failed") (root.opt("error") as? String).orEmpty().replace(Regex("[\\p{Cntrl}]+"), " ").replace(Regex("\\s+"), " ").trim().take(300) else ""
+        return Prediction(id, state, urls, state == "failed", reason)
     }
 
     private fun outputUrls(output: Any?): List<String> = when (output) {
