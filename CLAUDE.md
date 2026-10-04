@@ -13,7 +13,7 @@ Standard checks:
 ```
 gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease
 gradlew -p verification test
-python -m unittest discover -s scripts -p test_train_lora.py
+python -m unittest discover -s scripts -p "test_*.py"
 ```
 
 ## On-device engine
