@@ -703,8 +703,11 @@ class StudioApp : Application() {
         if (reason.isEmpty()) return "Generation failed at the provider. Check its dashboard for the cause. No automatic retry was made."
         val safety = Regex("(?i)nsfw|safety|sensitive|moderat|inappropriate|flagged").containsMatchIn(reason)
         val checkerOn = history.entry(id)?.requestSummary?.contains("disable_safety_checker=true") != true
+        // WAN 2.7 runs on Alibaba's service, whose own picture check ("Green net") cannot be switched off.
+        val alibaba = Regex("(?i)DataInspectionFailed|green net").containsMatchIn(reason)
         val hint = when {
-            safety && checkerOn -> " The model's safety checker stopped it. In API CALL, check disable_safety_checker and switch it on, then try again."
+            alibaba -> " Alibaba, which runs WAN 2.7, checks every input picture, and that check cannot be switched off. WAN 2.2 fast runs on Replicate's own servers without it: choose it in API CALL with the Safety checker off."
+            safety && checkerOn -> " The model's safety checker stopped it. In API CALL, switch the Safety checker off, then try again."
             safety -> " The provider stopped it even with the safety checker off. Try another model."
             else -> ""
         }
