@@ -29,7 +29,9 @@ data class Entry(
     /** For a chat turn: the job plan as JSON, or empty. */
     val plan: String = "",
     /** For a chat turn with a plan: the media entry it started, -1 when the user canceled it, 0 while it waits. */
-    val jobEntry: Long = 0
+    val jobEntry: Long = 0,
+    /** For a chat turn: the web searches behind the reply, as JSON, or empty. */
+    val sources: String = ""
 )
 data class MediaOutput(val position: Int, val url: String, val localFile: String)
 

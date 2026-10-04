@@ -75,6 +75,17 @@ Sources: [HTTP reference](https://replicate.com/docs/reference/http), [output fi
 
 Version 1.0 was tested live with the owner's own keys: chat, model metadata, FLUX images, downloads, and WAN 2.7 video. Provider restrictions, availability, and normal prices apply. See [LoRA training](LORA-TRAINING.md) for the separate photo-training helper.
 
+## Web search
+
+With Allow web search on, a job plan may ask for a search (action `search`, with the query in `prompt`). The app runs it, adds the results to the conversation as quoted data inside markers with a note that they are untrusted, and asks the model again. A message may search at most three times; after that, or when the results would not fit the on-device context, the search action is no longer offered. Searches run one at a time.
+
+| Service | Request | Notes |
+|---|---|---|
+| [Tavily](https://docs.tavily.com) (with the user's key) | POST `https://api.tavily.com/search`, `search_depth` basic, `max_results` 5, `include_answer` true | 1,000 free credits a month (October 2026); a basic search uses one. The key goes only to this origin. |
+| [Wikipedia](https://www.mediawiki.org/wiki/API:Etiquette) (no key) | GET `https://en.wikipedia.org/w/api.php`: `list=search` (3 titles), then `prop=extracts` with `exintro` | User-Agent `OTStudio/1.0 (github.com/Orangeriger1998/OTStudio)`. Text is CC BY-SA 4.0, credited under the reply. |
+
+No redirects are followed, and replies are capped at 512 KB. Result text is cut to a few hundred characters per source, and only https links appear.
+
 ## Editing models
 
 Edit on an image card uploads the image through the Files API, then starts one prediction on the chosen editing model with the instruction as `prompt`. Schemas were checked on 2026-10-03 at each model's `/api/schema` page. Every model listed exposes `disable_safety_checker` (provider default false). OT Studio sends it as true and sends `aspect_ratio` as `match_input_image`. Replicate's usage policy still applies.

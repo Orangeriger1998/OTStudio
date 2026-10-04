@@ -79,10 +79,13 @@ class SettingsStore(private val context: Context) {
         }
     }
 
-    fun key(mode: Mode): String {
-        val value = keys.getString(mode.name, null) ?: return ""
-        val boundOrigin = keys.getString("${mode.name}.origin", null)
-        if (boundOrigin != Rules.origin(get(mode).baseUrl)) {
+    fun key(mode: Mode): String = readKey(mode.name, Rules.origin(get(mode).baseUrl))
+
+    /** Reads the key in [slot], which must be bound to [origin]. Empty when none is saved. */
+    private fun readKey(slot: String, origin: String): String {
+        val value = keys.getString(slot, null) ?: return ""
+        val boundOrigin = keys.getString("$slot.origin", null)
+        if (boundOrigin != origin) {
             throw UserError("This saved key belongs to a different API origin. Re-enter the key for this provider.")
         }
         try {
@@ -90,26 +93,45 @@ class SettingsStore(private val context: Context) {
             require(parts.size == 2)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, encryptionKey(), GCMParameterSpec(128, Base64.decode(parts[0], Base64.NO_WRAP)))
-            cipher.updateAAD("${mode.name}|$boundOrigin".toByteArray(Charsets.UTF_8))
+            cipher.updateAAD("$slot|$boundOrigin".toByteArray(Charsets.UTF_8))
             return String(cipher.doFinal(Base64.decode(parts[1], Base64.NO_WRAP)), Charsets.UTF_8)
         } catch (_: Exception) { throw UserError("The saved API key cannot be decrypted. Re-enter it in Settings.") }
     }
 
     fun hasKey(mode: Mode): Boolean = keys.contains(mode.name)
 
-    private fun writeKey(mode: Mode, value: String, origin: String) {
+    // The Tavily key has its own slot, bound to Tavily's origin, so it can never reach another host.
+    private val searchSlot = "SEARCH"
+    private val searchOrigin get() = Rules.origin(WebSearch.TAVILY_ORIGIN)
+    fun searchKey(): String = readKey(searchSlot, searchOrigin)
+    fun hasSearchKey(): Boolean = keys.contains(searchSlot)
+    /** Saves the Tavily key; an empty value removes it. */
+    fun saveSearchKey(value: String) {
+        val v = value.trim()
+        if (v.isNotEmpty() && !v.startsWith("tvly-")) throw UserError("Tavily keys start with tvly-.")
+        writeKey(searchSlot, v, searchOrigin)
+    }
+
+    /** Allow web search (default on): the chat may search Wikipedia, or Tavily with a key. */
+    var allowSearch: Boolean
+        get() = prefs.getBoolean("search.allow", true)
+        set(v) { prefs.edit().putBoolean("search.allow", v).apply() }
+
+    private fun writeKey(mode: Mode, value: String, origin: String) = writeKey(mode.name, value, origin)
+
+    private fun writeKey(slot: String, value: String, origin: String) {
         if (value.isEmpty()) {
-            if (!keys.edit().remove(mode.name).remove("${mode.name}.origin").commit()) throw UserError("Could not remove the API key.")
+            if (!keys.edit().remove(slot).remove("$slot.origin").commit()) throw UserError("Could not remove the API key.")
             return
         }
         if (value.length > 4096 || value.any { it.isWhitespace() || it.code !in 33..126 }) throw UserError("The API key contains invalid characters.")
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, encryptionKey())
-            cipher.updateAAD("${mode.name}|$origin".toByteArray(Charsets.UTF_8))
+            cipher.updateAAD("$slot|$origin".toByteArray(Charsets.UTF_8))
             val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
             val record = Base64.encodeToString(cipher.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(encrypted, Base64.NO_WRAP)
-            if (!keys.edit().putString(mode.name, record).putString("${mode.name}.origin", origin).commit()) throw UserError("Could not save the API key.")
+            if (!keys.edit().putString(slot, record).putString("$slot.origin", origin).commit()) throw UserError("Could not save the API key.")
         } catch (e: UserError) { throw e }
         catch (_: Exception) { throw UserError("Android Keystore could not protect this key. Nothing was saved.") }
     }
@@ -127,7 +149,7 @@ class SettingsStore(private val context: Context) {
     }
 }
 
-class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 5) {
+class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 6) {
     companion object { const val LOCAL_BASE = "on-device" }
     /**
      * When false, new chat turns live only in this list and vanish when the app process ends.
@@ -143,7 +165,8 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 5
             model TEXT NOT NULL, base_url TEXT NOT NULL, credential_mode TEXT NOT NULL,
             remote_id TEXT NOT NULL DEFAULT '', output_url TEXT NOT NULL DEFAULT '',
             local_file TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, request_summary TEXT NOT NULL DEFAULT '',
-            parent_id INTEGER NOT NULL DEFAULT 0, plan TEXT NOT NULL DEFAULT '', job_entry INTEGER NOT NULL DEFAULT 0)""")
+            parent_id INTEGER NOT NULL DEFAULT 0, plan TEXT NOT NULL DEFAULT '', job_entry INTEGER NOT NULL DEFAULT 0,
+            sources TEXT NOT NULL DEFAULT '')""")
         db.execSQL("CREATE INDEX entries_mode_id ON entries(mode,id)")
         createDetails(db)
         createMemory(db)
@@ -157,7 +180,7 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 5
     }
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 1 || newVersion != 5) error("Unsupported history schema upgrade.")
+        if (oldVersion < 1 || newVersion != 6) error("Unsupported history schema upgrade.")
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE entries ADD COLUMN request_summary TEXT NOT NULL DEFAULT ''")
             createDetails(db)
@@ -169,6 +192,7 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 5
             db.execSQL("ALTER TABLE entries ADD COLUMN plan TEXT NOT NULL DEFAULT ''")
             db.execSQL("ALTER TABLE entries ADD COLUMN job_entry INTEGER NOT NULL DEFAULT 0")
         }
+        if (oldVersion < 6) db.execSQL("ALTER TABLE entries ADD COLUMN sources TEXT NOT NULL DEFAULT ''")
     }
 
     private fun unsavedChat(prompt: String, model: String, baseUrl: String): Long {
@@ -201,15 +225,15 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 5
         put("credential_mode", Mode.CHAT.name); put("created", System.currentTimeMillis())
     })
 
-    @Synchronized fun update(id: Long, state: String, response: String? = null, remoteId: String? = null, outputUrl: String? = null, localFile: String? = null, summary: String? = null, plan: String? = null) {
+    @Synchronized fun update(id: Long, state: String, response: String? = null, remoteId: String? = null, outputUrl: String? = null, localFile: String? = null, summary: String? = null, plan: String? = null, sources: String? = null) {
         val values = ContentValues().apply {
-            put("state", state); summary?.let { put("request_summary", it) }; plan?.let { put("plan", it) }
+            put("state", state); summary?.let { put("request_summary", it) }; plan?.let { put("plan", it) }; sources?.let { put("sources", it) }
             response?.let { put("response", it) }; remoteId?.let { put("remote_id", it) }
             outputUrl?.let { put("output_url", it) }; localFile?.let { put("local_file", it) }
         }
         if (id < 0) {
             val i = unsaved.indexOfFirst { it.id == id }
-            if (i >= 0) unsaved[i] = unsaved[i].copy(state = state, response = response ?: unsaved[i].response, requestSummary = summary ?: unsaved[i].requestSummary, plan = plan ?: unsaved[i].plan)
+            if (i >= 0) unsaved[i] = unsaved[i].copy(state = state, response = response ?: unsaved[i].response, requestSummary = summary ?: unsaved[i].requestSummary, plan = plan ?: unsaved[i].plan, sources = sources ?: unsaved[i].sources)
             return
         }
         if (writableDatabase.update("entries", values, "id = ?", arrayOf(id.toString())) != 1) throw UserError("Could not persist the request result.")
@@ -224,9 +248,9 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 5
     private fun listStored(mode: Mode?, pendingOnly: Boolean, where: String? = null, whereArgs: Array<String>? = null): List<Entry> {
         val selection = where ?: if (pendingOnly) "state IN ('submitting','chatting','processing','canceling','download')" else mode?.let { "mode = ?" }
         val args = whereArgs ?: mode?.let { arrayOf(it.name) }
-        val columns = arrayOf("id", "mode", "prompt", "response", "state", "model", "base_url", "credential_mode", "remote_id", "output_url", "local_file", "created", "request_summary", "parent_id", "plan", "job_entry")
+        val columns = arrayOf("id", "mode", "prompt", "response", "state", "model", "base_url", "credential_mode", "remote_id", "output_url", "local_file", "created", "request_summary", "parent_id", "plan", "job_entry", "sources")
         return readableDatabase.query("entries", columns, selection, if (pendingOnly && where == null) null else args, null, null, "id DESC", if (pendingOnly) null else "100").use { c ->
-            buildList { while (c.moveToNext()) add(Entry(c.getLong(0), Mode.valueOf(c.getString(1)), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), Mode.valueOf(c.getString(7)), c.getString(8), c.getString(9), c.getString(10), c.getLong(11), c.getString(12), c.getLong(13), c.getString(14), c.getLong(15))) }.reversed()
+            buildList { while (c.moveToNext()) add(Entry(c.getLong(0), Mode.valueOf(c.getString(1)), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), Mode.valueOf(c.getString(7)), c.getString(8), c.getString(9), c.getString(10), c.getLong(11), c.getString(12), c.getLong(13), c.getString(14), c.getLong(15), c.getString(16))) }.reversed()
         }
     }
 

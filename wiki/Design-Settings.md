@@ -47,6 +47,17 @@ This card appears only under Chat.
 | Create images and videos from chat | A checkbox, on by default | Turns each chat reply into a plan. A plan for a picture, an edit, or a video shows as a [job card](Design-Job-Card.md). Off brings back plain chat. |
 | Note | Says that thinking is not shown while this is on | A plan must be a structured reply, so the model cannot think out loud first |
 
+## Web search card
+
+This card appears only under Chat.
+
+| Box | What it holds | Why |
+|---|---|---|
+| Allow web search | A checkbox, on by default | Lets the chat look up current facts before it answers. Off keeps every message on the phone. |
+| Note | Says that search words leave the phone and that replies list their searches | The user knows what is sent and where |
+| Tavily API key | A password field, optional, with a status line | Without a key the chat searches Wikipedia. A free Tavily key searches the whole web. The key is encrypted and goes only to Tavily. |
+| Save key, Remove key, Get a free key | Buttons | Get a free key opens Tavily's sign-up page in the browser |
+
 ## Memory and history card
 
 This card also appears only under Chat.

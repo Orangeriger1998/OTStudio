@@ -61,6 +61,8 @@ The feed lists this mode's history, oldest at the top. It keeps its scroll posit
 
 With Create from chat on, a reply that describes a picture, an edit, or a video carries a [job card](Design-Job-Card.md) under it. After Generate, the result card takes the job card's place. Pictures in the chat carry Talk about this, which marks one picture for the next message. A line above the message bar then reads "Talking about:" with a Clear button.
 
+A reply that searched the web lists each search under it, such as "Searched Wikipedia: Nobel Prize in Literature 2024 winner", followed by the sources in blue. Tapping one opens it in the browser. Wikipedia results carry the line "Text from Wikipedia, available under CC BY-SA 4.0."
+
 When Show the model's thinking is on, a model that thinks first shows that thinking in a separate block above its answer. The block uses small gray italic type under the label "Thinking", so it never reads as the answer. It stays open while the model writes. Afterward it folds to one line, "Thinking, tap to show". Under each pair, a status label and the model name show what happened, and Use prompt copies the prompt back into the message bar.
 
 **Image and video entries** appear as cards.

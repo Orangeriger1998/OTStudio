@@ -59,7 +59,7 @@ class AndroidFlowTest {
         val activity = controller.get()
         click(activity, "Settings")
         val fields = views(activity.window.decorView).filterIsInstance<EditText>()
-        fields[1].setText("example/custom-text")
+        fields.first { it.text.toString() == "mistralai/mistral-nemo" }.setText("example/custom-text")
         click(activity, "Save chat settings")
         val fresh = SettingsStore(activity)
         assertEquals("example/custom-text", fresh.get(Mode.CHAT).model)
@@ -181,6 +181,21 @@ class AndroidFlowTest {
         shadowOf(Looper.getMainLooper()).idle()
         val replaced = JobPlan.fromJson(app.history.entry(bad)!!.plan)!!
         assertEquals("image", replaced.action); assertEquals("do the thing", replaced.prompt)
+        controller.pause().stop().destroy()
+    }
+
+    @Test fun theTavilyKeyIsCheckedEncryptedAndSourcesShow() {
+        val app = RuntimeEnvironment.getApplication() as StudioApp
+        assertTrue(app.settings.allowSearch)
+        assertThrows(UserError::class.java) { app.settings.saveSearchKey("sk-or-wrong") }
+        assertFalse(app.settings.hasSearchKey())
+        val id = app.history.insertLocal("who painted the mona lisa", "test model")
+        app.history.update(id, "succeeded", "Leonardo da Vinci [1].", sources = SearchResult.listToJson(listOf(SearchResult("Mona Lisa painter", "Wikipedia", "", listOf(SearchHit("Mona Lisa", "https://en.wikipedia.org/wiki/Mona_Lisa", "A portrait by Leonardo."))))))
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        val texts = views(controller.get().window.decorView).filterIsInstance<TextView>().map { it.text.toString() }
+        assertTrue(texts.contains("Searched Wikipedia: Mona Lisa painter"))
+        assertTrue(texts.contains("Mona Lisa (en.wikipedia.org)"))
+        assertTrue(texts.contains("Text from Wikipedia, available under CC BY-SA 4.0."))
         controller.pause().stop().destroy()
     }
 

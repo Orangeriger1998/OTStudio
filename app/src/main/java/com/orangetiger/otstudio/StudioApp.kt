@@ -125,10 +125,36 @@ class StudioApp : Application() {
     fun describe(e: Entry): String = if (e.parentId > 0) (history.entry(e.parentId)?.let { "${describe(it)}, edited: ${e.prompt}" } ?: e.prompt) else e.prompt
 
     /** Stores a model's reply as a plan, an answer, or an invalid plan the user can replace with their own words. */
-    private fun storePlan(id: Long, raw: String, refs: List<ImageRef>, selected: Long?, summary: String? = null) {
+    private fun storePlan(id: Long, raw: String, refs: List<ImageRef>, selected: Long?, summary: String? = null, found: List<SearchResult> = emptyList()) {
+        val sources = SearchResult.listToJson(found).ifEmpty { null }
         when (val r = Planner.parse(raw, refs, selected)) {
-            is PlanResult.Ok -> history.update(id, "succeeded", r.plan.reply, summary = summary, plan = if (r.plan.action == "answer") null else r.plan.toJson())
-            is PlanResult.Invalid -> history.update(id, "succeeded", r.reply.ifEmpty { "No plan came back." }, summary = summary, plan = JobPlan("invalid", r.reason).toJson())
+            is PlanResult.Ok -> history.update(id, "succeeded", r.plan.reply, summary = summary, plan = if (r.plan.action == "answer") null else r.plan.toJson(), sources = sources)
+            is PlanResult.Invalid -> history.update(id, "succeeded", r.reply.ifEmpty { "No plan came back." }, summary = summary, plan = JobPlan("invalid", r.reason).toJson(), sources = sources)
+        }
+    }
+
+    private val web = WebSearch(HttpWebFetch())
+
+    /**
+     * Runs the planner, answering up to three web searches in between. Each search result goes back to the model as
+     * quoted, untrusted data. [fits] tells whether another round of results still fits the model's context.
+     * Returns the final reply and the searches made.
+     */
+    private fun planWithSearch(id: Long, start: List<Turn>, refs: List<ImageRef>, selected: Long?, fits: (List<Turn>) -> Boolean, ask: (List<Turn>, Boolean) -> String): Pair<String, List<SearchResult>> {
+        var messages = start
+        val found = ArrayList<SearchResult>()
+        while (true) {
+            val allow = settings.allowSearch && found.size < WebSearch.MAX_SEARCHES && !stopRequested && fits(messages)
+            val raw = ask(messages, allow)
+            val r = Planner.parse(raw, refs, selected, allow)
+            if (r !is PlanResult.Ok || r.plan.action != "search") return raw to found
+            postStream(id, "Searching the web for: ${r.plan.prompt}")
+            val key = try { settings.searchKey().ifBlank { null } } catch (_: UserError) { null }
+            val result = try { web.search(r.plan.prompt, key) }
+                catch (e: Exception) { SearchResult(r.plan.prompt, "failed", (e as? UserError)?.message ?: "The search could not reach the service.", emptyList()) }
+            found.add(result)
+            messages = messages + Turn("assistant", raw.trim()) +
+                Turn("user", if (result.source == "failed") "The web search failed: ${result.answer} Answer without it, and say that the search failed." else WebSearch.context(result))
         }
     }
 
@@ -181,7 +207,11 @@ class StudioApp : Application() {
             changed()
             if (mode == Mode.CHAT) {
                 try {
-                    if (plan) storePlan(id, api.chat(model, turns, Planner.responseFormat(refs)), refs, selected)
+                    if (plan) {
+                        val (raw, found) = planWithSearch(id, turns.map { if (it.role == "system") Turn("system", Planner.systemPrompt(memory, refs, selected, settings.allowSearch)) else it },
+                            refs, selected, { m -> m.sumOf { it.content.length } < 60_000 }) { m, allow -> api.chat(model, m, Planner.responseFormat(refs, allow)) }
+                        storePlan(id, raw, refs, selected, found = found)
+                    }
                     else history.update(id, "succeeded", api.chat(model, turns))
                 }
                 catch (e: Exception) { history.update(id, "failed", friendly(e)) }
@@ -231,14 +261,18 @@ class StudioApp : Application() {
                     // Planning: the grammar from the plan's JSON schema shapes every token, and thinking stays off.
                     val refs = imageRefs()
                     val selected = selectedImage
-                    val messages = ChatWindow.fit(Planner.systemPrompt(memoryPrompt(), refs, selected), turns, p, local.contextTokens, Planner.REPLY_TOKENS, engine::countTokens)
+                    val messages = ChatWindow.fit(Planner.systemPrompt(memoryPrompt(), refs, selected, settings.allowSearch), turns, p, local.contextTokens, Planner.REPLY_TOKENS, engine::countTokens)
                     streaming = id to ""
-                    val raw = engine.chat(messages, Planner.REPLY_TOKENS, Planner.responseFormat(refs), false) { postStream(id, Planner.streamingReply(it)) }
+                    // One round of results takes up to about 1,500 tokens, plus the reply.
+                    val fits = { m: List<Turn> -> m.sumOf { engine.countTokens(it.content) + 8 } + 1500 + Planner.REPLY_TOKENS < local.contextTokens }
+                    val (raw, found) = planWithSearch(id, messages, refs, selected, fits) { m, allow ->
+                        engine.chat(m, Planner.REPLY_TOKENS, Planner.responseFormat(refs, allow), false) { postStream(id, Planner.streamingReply(it)) }
+                    }
                     val stats = engine.lastStats?.summary()
                     if (raw.isNotBlank() && history.saveChat) engine.saveState()
                     if (stopRequested) history.update(id, if (raw.isBlank()) "canceled" else "stopped", Planner.streamingReply(raw).ifEmpty { "Stopped before the reply began." }, summary = stats)
                     else if (raw.isBlank()) history.update(id, "failed", "The model returned no text. Try again or choose another model.", summary = stats)
-                    else storePlan(id, raw, refs, selected, stats)
+                    else storePlan(id, raw, refs, selected, stats, found)
                     return@run
                 }
                 val messages = ChatWindow.fit(memoryPrompt(), turns, p, local.contextTokens, LOCAL_REPLY_TOKENS, engine::countTokens)

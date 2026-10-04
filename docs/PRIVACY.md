@@ -10,6 +10,8 @@ A chat message goes to the chat provider together with a limited amount of recen
 
 With Chat set to On this phone, messages and replies never leave the phone. The model file comes from Hugging Face, and OT Studio sends no key and no message there. The app keeps the model's processed conversation in its private cache, so a restart does not have to read it again.
 
+With Allow web search on (the default), the chat may send short search words to Wikipedia, or to Tavily when a Tavily key is saved. Only the search words go there, never the conversation. The Tavily key is encrypted like the other keys and goes only to api.tavily.com. Each reply that searched lists the searches under it. Switch Allow web search off to keep every message on the phone.
+
 Memory instructions are stored as plain text in the app's private database. They go first in every chat. With on-device chat they stay on the phone. When Chat uses OpenRouter, the instructions that are on travel to OpenRouter with each message.
 
 Save chat history is on by default. When it is off, new chat messages live only in the app's memory and vanish when the app closes, and the processed conversation is not kept either. Images and videos are still saved. Clear chat history deletes every chat message on the phone.

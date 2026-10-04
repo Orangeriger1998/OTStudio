@@ -46,6 +46,7 @@ class MainActivity : AppCompatActivity() {
         const val WIKI = "https://github.com/Orangeriger1998/OTStudio/tree/main/wiki"
         const val OPENROUTER_KEYS = "https://openrouter.ai/settings/keys"
         const val REPLICATE_TOKENS = "https://replicate.com/account/api-tokens"
+        const val TAVILY_SIGNUP = "https://app.tavily.com/home"
     }
     private val app get() = application as StudioApp
     private lateinit var ui: Ui
@@ -422,6 +423,7 @@ class MainActivity : AppCompatActivity() {
             streamThinking = (block as LinearLayout).getChildAt(1) as TextView
             feed.addView(holder, ui.matchWrap(4))
         }
+        if (e.sources.isNotEmpty()) sourcesBlock(SearchResult.listFromJson(e.sources))
         val plan = JobPlan.fromJson(e.plan)
         when {
             plan == null -> { }
@@ -438,6 +440,24 @@ class MainActivity : AppCompatActivity() {
         meta.addView(ui.textButton("Use prompt") { prompt.setText(e.prompt); prompt.requestFocus() })
         feed.addView(meta, ui.matchWrap(if (e.requestSummary.isEmpty()) 14 else 2))
         if (e.requestSummary.isNotEmpty()) feed.addView(ui.text(e.requestSummary, Ui.Type.CAPTION, ui.muted), ui.matchWrap(14))
+    }
+
+    /** The web searches behind a reply: each query, its service, and links the user can open. */
+    private fun sourcesBlock(results: List<SearchResult>) {
+        val box = ui.column().apply { setPadding(dp(14), 0, dp(14), dp(4)) }
+        results.forEach { r ->
+            box.addView(ui.text(if (r.source == "failed") "Search failed: ${r.query}" else "Searched ${r.source}: ${r.query}", Ui.Type.CAPTION, ui.muted))
+            r.hits.take(5).forEach { h ->
+                val host = try { Uri.parse(h.url).host.orEmpty() } catch (_: Exception) { "" }
+                box.addView(ui.text("${h.title} ($host)", Ui.Type.SMALL, ui.color(R.color.ot_blue)).apply {
+                    setPadding(0, dp(2), 0, dp(2)); maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
+                    contentDescription = "Open ${h.title} in the browser"
+                    setOnClickListener { if (h.url.startsWith("https://")) openLink(h.url) }
+                })
+            }
+        }
+        if (results.any { it.source == "Wikipedia" && it.hits.isNotEmpty() }) box.addView(ui.text("Text from Wikipedia, available under CC BY-SA 4.0.", Ui.Type.CAPTION, ui.muted).apply { setPadding(0, dp(2), 0, 0) })
+        feed.addView(box, ui.matchWrap(4))
     }
 
     /** Offers to send the user's own message, as typed, to an image or video model. Only a job card follows; nothing is paid yet. */
@@ -579,7 +599,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         content.addView(ui.text("Models and keys stay on this device.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, dp(10)) })
         ui.segmented(content, listOf("Chat" to R.drawable.ic_chat, "Image" to R.drawable.ic_image, "Video" to R.drawable.ic_movie), selected.ordinal) { i -> showSettings(Mode.entries[i]) }
-        if (selected == Mode.CHAT) { localChatCard(content); memoryCard(content) }
+        if (selected == Mode.CHAT) { localChatCard(content); memoryCard(content); searchCard(content) }
         val s = app.settings.get(selected)
         val provider = ui.card(content)
         ui.sectionTitle(provider, if (selected == Mode.CHAT) "OpenRouter, Chat Completions" else "Replicate, Predictions", "A new provider must speak this API protocol. Changing a URL alone does not add a different protocol.")
@@ -668,6 +688,22 @@ class MainActivity : AppCompatActivity() {
         card.addView(ui.text("Some models, such as Qwen3.5 and Gemma 4, can think before they answer. Answers then come slower but may be better. The thinking appears in small gray type above the answer, and the model does not see it again later. Qwen3 4B Instruct never thinks.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, dp(8)) })
         card.addView(ui.text("A larger context remembers more of the conversation and uses more memory. 8192 suits phones with 8 GB or more. Change threads only to test speed. Changes apply to the next message.", Ui.Type.SMALL, ui.muted))
         content.addView(ui.text("OpenRouter settings below stay saved. Suggest setup in API CALL still uses them.", Ui.Type.SMALL, ui.muted).apply { setPadding(dp(4), 0, dp(4), dp(10)) })
+    }
+
+    private fun searchCard(content: LinearLayout) {
+        val card = ui.card(content)
+        ui.sectionTitle(card, "Web search", "The chat can look up current facts before it answers. Without a key it searches Wikipedia. With your own free Tavily key it searches the whole web.")
+        card.addView(ui.checkbox("Allow web search", app.settings.allowSearch).apply { setOnCheckedChangeListener { _, on -> app.settings.allowSearch = on } })
+        card.addView(ui.text("Search words leave the phone and go to Wikipedia or Tavily. Each reply that searched lists its searches and sources.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, dp(8)) })
+        val helper = { if (app.settings.hasSearchKey()) "Saved securely. Leave blank to keep." else "Optional. Starts with tvly-." }
+        val key = ui.field(card, "Tavily API key", "", secret = true, helper = helper())
+        val note = ui.text("", Ui.Type.BODY, ui.orange)
+        card.addView(actionRow(
+            ui.tonal("Save key") { try { if (key.text.toString().isNotBlank()) { app.settings.saveSearchKey(key.text.toString()); key.setText(""); ui.layoutOf(key)?.helperText = helper(); note.text = "Saved." } } catch (e: UserError) { note.text = e.message } },
+            ui.danger("Remove key", R.drawable.ic_delete) { try { app.settings.saveSearchKey(""); ui.layoutOf(key)?.helperText = helper(); note.text = "Key removed." } catch (e: UserError) { note.text = e.message } },
+            ui.textButton("Get a free key", R.drawable.ic_open_in_new) { openLink(TAVILY_SIGNUP) }
+        ))
+        card.addView(note)
     }
 
     private fun memoryCard(content: LinearLayout) {

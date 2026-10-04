@@ -46,7 +46,7 @@ object Planner {
     private fun refName(id: Long) = "image_$id"
     private fun references(images: List<ImageRef>) = listOf("none", "last_image") + images.take(MAX_IMAGES).map { refName(it.id) }
 
-    fun systemPrompt(memory: String, images: List<ImageRef>, selected: Long?): String = buildString {
+    fun systemPrompt(memory: String, images: List<ImageRef>, selected: Long?, search: Boolean = false): String = buildString {
         if (memory.isNotBlank()) append(memory).append("\n\n")
         append("""You are the assistant in OT Studio, a phone app that can also make pictures and short videos through the user's own Replicate account.
 Answer every message with one JSON object and nothing else.
@@ -57,7 +57,10 @@ Answer every message with one JSON object and nothing else.
 - "shape": "square", "portrait", or "landscape" when the user asks for one, otherwise "default".
 - For image, edit, and video, "reply" is one short sentence saying what the plan does. Put the details in "prompt", not in "reply".
 - For "answer", set "prompt" to "", "reference" to "none", "shape" to "default", and "seconds" to 5. Most messages are conversation: only plan a picture, edit, or video when the user asks for one.
-You cannot start a job yourself. The user reviews the plan and taps Generate. Never claim a picture or video already exists. Never write a web address.""")
+""")
+        if (search) append("""- "action": "search" when the answer needs current facts, news, prices, or details you are not sure of. Put a short web search query in "prompt". The app runs the search and shows you the results, then you answer.
+""")
+        append("""You cannot start a job yourself. The user reviews the plan and taps Generate. Never claim a picture or video already exists. Never write a web address.""")
         if (images.isNotEmpty()) {
             append("\n\nPictures in this conversation, newest first. \"last_image\" means the first one.")
             if (selected != null) append(" The user selected ${refName(selected)}, so \"that picture\" means it.")
@@ -70,10 +73,10 @@ You cannot start a job yourself. The user reviews the plan and taps Generate. Ne
      * order the properties are written. The action therefore comes first, so the model decides what to do before it
      * writes anything else. The text is built by hand because some JSON libraries do not keep key order.
      */
-    fun schemaText(images: List<ImageRef>): String {
+    fun schemaText(images: List<ImageRef>, search: Boolean = false): String {
         fun list(values: List<String>) = values.joinToString(",") { JSONObject.quote(it) }
         return "{\"type\":\"object\",\"properties\":{" +
-            "\"action\":{\"type\":\"string\",\"enum\":[${list(listOf("answer") + MEDIA_ACTIONS)}]}," +
+            "\"action\":{\"type\":\"string\",\"enum\":[${list(listOf("answer") + MEDIA_ACTIONS + if (search) listOf("search") else emptyList())}]}," +
             "\"reply\":{\"type\":\"string\"}," +
             "\"prompt\":{\"type\":\"string\"}," +
             "\"reference\":{\"type\":\"string\",\"enum\":[${list(references(images))}]}," +
@@ -82,14 +85,14 @@ You cannot start a job yourself. The user reviews the plan and taps Generate. Ne
             "\"required\":[\"action\",\"reply\",\"prompt\",\"reference\",\"shape\",\"seconds\"],\"additionalProperties\":false}"
     }
 
-    fun schema(images: List<ImageRef>): JSONObject = JSONObject(schemaText(images))
+    fun schema(images: List<ImageRef>, search: Boolean = false): JSONObject = JSONObject(schemaText(images, search))
 
     /** The OpenAI-style response_format both engines accept, with the properties in schema order. */
-    fun responseFormat(images: List<ImageRef>): String =
-        "{\"type\":\"json_schema\",\"json_schema\":{\"name\":\"job_plan\",\"strict\":true,\"schema\":${schemaText(images)}}}"
+    fun responseFormat(images: List<ImageRef>, search: Boolean = false): String =
+        "{\"type\":\"json_schema\",\"json_schema\":{\"name\":\"job_plan\",\"strict\":true,\"schema\":${schemaText(images, search)}}}"
 
     /** Reads a model reply as a plan. Anything unexpected makes the plan invalid; nothing is guessed. */
-    fun parse(raw: String, images: List<ImageRef>, selected: Long?): PlanResult {
+    fun parse(raw: String, images: List<ImageRef>, selected: Long?, search: Boolean = false): PlanResult {
         // A model that ignores the format and writes plain prose has still answered; Use my words remains under it.
         // A broken object is no plan, and only the reply text it holds is shown.
         if ('{' !in raw) return if (raw.isBlank()) PlanResult.Invalid("The model returned no text.", "") else PlanResult.Ok(JobPlan("answer", raw.trim().take(4000)))
@@ -97,6 +100,10 @@ You cannot start a job yourself. The user reviews the plan and taps Generate. Ne
         val o = try { JSONObject(text) } catch (_: Exception) { return PlanResult.Invalid("The model returned a broken plan.", "") }
         val action = o.optString("action")
         val reply = o.optString("reply").trim().take(4000)
+        if (action == "search") {
+            val q = o.optString("prompt").trim()
+            return if (search && q.isNotEmpty()) PlanResult.Ok(JobPlan("search", reply, q.take(300))) else PlanResult.Invalid("The model asked for a web search that is not available now.", reply)
+        }
         if (action !in listOf("answer") + MEDIA_ACTIONS) return PlanResult.Invalid("The plan named an unknown action.", reply)
         if (action == "answer") return if (reply.isEmpty()) PlanResult.Invalid("The model returned an empty answer.", "") else PlanResult.Ok(JobPlan("answer", reply))
         val prompt = o.optString("prompt").trim()

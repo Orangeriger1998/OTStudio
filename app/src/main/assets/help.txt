@@ -12,13 +12,17 @@ OT Studio connects your phone to AI models for chat, images, and video. You brin
 
 # Chat on this phone
 
-Chat can run on the phone itself, with no key and no cost per message. Open Settings, choose Chat, and pick On this phone. Then tap Manage models and download the suggested model. It is about 2.4 GB, so use Wi-Fi. Once it is ready, your messages and the replies never leave the phone. Phones with 8 GB of memory or more work best.
+Chat can run on the phone itself, with no key and no cost per message. Open Settings, choose Chat, and pick On this phone. Then tap Manage models and download the suggested model. It is about 2.4 GB, so use Wi-Fi. Once it is ready, your messages and the replies stay on the phone. Only the words of a web search leave it, as the Web search card explains. Phones with 8 GB of memory or more work best.
 
 # Memory and chat history
 
 Memory holds standing instructions, such as a name to call you or a writing rule. Every chat starts with the ones that are switched on. Open it from Settings under Chat, with Edit memory. When Chat uses OpenRouter, the instructions that are on go to OpenRouter with each message.
 
 Save chat history is on at first. Switch it off for a chat that leaves no trace: its messages last only until the app closes. Images and videos are still saved either way, so their files can be kept. Clear chat history deletes every chat message on the phone.
+
+# Web search
+
+The chat can look up current facts before it answers. Without a key it searches Wikipedia. With your own free Tavily key it searches the whole web; get one at tavily.com and paste it in Settings, under Chat. A reply that searched lists its searches and links under it. Search words leave the phone, so switch Allow web search off for chats that must stay on the phone.
 
 # Edit an image
 
