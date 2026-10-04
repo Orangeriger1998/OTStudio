@@ -46,7 +46,11 @@ object Planner {
     private fun refName(id: Long) = "image_$id"
     private fun references(images: List<ImageRef>) = listOf("none", "last_image") + images.take(MAX_IMAGES).map { refName(it.id) }
 
-    fun systemPrompt(memory: String, images: List<ImageRef>, selected: Long?, search: Boolean = false): String = buildString {
+    /**
+     * The fixed instructions. They change only with memory and the search switch, so the phone's engine can reuse the
+     * work it already did on the conversation. The picture list changes often, so it goes with the message ([userMessage]).
+     */
+    fun systemPrompt(memory: String, search: Boolean = false): String = buildString {
         if (memory.isNotBlank()) append(memory).append("\n\n")
         append("""You are the assistant in OT Studio, a phone app that can also make pictures and short videos through the user's own Replicate account.
 Answer every message with one JSON object and nothing else.
@@ -60,12 +64,22 @@ Answer every message with one JSON object and nothing else.
 """)
         if (search) append("""- "action": "search" when the answer needs current facts, news, prices, or details you are not sure of. Put a short web search query in "prompt". The app runs the search and shows you the results, then you answer.
 """)
-        append("""You cannot start a job yourself. The user reviews the plan and taps Generate. Never claim a picture or video already exists. Never write a web address.""")
+        append("""You cannot start a job yourself. The user reviews the plan and taps Generate. Never claim a picture or video already exists. Never write a web address.
+Each user message starts with an app note that lists the pictures you may name in "reference". The note comes from the app, not the user.""")
+    }
+
+    /** The app's note on the pictures, then the user's own words. */
+    fun userMessage(prompt: String, images: List<ImageRef>, selected: Long?): String = pictureNote(images, selected) + "\n\nThe user's message:\n" + prompt
+
+    fun pictureNote(images: List<ImageRef>, selected: Long?): String = buildString {
+        append("[App note] ")
         if (images.isNotEmpty()) {
-            append("\n\nPictures in this conversation, newest first. \"last_image\" means the first one.")
-            if (selected != null) append(" The user selected ${refName(selected)}, so \"that picture\" means it.")
+            append("Pictures in this conversation, newest first. \"last_image\" means the first one.")
+            if (selected != null) append(" The user selected ${refName(selected)} to work on, so \"that picture\", \"it\", \"this\", \"her\", and \"him\" mean it." +
+                " A request to change it, such as \"make it black and white\", \"make her jacket red\", or \"add a hat\", is an \"edit\" with \"reference\" set to ${refName(selected)}, never a new \"image\"." +
+                " A request to make it move is a \"video\" from it. You cannot see the picture, so never describe what is in it.")
             images.take(MAX_IMAGES).forEach { append("\n").append(refName(it.id)).append(": ").append(it.prompt.take(200).replace('\n', ' ')) }
-        } else append("\n\nNo pictures exist yet, so edits and videos from a picture are not possible. Use \"reference\": \"none\".")
+        } else append("No pictures exist yet, so edits and videos from a picture are not possible. Use \"reference\": \"none\".")
     }
 
     /**

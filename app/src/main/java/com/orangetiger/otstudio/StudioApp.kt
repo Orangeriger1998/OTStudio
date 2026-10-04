@@ -208,15 +208,18 @@ class StudioApp : Application() {
             val plan = mode == Mode.CHAT && createFromChat
             val refs = if (plan) imageRefs() else emptyList()
             val selected = selectedImage
-            val system = if (plan) Planner.systemPrompt(memory, refs, selected) else memory
-            val turns = if (mode == Mode.CHAT) (if (system.isEmpty()) emptyList() else listOf(Turn("system", system))) + Rules.boundedTurns(history.turns(), p) else emptyList()
+            val system = if (plan) Planner.systemPrompt(memory, settings.allowSearch) else memory
+            val bounded = if (mode == Mode.CHAT) Rules.boundedTurns(history.turns(), p) else emptyList()
+            // With a plan, the newest message carries the app's note on the pictures.
+            val withNote = if (plan && bounded.lastOrNull()?.role == "user") bounded.dropLast(1) + Turn("user", Planner.userMessage(bounded.last().content, refs, selected)) else bounded
+            val turns = if (mode == Mode.CHAT) (if (system.isEmpty()) emptyList() else listOf(Turn("system", system))) + withNote else emptyList()
             val id = history.insert(mode, p, model)
             changed()
             if (mode == Mode.CHAT) {
                 try {
                     streaming = null
                     if (plan) {
-                        val (raw, found) = planWithSearch(id, turns.map { if (it.role == "system") Turn("system", Planner.systemPrompt(memory, refs, selected, settings.allowSearch)) else it },
+                        val (raw, found) = planWithSearch(id, turns,
                             refs, selected, { m -> m.sumOf { it.content.length } < 60_000 }) { m, allow -> api.chat(model, m, Planner.responseFormat(refs, allow)) }
                         storePlan(id, raw, refs, selected, found = found)
                     }
@@ -271,7 +274,7 @@ class StudioApp : Application() {
                     // Planning: the grammar from the plan's JSON schema shapes every token, and thinking stays off.
                     val refs = imageRefs()
                     val selected = selectedImage
-                    val messages = ChatWindow.fit(Planner.systemPrompt(memoryPrompt(), refs, selected, settings.allowSearch), turns, p, local.contextTokens, Planner.REPLY_TOKENS, engine::countTokens)
+                    val messages = ChatWindow.fit(Planner.systemPrompt(memoryPrompt(), settings.allowSearch), turns, Planner.userMessage(p, refs, selected), local.contextTokens, Planner.REPLY_TOKENS, engine::countTokens)
                     streaming = id to ""
                     // One round of results takes up to about 1,500 tokens, plus the reply.
                     val fits = { m: List<Turn> -> m.sumOf { engine.countTokens(it.content) + 8 } + 1500 + Planner.REPLY_TOKENS < local.contextTokens }

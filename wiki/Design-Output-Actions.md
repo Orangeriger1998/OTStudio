@@ -32,7 +32,7 @@ The upload goes to the user's own Replicate account through Replicate's Files AP
 
 | Box | What it holds | Why |
 |---|---|---|
-| What should change? | A text field for a plain instruction, with an example under it | Editing models follow short, direct instructions best, such as "change the orange border to black" |
+| What should change? | A text field for a plain instruction, with an example under it | Editing models follow short, direct instructions best, such as "change her jacket to a red sweater. Keep her face the same." |
 | Editing model | A dropdown of nine Replicate editing models, set to the last one used | FLUX Kontext dev comes first. It made the most exact change in testing. |
 | Cost line | The model's price per edit, and a reminder that Replicate's usage policy still applies | Each Edit is one paid request, so the price shows before the tap |
 | Edit | Uploads the image and starts the edit | The tap is the confirmation. OT Studio never retries an edit on its own. |

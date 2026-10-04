@@ -4,6 +4,14 @@
 
 This log lists the main changes from one version to the next. It records what a user would notice, not every code change.
 
+## 1.1.3 (October 2026)
+
+**Chat on the phone answers again after a restart.** In 1.0.0 and 1.1.0, the first message after the on-device model loaded could fail with "The model returned no text". That is fixed.
+
+**Chat edits the photo you chose.** With a photo chosen, a request such as "make her jacket red" now becomes an edit of that photo instead of a new picture. A job card for a new picture also offers Edit the chosen picture instead.
+
+**Faster replies with a chosen picture.** On the phone, the first word now takes seconds instead of most of a minute, because the picture list no longer forces the phone to reread the whole conversation.
+
 ## 1.1.0 (October 2026)
 
 **Photos from your phone in every mode.** A photo button at the left of the message bar adds a photo from the phone. In Chat, the next message can edit the photo or turn it into a video. In Image, the photo can be edited or used as the reference for the next image. In Video, it becomes the first or the last frame. A small copy of the chosen picture now sits beside "Talking about:".

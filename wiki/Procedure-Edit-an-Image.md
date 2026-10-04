@@ -28,6 +28,8 @@ In Chat, the same photo button works with plain words. Pick the photo, then send
 ## Tips
 
 - One change per edit works best. For two changes, edit the result again.
+- Say what must stay, too. In a test on a selfie, `Change her jacket to a red sweater. Keep her face and the background the same.` changed only the clothing.
+- An edit that comes back unchanged usually means the editing model declined the request. The provider still charges for it.
 - In a test with the same picture and instruction, FLUX Kontext dev changed only the window frame. Qwen Image Edit Plus and P-Image Edit also darkened the sill below it.
 - Repeated edits can slowly change a face. For a face that must stay true, edit the original picture again rather than an edit of an edit.
 - Every editing model in the list starts with its safety checker off. Replicate's usage policy still applies.

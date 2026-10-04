@@ -45,7 +45,9 @@ class LlamaEngine : LocalLlm {
     }
 
     override fun unload() {
-        cancel()
+        // Ends a running reply without setting the Stop flag: load() unloads first, and a set flag
+        // would make the next chat() return nothing.
+        running?.cancel()
         model?.close()
         model = null
         loadedPath = null

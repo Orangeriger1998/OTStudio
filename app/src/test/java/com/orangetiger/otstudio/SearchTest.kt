@@ -69,7 +69,7 @@ class SearchTest {
         assertTrue(Planner.parse(raw, emptyList(), null, search = false) is PlanResult.Invalid)
         assertTrue(Planner.schemaText(emptyList(), search = true).contains("\"search\""))
         assertFalse(Planner.schemaText(emptyList(), search = false).contains("\"search\""))
-        assertTrue(Planner.systemPrompt("", emptyList(), null, search = true).contains("\"action\": \"search\""))
-        assertFalse(Planner.systemPrompt("", emptyList(), null, search = false).contains("\"action\": \"search\""))
+        assertTrue(Planner.systemPrompt("", search = true).contains("\"action\": \"search\""))
+        assertFalse(Planner.systemPrompt("", search = false).contains("\"action\": \"search\""))
     }
 }

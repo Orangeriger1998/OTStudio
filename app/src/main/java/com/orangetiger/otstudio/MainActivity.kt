@@ -481,13 +481,13 @@ class MainActivity : AppCompatActivity() {
         feed.addView(box, ui.matchWrap(4))
     }
 
-    /** Offers to send the user's own message, as typed, to an image or video model. Only a job card follows; nothing is paid yet. */
     /** Ways to use a message as typed: a new picture, an edit of the chosen picture (only when one is chosen), or a video. */
     private fun ownWordsActions(): List<Pair<String, String>> =
         listOfNotNull("New picture" to "image", if (app.selectedImage != null) "Edit the chosen picture" to "edit" else null, "Video" to "video")
 
     private fun ownWords(e: Entry, action: String) { try { app.planFromWords(e, action) } catch (ex: UserError) { showError(ex.message.orEmpty()) } }
 
+    /** Offers to send the user's own message, as typed, to an image or video model. Only a job card follows; nothing is paid yet. */
     private fun ownWordsChoice(e: Entry) {
         val actions = ownWordsActions()
         // A list instead of a message, so it can hold every choice. You still review the job card and tap Generate.
@@ -522,6 +522,10 @@ class MainActivity : AppCompatActivity() {
             card.addView(ui.text("${if (plan.action == "edit") "Edits" else "Starts from"} the picture: ${app.describe(ref).take(120)}", Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(2), 0, dp(6)) })
             if (plan.action == "video") card.addView(ui.textButton("Without the picture") { cardModels.remove(e.id); app.dropPlanPicture(e, plan) }, LinearLayout.LayoutParams(-2, -2))
         } }
+        // A small chat model sometimes plans a brand-new picture when the user meant to change the chosen one.
+        if (plan.action == "image" && app.selectedImage != null) card.addView(ui.textButton("Edit the chosen picture instead", R.drawable.ic_edit) {
+            cardModels.remove(e.id); cardPrompts.remove(e.id); ownWords(e, "edit")
+        }, LinearLayout.LayoutParams(-2, -2))
         ui.gap(card, 6)
         val field = ui.field(card, if (plan.action == "edit") "Instruction" else "Prompt the model receives", cardPrompts[e.id] ?: plan.prompt, multiline = true)
         field.maxLines = 8
@@ -892,7 +896,7 @@ class MainActivity : AppCompatActivity() {
     private fun editImage(e: Entry, file: File) {
         if (!file.exists()) { showError("The private media file is missing."); return }
         val content = ui.column(20)
-        val instruction = ui.field(content, "What should change?", "", multiline = true, helper = "For example: change the orange border to black.")
+        val instruction = ui.field(content, "What should change?", "", multiline = true, helper = "For example: change her jacket to a red sweater. Keep her face the same.")
         val models = ModelCatalog.edits
         var chosen = models.firstOrNull { it.model == app.settings.editModel } ?: ModelCatalog.defaultEdit
         val cost = ui.text("", Ui.Type.SMALL, ui.muted)

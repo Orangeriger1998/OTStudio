@@ -40,7 +40,7 @@ The chat can look up current facts before it answers. Without a key it searches 
 
 # Edit an image
 
-Tap Edit on a finished image and write what should change, such as "change the orange border to black." The edit keeps the rest of the picture. Each edit is one request to Replicate and costs about 1 to 4 cents, depending on the model. The edited image appears as a new card. For a face that must stay the same, edit the original image again rather than an edit of an edit.
+Tap Edit on a finished image and write what should change and what must stay, such as "change her jacket to a red sweater. Keep her face the same." The edit keeps the rest of the picture. An edit that comes back unchanged usually means the editing model declined the request. Each edit is one request to Replicate and costs about 1 to 4 cents, depending on the model. The edited image appears as a new card. For a face that must stay the same, edit the original image again rather than an edit of an edit.
 
 # Get your keys
 

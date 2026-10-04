@@ -59,9 +59,13 @@ class PlannerTest {
         assertTrue(Planner.responseFormat(refs).indexOf("\"action\"") < Planner.responseFormat(refs).indexOf("\"seconds\""))
         val format = JSONObject(Planner.responseFormat(refs))
         assertEquals("json_schema", format.getString("type")); assertTrue(format.getJSONObject("json_schema").getBoolean("strict"))
-        val prompt = Planner.systemPrompt("MEMORY LINE", refs, 14)
-        assertTrue(prompt.startsWith("MEMORY LINE")); assertTrue(prompt.contains("image_17: a green window")); assertTrue(prompt.contains("The user selected image_14"))
-        assertTrue(Planner.systemPrompt("", emptyList(), null).contains("No pictures exist yet"))
+        assertTrue(Planner.systemPrompt("MEMORY LINE").startsWith("MEMORY LINE"))
+        // The picture list rides with the message, so the fixed instructions stay the same and the engine can reuse its work.
+        assertFalse(Planner.systemPrompt("M").contains("image_"))
+        val message = Planner.userMessage("make it red", refs, 14)
+        assertTrue(message.contains("image_17: a green window")); assertTrue(message.contains("The user selected image_14"))
+        assertTrue(message.endsWith("The user's message:\nmake it red"))
+        assertTrue(Planner.userMessage("hi", emptyList(), null).contains("No pictures exist yet"))
     }
 
     @Test fun theReplyStreamsOutOfPartialJson() {
