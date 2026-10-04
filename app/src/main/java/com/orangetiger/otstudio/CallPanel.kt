@@ -143,7 +143,7 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
                 }
             }
             content.addView(ui.text("Inputs", Ui.Type.SUBTITLE).apply { setPadding(dp(4), dp(4), 0, 0) })
-            content.addView(ui.text("Check an input to override its provider default. Unchecked inputs are omitted.", Ui.Type.SMALL, ui.muted).apply { setPadding(dp(4), 0, 0, dp(8)) })
+            content.addView(ui.text("Each setting starts at the model's default. Change only what you need; Use default puts a setting back.", Ui.Type.SMALL, ui.muted).apply { setPadding(dp(4), 0, 0, dp(8)) })
             schema.fields.forEach { definition -> option(content, definition) }
             if (schema.unsupported.isNotEmpty()) content.addView(ui.text("Inputs needing another editor: ${schema.unsupported.joinToString()}. Required unsupported inputs block generation.", Ui.Type.SMALL, ui.muted))
             if (mode == Mode.VIDEO && schema.fields.none { it.name in listOf("frames_per_second", "frame_per_second", "fps") }) content.addView(ui.text("This model does not expose frame-rate control. Use the Frame rate filter to find one that does.", Ui.Type.SMALL, ui.muted))
@@ -208,34 +208,51 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
 
     private fun photoField(d: InputDefinition) = d.uri && (d.name.contains("image") || d.name.contains("frame"))
 
+    /**
+     * One control per setting. It shows what will be sent: the model's default until the user changes it.
+     * A changed setting is sent; Use default removes it again. Required settings are always sent.
+     */
     private fun option(parent: LinearLayout, d: InputDefinition) {
         val stored = draft.options.firstOrNull { it.name == d.name }
         val card = ui.card(parent, padding = 12, bottom = 8)
-        val override = ui.checkbox(d.name + if (d.required) " (required)" else "", stored != null, "Override ${d.name}").apply { isEnabled = !waiting }
-        card.addView(override)
-        val raw = stored?.value ?: d.defaultValue ?: d.choices.firstOrNull() ?: if (d.kind == InputKind.BOOLEAN) "false" else ""
-        val bounds = if (d.minimum != null || d.maximum != null) " Range: ${d.minimum ?: "unbounded"} to ${d.maximum ?: "unbounded"}." else ""
-        val help = "Provider default: ${d.defaultValue?.ifEmpty { "empty" } ?: "not set"}.$bounds ${d.description}".trim()
-        lateinit var control: View
-        val readValue: () -> String = if (d.choices.isNotEmpty()) {
-            val box: MaterialAutoCompleteTextView = ui.dropdown(card, "Value for ${d.name}", d.choices, raw); control = box;
-            { box.text.toString() }
+        val head = ui.row()
+        head.addView(ui.text(InputLabels.title(d.name) + if (d.required) " (required)" else "", Ui.Type.SUBTITLE), ui.weight())
+        if (stored != null && !d.required) head.addView(ui.textButton("Use default") {
+            safely { remember(); draft = draft.copy(options = draft.options.filter { it.name != d.name }); render() }
+        }.apply { isEnabled = !waiting; contentDescription = "Use the model's default for ${InputLabels.title(d.name)}" })
+        card.addView(head)
+        card.addView(ui.text(d.name, Ui.Type.CAPTION, ui.muted))
+        val bounds = if (d.minimum != null || d.maximum != null) "From ${d.minimum ?: "any"} to ${d.maximum ?: "any"}. " else ""
+        val inverted = InputLabels.invertedSafety(d)
+        val help = if (inverted) "Off lets the model make anything Replicate's usage policy allows. Model default: ${if (d.defaultValue == "true") "off" else "on"}."
+            else (bounds + d.description).trim()
+        val readValue: () -> InputValue?
+        if (d.choices.isNotEmpty()) {
+            val default = InputLabels.defaultChoice(d)
+            val items = (if (d.required) emptyList() else listOf(default)) + d.choices
+            val box: MaterialAutoCompleteTextView = ui.dropdown(card, "Choose", items, stored?.value ?: if (d.required) (d.defaultValue ?: d.choices.first()) else default)
+            box.isEnabled = !waiting
+            readValue = { box.text.toString().takeIf { it != default }?.let { ModelOptions.value(d, it) } }
         } else if (d.kind == InputKind.BOOLEAN) {
-            val check: CheckBox = ui.checkbox("On (true)", raw == "true", "${d.name} value"); card.addView(check); control = check;
-            { check.isChecked.toString() }
+            // The switch shows the effective state. For the safety setting it shows the checker itself, so On means on.
+            val sent = (stored?.value ?: d.defaultValue ?: "false") == "true"
+            var changed = stored != null
+            val toggle = ui.switch(if (inverted) "Safety checker on" else "On", if (inverted) !sent else sent).apply { isEnabled = !waiting }
+            toggle.setOnCheckedChangeListener { _, _ -> changed = true }
+            card.addView(toggle)
+            readValue = { if (changed || d.required) ModelOptions.value(d, (if (inverted) !toggle.isChecked else toggle.isChecked).toString()) else null }
         } else {
-            val edit = ui.field(card, "Value for ${d.name}", raw, multiline = d.kind == InputKind.TEXT, numeric = d.kind != InputKind.TEXT, decimal = d.kind == InputKind.NUMBER)
-            control = edit;
-            { edit.text.toString().let { if (d.kind == InputKind.NUMBER) it.replace(',', '.') else it } }
+            val hint = d.defaultValue?.takeIf { it.isNotEmpty() }?.let { "Empty uses the model default: $it" } ?: "Empty leaves it to the model"
+            val edit = ui.field(card, if (d.required) "Value" else "Value (optional)", stored?.value.orEmpty(), multiline = d.kind == InputKind.TEXT,
+                helper = hint, numeric = d.kind != InputKind.TEXT, decimal = d.kind == InputKind.NUMBER)
+            edit.isEnabled = !waiting
+            readValue = { edit.text.toString().let { if (d.kind == InputKind.NUMBER) it.replace(',', '.') else it }.trim().takeIf { it.isNotEmpty() }?.let { ModelOptions.value(d, it) } }
         }
-        fun enable() { control.isEnabled = override.isChecked && !waiting; ui.layoutOf(control)?.isEnabled = control.isEnabled }
-        enable()
-        override.setOnCheckedChangeListener { _, _ -> enable() }
-        card.addView(ui.text(help, Ui.Type.SMALL, ui.muted))
+        if (help.isNotEmpty()) card.addView(ui.text(help, Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(4), 0, 0) })
         if (photoField(d)) card.addView(ui.tonal("Choose photo", R.drawable.ic_add_photo_alternate) { choosePhoto(d) }.apply {
             isEnabled = !waiting; contentDescription = "Choose a photo for ${d.name}"; layoutParams = LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) }
         })
-        readers.add { if (override.isChecked) ModelOptions.value(d, readValue()) else null }
+        readers.add(readValue)
     }
 
     /** Picks a photo, uploads it to Replicate, and fills this input with the returned file URL. */

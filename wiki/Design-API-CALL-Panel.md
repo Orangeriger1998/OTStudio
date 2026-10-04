@@ -48,13 +48,16 @@ This card appears only for `black-forest-labs/flux-dev-lora`.
 
 ## Input cards
 
-Each input of the model gets its own card, in the provider's order.
+Each input of the model gets its own card, in the provider's order. Every card has one control, which shows what will be sent. An input starts at the model's default and is sent only after the user changes it. People who find ComfyUI and similar tools hard to read are the reason for this layout.
 
 | Box | What it holds | Why |
 |---|---|---|
-| Override checkbox | The input's exact provider name, marked "(required)" when needed | A checked input is sent. An unchecked input is left out, so the provider's own default applies. Leaving inputs out avoids guessing at values the provider already chooses well. |
-| Value | A dropdown for fixed choices, an On checkbox for yes or no, or a text field for numbers and text | Each input gets the control that cannot hold an invalid value. Numbers use the number keyboard. A comma typed as a decimal point is accepted. |
-| Helper line | "Provider default: ..." with the allowed range and the provider's description | Shows what happens if the box stays unchecked |
+| Title | A plain name, such as "Safety checker", "Shape", or "Number of pictures", marked "(required)" when needed | The provider's own names, such as `disable_safety_checker`, read like code |
+| Provider name | The input's exact name, in small gray type under the title | Matches the provider's documentation and the summary line on cards |
+| Value | A list for fixed choices, a switch for yes or no, or a text field for numbers and text | One control per input. A list starts with "Model default", and an empty field means the model's default. Numbers use the number keyboard, and a comma typed as a decimal point is accepted. |
+| Safety checker switch | "Safety checker on", on or off | It shows the checker itself, so on means on. The app sends the provider's reversed setting (`disable_safety_checker`) for you. |
+| Use default | A link on a card the user has changed | Puts that input back to the model's default, so it is no longer sent |
+| Helper line | The allowed range and the provider's description | Tells what the input does |
 | Choose photo | A button on image and frame inputs, such as `image`, `first_frame`, and `last_frame` | Opens the phone's photo picker, uploads the photo to the user's Replicate account, and fills the input. Without it, the user would need a public web address for the photo. |
 
 Below the cards, a note lists any inputs the panel cannot edit, such as nested settings. A required input of that kind blocks the model, because the request would fail. Video models without a frame rate input show a note that points to the Frame rate filter.
@@ -65,7 +68,7 @@ Below the cards, a note lists any inputs the panel cannot edit, such as nested s
 |---|---|---|
 | Refresh model inputs | Reads the model's current inputs from Replicate (Image and Video) | Providers change their models. Refreshing keeps the input cards true to the live model. It is free and runs no generation. |
 | Suggest setup with text LLM | Sends the prompt and the matching models' inputs to the chat model, then shows its suggestion for review | Helps choose a model and values for a prompt. The suggestion fills the panel only after the user taps Use in panel, and nothing generates until the user taps send. It costs one small chat request. |
-| Reset this model's overrides | Restores the starting inputs for this model | Undoes experiments without hunting through every card |
+| Reset this model's overrides | Puts every input of this model back to its starting value | Undoes experiments without hunting through every card |
 
 ## Bottom bar
 

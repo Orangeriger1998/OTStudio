@@ -385,4 +385,23 @@ class AndroidFlowTest {
             assertTrue(tab, views(activity.window.decorView).any { it.contentDescription?.toString() == "Add a photo from this phone" })
         }
     }
+
+    @Test fun theSafetyCheckerIsOneSwitchThatReadsTheRightWayRound() {
+        val app = RuntimeEnvironment.getApplication() as StudioApp
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        click(activity, "Image"); shadowOf(Looper.getMainLooper()).idle()
+        click(activity, "API CALL"); shadowOf(Looper.getMainLooper()).idle()
+        val panel: Dialog = ShadowDialog.getLatestDialog()
+        val all = views(panel.window!!.decorView)
+        assertTrue(all.filterIsInstance<TextView>().any { it.text.toString() == "Safety checker" })
+        assertFalse(all.filterIsInstance<CheckBox>().any { it.contentDescription?.toString()?.startsWith("Override") == true })
+        val toggle = all.filterIsInstance<com.google.android.material.materialswitch.MaterialSwitch>().first { it.text.toString() == "Safety checker on" }
+        // The model's default keeps the checker on, and nothing is sent until the user changes it.
+        assertTrue(toggle.isChecked)
+        toggle.performClick()
+        assertFalse(toggle.isChecked)
+        all.filterIsInstance<Button>().first { it.text.toString() == "Apply" }.performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("true", app.settings.get(Mode.IMAGE).options.firstOrNull { it.name == "disable_safety_checker" }?.value)
+    }
 }

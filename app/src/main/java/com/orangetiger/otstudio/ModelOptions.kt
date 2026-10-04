@@ -284,6 +284,29 @@ object ModelCatalog {
     )))
 }
 
+/** Plain names for model inputs, so the API CALL panel reads like a form instead of an API. The real name shows small below. */
+object InputLabels {
+    private val names = mapOf(
+        "disable_safety_checker" to "Safety checker", "aspect_ratio" to "Shape", "num_outputs" to "Number of pictures",
+        "go_fast" to "Fast mode", "seed" to "Seed", "megapixels" to "Size in megapixels", "output_format" to "File type",
+        "output_quality" to "File quality", "num_inference_steps" to "Steps", "guidance" to "Prompt strength",
+        "guidance_scale" to "Prompt strength", "prompt_strength" to "How far from your picture", "lora_scale" to "LoRA strength",
+        "lora_weights" to "LoRA", "duration" to "Length in seconds", "resolution" to "Resolution", "negative_prompt" to "Avoid",
+        "image" to "Picture", "input_image" to "Picture", "image_input" to "Pictures", "input_images" to "Pictures", "images" to "Pictures",
+        "first_frame" to "Starting picture", "last_frame" to "Ending picture", "first_clip" to "Clip to continue",
+        "frames_per_second" to "Frames per second", "fps" to "Frames per second", "num_frames" to "Number of frames",
+        "safety_tolerance" to "Safety tolerance", "size" to "Size", "width" to "Width", "height" to "Height"
+    )
+
+    fun title(name: String): String = names[name] ?: name.replace('_', ' ').trim().replaceFirstChar { it.uppercase() }
+
+    /** True for the switch that reads the other way round: on means the checker is off. */
+    fun invertedSafety(d: InputDefinition) = d.name == "disable_safety_checker" && d.kind == InputKind.BOOLEAN
+
+    /** "Model default (1:1)" for the first entry of a choice list. */
+    fun defaultChoice(d: InputDefinition) = "Model default" + (d.defaultValue?.takeIf { it.isNotEmpty() }?.let { " ($it)" } ?: "")
+}
+
 /** The shapes Expand offers, with plain names. The first is the usual choice. */
 val EXPAND_RATIOS = listOf("16:9" to "Wide", "9:16" to "Tall", "1:1" to "Square", "3:2" to "Landscape", "2:3" to "Portrait",
     "4:3" to "Landscape", "3:4" to "Portrait", "5:4" to "Landscape", "4:5" to "Portrait")

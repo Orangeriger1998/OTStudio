@@ -61,7 +61,7 @@ WAN 2.7 exposes no FPS or disable_safety_checker input in the schemas checked. I
 
 API CALL filters by required features and resolution. **Refresh model inputs** performs a metadata GET to `/models/{owner}/{model}` and parses latest_version.openapi_schema. It makes no generation request. Primitive typed fields, enums, and simple schema references are supported. Unsupported required structures block calls.
 
-Each override checkbox controls whether a field is sent. Unchecked fields are omitted; explicit false is retained. Profiles are saved per mode, origin, and model. Suggestions call the configured text LLM with the prompt and matching catalog, validate model IDs/types/choices/bounds, and require review. Required media inputs still need to be filled before Generate. Text responses do not automatically invoke media generation.
+Each input card has one control. An input stays at the provider default, and is omitted, until the user changes it; Use default omits it again. An explicit false is retained. The safety switch shows the checker itself and sends the inverse as disable_safety_checker. Profiles are saved per mode, origin, and model. Suggestions call the configured text LLM with the prompt and matching catalog, validate model IDs/types/choices/bounds, and require review. Required media inputs still need to be filled before Generate. Text responses do not automatically invoke media generation.
 
 Creation uses POST `/models/{owner}/{model}/predictions` with only prompt and selected supported inputs. A provider needing a different protocol or community version-hash prediction route needs an adapter change. LoRA references can contain versions because they are inputs to the supported FLUX dev LoRA endpoint.
 

@@ -139,6 +139,9 @@ class Ui(private val context: Context) {
         return group
     }
 
+    fun switch(label: String, checked: Boolean) = com.google.android.material.materialswitch.MaterialSwitch(context).apply {
+        text = label; isChecked = checked; setTextColor(onSurface)
+    }
     fun checkbox(label: String, checked: Boolean, description: String? = null) = MaterialCheckBox(context).apply {
         text = label; isChecked = checked; description?.let { contentDescription = it }
     }

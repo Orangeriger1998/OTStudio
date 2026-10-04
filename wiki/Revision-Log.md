@@ -10,6 +10,10 @@ This log lists the main changes from one version to the next. It records what a 
 
 **Any photo format.** The trainer now accepts JPG, PNG, WebP, HEIC, and most other photo files, and converts them itself, so a photo saved under the wrong file type no longer stops it. Photos it cannot use are left out and named with the reason, and the accepted formats show under Choose photos. Choosing again adds photos, and Clear starts over.
 
+## 1.2.5 (October 2026)
+
+**Simpler API CALL.** Every input now has one control and a plain title, such as "Safety checker" or "Shape", with the provider's name in small type below. Inputs start at the model's default; change one, and Use default puts it back. The safety setting is one switch, Safety checker on or off, instead of two checkboxes with a double negative.
+
 ## 1.2.4 (October 2026)
 
 **LoRAs in one tap.** Each saved LoRA, and every new import, offers Use for pictures. It switches Image to FLUX dev LoRA with that LoRA and the safety checker off, and starts the prompt with the trigger word. A prompt in Image that names a saved trigger word on another model offers Switch and generate. In Chat, naming a LoRA's trigger word or name plans the picture on FLUX dev LoRA with it.
