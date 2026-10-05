@@ -238,12 +238,14 @@ class MainActivity : AppCompatActivity() {
         else setupRow.addView(ui.tonal("API CALL", R.drawable.ic_tune) { openCallPanel() }.apply { contentDescription = "API CALL: choose models and generation inputs" })
         setup.addView(setupRow)
         // A saved picture shapes every request on this model, so it is shown here with a way to remove it.
-        if (mode != Mode.CHAT) app.attachedPictures(mode).takeIf { it.isNotEmpty() }?.let { names ->
-            val row = ui.row().apply { setPadding(0, dp(8), 0, 0) }
-            row.addView(ui.text("${names.joinToString(" and ") { InputLabels.title(it) }} attached. Every request starts from it.", Ui.Type.SMALL, ui.orange), ui.weight())
-            row.addView(ui.textButton("Remove picture") {
-                try { app.removePictures(mode); showChat(); snack("Picture removed. New requests start from your words alone.") } catch (e: UserError) { showError(e.message.orEmpty()) }
-            }.apply { contentDescription = "Remove the attached picture" })
+        // One line per picture, each with its own Remove, so one can go and the other stay.
+        if (mode != Mode.CHAT) app.attachedPictures(mode).forEach { name ->
+            val label = InputLabels.title(name, mode)
+            val row = ui.row().apply { setPadding(0, dp(6), 0, 0) }
+            row.addView(ui.text("$label attached. Every request uses it.", Ui.Type.SMALL, ui.orange), ui.weight())
+            row.addView(ui.textButton("Remove") {
+                try { app.removePictures(mode, listOf(name)); showChat(); snack("$label removed.") } catch (e: UserError) { showError(e.message.orEmpty()) }
+            }.apply { contentDescription = "Remove the ${label.lowercase()}" })
             setup.addView(row)
         }
         statusArea = ui.column()

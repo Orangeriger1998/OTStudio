@@ -236,10 +236,10 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
         val stored = draft.options.firstOrNull { it.name == d.name }
         val card = ui.card(parent, padding = 12, bottom = 8)
         val head = ui.row()
-        head.addView(ui.text(InputLabels.title(d.name) + if (d.required) " (required)" else "", Ui.Type.SUBTITLE), ui.weight())
+        head.addView(ui.text(InputLabels.title(d.name, mode) + if (d.required) " (required)" else "", Ui.Type.SUBTITLE), ui.weight())
         if (stored != null && !d.required && !(photoField(d) && !allSettings)) head.addView(ui.textButton("Use default") {
             safely { remember(); draft = draft.copy(options = draft.options.filter { it.name != d.name }); render() }
-        }.apply { isEnabled = !waiting; contentDescription = "Use the model's default for ${InputLabels.title(d.name)}" })
+        }.apply { isEnabled = !waiting; contentDescription = "Use the model's default for ${InputLabels.title(d.name, mode)}" })
         card.addView(head)
         card.addView(ui.text(d.name, Ui.Type.CAPTION, ui.muted))
         val bounds = if (d.minimum != null || d.maximum != null) "From ${d.minimum ?: "any"} to ${d.maximum ?: "any"}. " else ""

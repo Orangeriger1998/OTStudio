@@ -448,10 +448,10 @@ class AndroidFlowTest {
         app.settings.save(dev.copy(options = dev.options + InputValue("image", InputKind.TEXT, "https://api.replicate.com/v1/files/abc")), null)
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         click(activity, "Image"); shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(views(activity.window.decorView).filterIsInstance<TextView>().any { it.text.toString() == "Picture attached. Every request starts from it." })
-        click(activity, "Remove picture"); shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(views(activity.window.decorView).filterIsInstance<TextView>().any { it.text.toString() == "Picture attached. Every request uses it." })
+        click(activity, "Remove"); shadowOf(Looper.getMainLooper()).idle()
         assertTrue(app.attachedPictures(Mode.IMAGE).isEmpty())
-        assertFalse(views(activity.window.decorView).filterIsInstance<Button>().any { it.text.toString() == "Remove picture" })
+        assertFalse(views(activity.window.decorView).filterIsInstance<Button>().any { it.text.toString() == "Remove" })
     }
 
     @Test fun imageHistoryCanBeClearedOneCardOrAll() {
@@ -469,5 +469,28 @@ class AndroidFlowTest {
         assertTrue(app.history.list(Mode.IMAGE).isEmpty())
         // Clearing images leaves videos alone.
         assertEquals(1, app.history.list(Mode.VIDEO).size)
+    }
+
+    @Test fun clearingAPictureFieldInAllSettingsRemovesIt() {
+        val app = RuntimeEnvironment.getApplication() as StudioApp
+        val wan = app.settings.forModel(app.settings.get(Mode.VIDEO), "wan-video/wan-2.2-i2v-fast")
+        app.settings.save(wan.copy(options = wan.options.filter { it.name !in listOf("image", "last_image") } + InputValue("image", InputKind.TEXT, "https://api.replicate.com/v1/files/first") + InputValue("last_image", InputKind.TEXT, "https://api.replicate.com/v1/files/last")), null)
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        click(activity, "Video"); shadowOf(Looper.getMainLooper()).idle()
+        click(activity, "API CALL"); shadowOf(Looper.getMainLooper()).idle()
+        val panel: Dialog = ShadowDialog.getLatestDialog()
+        views(panel.window!!.decorView).filterIsInstance<Button>().first { it.text.toString().startsWith("Show all settings") }.performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        val field = views(panel.window!!.decorView).filterIsInstance<EditText>().first { it.text.toString() == "https://api.replicate.com/v1/files/last" }
+        field.setText("")
+        views(panel.window!!.decorView).filterIsInstance<Button>().first { it.text.toString() == "Apply" }.performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        val saved = app.settings.get(Mode.VIDEO).options.map { it.name }
+        assertFalse(saved.toString(), "last_image" in saved); assertTrue("image" in saved)
+        // On the main screen, the starting picture has its own Remove.
+        app.settings.save(app.settings.get(Mode.VIDEO).let { it.copy(options = it.options + InputValue("last_image", InputKind.TEXT, "https://api.replicate.com/v1/files/last")) }, null)
+        app.removePictures(Mode.VIDEO, listOf("last_image"))
+        assertEquals(listOf("image"), app.attachedPictures(Mode.VIDEO))
+        assertEquals("Starting picture", InputLabels.title("image", Mode.VIDEO)); assertEquals("Ending picture", InputLabels.title("last_image", Mode.VIDEO))
     }
 }

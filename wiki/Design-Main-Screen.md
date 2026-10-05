@@ -100,7 +100,7 @@ When Show the model's thinking is on, a model that thinks first shows that think
 
 A new mode shows the tiger with a short headline. One line of guidance sits below it. Image and Video add a reminder that each Generate is a paid request. When no keys are saved yet, a "How to get started" button opens the Help screen. The empty state turns a blank screen into a first step.
 
-A line under the setup card appears in Image and Video when the model has a picture attached, such as "Picture attached. Every request starts from it.", with a **Remove picture** button. An attached reference or frame changes every result, so it stays visible.
+Under the setup card, Image and Video show one line for each picture attached to the model, such as "Starting picture attached. Every request uses it." or "Ending picture attached. Every request uses it.", each with its own **Remove** button. An attached reference or frame changes every result, so it stays visible.
 
 ## Message bar
 

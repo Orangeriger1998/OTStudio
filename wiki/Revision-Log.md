@@ -10,6 +10,10 @@ This log lists the main changes from one version to the next. It records what a 
 
 **Any photo format.** The trainer now accepts JPG, PNG, WebP, HEIC, and most other photo files, and converts them itself, so a photo saved under the wrong file type no longer stops it. Photos it cannot use are left out and named with the reason, and the accepted formats show under Choose photos. Choosing again adds photos, and Clear starts over.
 
+## 1.3.1 (October 2026)
+
+**Remove one picture at a time.** Each attached picture has its own line and Remove button on the Image and Video screens, so the ending picture can go while the starting picture stays. Pictures are named plainly: Starting picture and Ending picture.
+
 ## 1.3.0 (October 2026)
 
 **Make it longer.** A finished video has Make it longer: say what happens next, and the app makes about 5 more seconds that start from the video's last frame, then joins the parts into one video on the phone. Repeat it for 15, 20, or more seconds. With WAN 2.2 fast each part costs about 5 to 11 cents.

@@ -293,12 +293,16 @@ object InputLabels {
         "guidance_scale" to "Prompt strength", "prompt_strength" to "How far from your picture", "lora_scale" to "LoRA strength",
         "lora_weights" to "LoRA", "duration" to "Length in seconds", "resolution" to "Resolution", "negative_prompt" to "Avoid",
         "image" to "Picture", "input_image" to "Picture", "image_input" to "Pictures", "input_images" to "Pictures", "images" to "Pictures",
-        "first_frame" to "Starting picture", "last_frame" to "Ending picture", "first_clip" to "Clip to continue",
+        "first_frame" to "Starting picture", "last_frame" to "Ending picture", "last_image" to "Ending picture", "end_image" to "Ending picture",
+        "start_image" to "Starting picture", "first_frame_image" to "Starting picture", "first_clip" to "Clip to continue",
         "frames_per_second" to "Frames per second", "fps" to "Frames per second", "num_frames" to "Length in frames (81 is 5 s, 121 is 7.5 s)",
         "safety_tolerance" to "Safety tolerance", "size" to "Size", "width" to "Width", "height" to "Height"
     )
 
     fun title(name: String): String = names[name] ?: name.replace('_', ' ').trim().replaceFirstChar { it.uppercase() }
+
+    /** A video model's plain "image" input is its starting picture. */
+    fun title(name: String, mode: Mode): String = if (mode == Mode.VIDEO && name == "image") "Starting picture" else title(name)
 
     /** True for the switch that reads the other way round: on means the checker is off. */
     fun invertedSafety(d: InputDefinition) = d.name == "disable_safety_checker" && d.kind == InputKind.BOOLEAN

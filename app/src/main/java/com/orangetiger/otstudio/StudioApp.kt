@@ -627,10 +627,10 @@ class StudioApp : Application() {
         return s.options.filter { it.name in pictures && it.value.isNotBlank() }.map { it.name }
     }
 
-    /** Removes every saved picture input from [mode]'s model. */
-    fun removePictures(mode: Mode) {
+    /** Removes saved picture inputs from [mode]'s model: [only] these, or every one. */
+    fun removePictures(mode: Mode, only: List<String>? = null) {
         val s = settings.get(mode)
-        val names = attachedPictures(mode).toSet()
+        val names = attachedPictures(mode).filter { only == null || it in only }.toSet()
         if (names.isEmpty()) return
         settings.save(s.copy(options = s.options.filter { it.name !in names }), null)
         changed()
