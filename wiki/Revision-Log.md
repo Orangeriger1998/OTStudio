@@ -10,6 +10,10 @@ This log lists the main changes from one version to the next. It records what a 
 
 **Any photo format.** The trainer now accepts JPG, PNG, WebP, HEIC, and most other photo files, and converts them itself, so a photo saved under the wrong file type no longer stops it. Photos it cannot use are left out and named with the reason, and the accepted formats show under Choose photos. Choosing again adds photos, and Clear starts over.
 
+## 1.5.1 (October 2026)
+
+**Open folder.** After Save, the message offers Open folder beside Change, and the Save folder card in Settings has Open folder too. Android opens the folder in the phone's file manager, such as Files.
+
 ## 1.5.0 (October 2026)
 
 **Repeat.** Every picture and video card has Repeat. It brings back the same model and settings, including the starting and ending pictures, and puts the words in the message box to change before sending again. For an edit, an expansion, or a longer video, it opens that dialog again, filled in.

@@ -746,7 +746,10 @@ class MainActivity : AppCompatActivity() {
         val downloads = ui.card(content)
         ui.sectionTitle(downloads, "Save folder", "Save puts images and videos here. Android remembers the folder, so you don't have to browse from the top each time.")
         downloads.addView(ui.text(savedTree()?.let(::folderName) ?: "Not chosen yet. You'll pick one the first time you tap Save.", Ui.Type.BODY))
-        downloads.addView(ui.outlined("Choose folder", R.drawable.ic_folder_open) { pickFolder { uri -> if (uri != null) { rememberTree(uri); showSettings(selected) } } }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
+        downloads.addView(actionRow(
+            ui.outlined("Choose folder", R.drawable.ic_folder_open) { pickFolder { uri -> if (uri != null) { rememberTree(uri); showSettings(selected) } } },
+            savedTree()?.let { tree -> ui.textButton("Open folder", R.drawable.ic_open_in_new) { openFolder(tree) } }
+        ).also { (it.layoutParams as? LinearLayout.LayoutParams)?.topMargin = dp(8) })
         val about = ui.card(content)
         val header = ui.row()
         header.addView(ui.avatar(56))
@@ -1186,6 +1189,30 @@ class MainActivity : AppCompatActivity() {
     }
     private fun folderName(tree: Uri): String = try { DocumentsContract.getTreeDocumentId(tree).substringAfter(':').ifBlank { "Device storage" } } catch (_: Exception) { "Chosen folder" }
 
+    /** "Saved to <folder>" with two actions: Open folder and Change. */
+    private fun savedSnack(tree: Uri) {
+        if (isFinishing || isDestroyed) return
+        val bar = Snackbar.make(screen, "Saved to ${folderName(tree)}", Snackbar.LENGTH_LONG).setAction("Change") { pickFolder { uri -> if (uri != null) { rememberTree(uri); snack("New save folder: ${folderName(uri)}") } } }
+        // A Snackbar holds one action; the second one is added beside it.
+        ((bar.view as? ViewGroup)?.getChildAt(0) as? ViewGroup)?.let { row ->
+            row.addView(ui.textButton("Open folder") { bar.dismiss(); openFolder(tree) }, row.childCount - 1)
+        }
+        bar.show()
+    }
+
+    /** Opens the save folder in the phone's file manager. Android decides which app shows it. */
+    private fun openFolder(tree: Uri) {
+        val folder = try { DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree)) } catch (_: Exception) { null }
+        val tries = listOfNotNull(
+            folder?.let { Intent(Intent.ACTION_VIEW).setDataAndType(it, DocumentsContract.Document.MIME_TYPE_DIR) },
+            folder?.let { Intent(Intent.ACTION_VIEW).setData(it) }
+        ).map { it.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK) }
+        for (intent in tries) {
+            try { startActivity(intent); return } catch (_: android.content.ActivityNotFoundException) { } catch (_: SecurityException) { }
+        }
+        showError("No app on this phone can open folders directly. Open the Files app and go to ${folderName(tree)}.")
+    }
+
     private fun saveMedia(e: Entry) {
         val file = localMedia(e)
         if (!file.exists()) { showError("The private media file is missing."); return }
@@ -1196,7 +1223,7 @@ class MainActivity : AppCompatActivity() {
                 val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
                 created = DocumentsContract.createDocument(contentResolver, parent, mimeOf(file), "OTStudio-${e.id}-${file.name}") ?: throw UserError("Android could not create the saved file.")
                 contentResolver.openOutputStream(created)?.use { output -> file.inputStream().use { it.copyTo(output) } } ?: throw UserError("Android could not write the saved file.")
-                runOnUiThread { snack("Saved to ${folderName(tree)}", "Change") { pickFolder { uri -> if (uri != null) { rememberTree(uri); snack("New save folder: ${folderName(uri)}") } } } }
+                runOnUiThread { savedSnack(tree) }
             } catch (ex: Exception) {
                 created?.let { try { DocumentsContract.deleteDocument(contentResolver, it) } catch (_: Exception) { } }
                 runOnUiThread {

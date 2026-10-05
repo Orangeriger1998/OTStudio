@@ -112,6 +112,8 @@ The Image and Video pages each show how many cards their list holds, with **Clea
 | Current folder | The folder name, or "Not chosen yet" | Shows where Save puts files |
 | Choose folder | Opens Android's folder picker at the current folder | Changes the folder without starting from the top of storage. Android remembers the permission, so the folder works after a restart. |
 
+**Open folder** opens the save folder in the phone's file manager. Android lets the user pick which file manager when more than one is installed. The message after each Save offers Open folder and Change as well.
+
 ## About card
 
 | Box | What it holds | Why |
