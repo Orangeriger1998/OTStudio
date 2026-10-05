@@ -188,4 +188,21 @@ class ModelOptionsTest {
         assertEquals("image", MediaRole.START_FRAME.apply(fast, url) { catalog(Mode.VIDEO, it) }.options.single().name)
         assertEquals("last_image", MediaRole.END_FRAME.apply(fast, url) { catalog(Mode.VIDEO, it) }.options.single().name)
     }
+
+    @Test fun aListInputCarriesSeveralPicturesUpToTheModelsLimit() {
+        val seedream = ModelCatalog.find(Mode.IMAGE, "bytedance/seedream-4.5")!!.schema
+        val three = PictureList.join(listOf("https://api.replicate.com/v1/files/a", "https://api.replicate.com/v1/files/b", "https://api.replicate.com/v1/files/c"))
+        ModelOptions.validateForModel("bytedance/seedream-4.5", seedream, listOf(InputValue("image_input", InputKind.TEXT, three)))
+        val body = org.json.JSONObject()
+        SchemaCodec.append(body, seedream, listOf(InputValue("image_input", InputKind.TEXT, three)))
+        assertEquals(3, body.getJSONArray("image_input").length()); assertEquals("https://api.replicate.com/v1/files/b", body.getJSONArray("image_input").getString(1))
+        val fifteen = PictureList.join((1..15).map { "https://api.replicate.com/v1/files/x$it" })
+        assertThrows(UserError::class.java) { ModelOptions.validateForModel("bytedance/seedream-4.5", seedream, listOf(InputValue("image_input", InputKind.TEXT, fifteen))) }
+        // A single picture input refuses a second link.
+        val kontext = ModelCatalog.find(Mode.IMAGE, "black-forest-labs/flux-kontext-dev")!!.schema
+        assertThrows(UserError::class.java) { ModelOptions.validate(kontext, listOf(InputValue("input_image", InputKind.TEXT, three))) }
+        assertEquals("image_input=3 pictures", ModelOptions.summary("bytedance/seedream-4.5", listOf(InputValue("image_input", InputKind.TEXT, three))))
+        assertEquals(listOf("https://api.replicate.com/v1/files/a", "https://api.replicate.com/v1/files/c"), PictureList.split(PictureList.remove(three, 1)))
+        assertEquals(14, PictureList.max("bytedance/seedream-4.5")); assertEquals(5, PictureList.max("black-forest-labs/flux-2-dev")); assertEquals(3, PictureList.max("qwen/qwen-image-edit-plus"))
+    }
 }

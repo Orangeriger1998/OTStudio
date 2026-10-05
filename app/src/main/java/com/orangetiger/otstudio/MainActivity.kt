@@ -984,16 +984,36 @@ class MainActivity : AppCompatActivity() {
         var chosen = models.firstOrNull { it.model == (model ?: app.settings.editModel) } ?: ModelCatalog.defaultEdit
         val cost = ui.text("", Ui.Type.SMALL, ui.muted)
         fun showCost() { cost.text = "One edit with ${chosen.title} costs ${chosen.price} at Replicate. The edited image appears as a new card. Replicate's usage policy still applies, whatever the safety setting says." }
-        ui.dropdown(content, "Editing model", models.map { it.title }, chosen.title) { title -> chosen = models.first { it.title == title }; showCost() }
+        // Reference photos from the phone, such as an outfit or a place, follow the picture being edited.
+        val references = ArrayList<Uri>()
+        val referenceNote = ui.text("", Ui.Type.SMALL, ui.muted)
+        val referenceButtons = ui.row()
+        lateinit var showReferences: () -> Unit
+        showReferences = {
+            val takes = PictureList.max(chosen.model) - 1
+            val listInput = ModelCatalog.find(Mode.IMAGE, chosen.model)?.schema?.fields?.firstOrNull { it.name == chosen.imageField }?.list == true
+            referenceButtons.removeAllViews()
+            if (!listInput) {
+                referenceNote.text = if (references.isEmpty()) "${chosen.title} edits one picture. Seedream 4.5, Qwen Image Edit Plus, FLUX.2, and P-Image Edit also take reference photos." else "${chosen.title} takes one picture, so the ${references.size} reference photo(s) would be left out. Choose another model, or clear them."
+            } else {
+                referenceNote.text = if (references.isEmpty()) "You can add up to $takes reference photos, such as an outfit or a place. This picture is image 1, and they become image 2, image 3, and so on." else "This picture is image 1; ${references.indices.joinToString(" and ") { "image ${it + 2}" }} ${if (references.size == 1) "comes" else "come"} from your phone. Name them in your words, for example: dress her in the outfit from image 2."
+                if (references.size < takes) referenceButtons.addView(ui.textButton("Add a reference photo", R.drawable.ic_add_photo_alternate) { pickPhoto { uri -> if (uri != null) { references.add(uri); showReferences() } } })
+            }
+            if (references.isNotEmpty()) referenceButtons.addView(ui.textButton("Clear references") { references.clear(); showReferences() })
+        }
+        ui.dropdown(content, "Editing model", models.map { it.title }, chosen.title) { title -> chosen = models.first { it.title == title }; showCost(); showReferences() }
         showCost()
         content.addView(cost)
+        content.addView(referenceNote.apply { setPadding(0, dp(8), 0, 0) })
+        content.addView(referenceButtons)
+        showReferences()
         val dialog = MaterialAlertDialogBuilder(this).setTitle("Edit this image").setView(ScrollView(this).apply { addView(content) })
             .setPositiveButton("Edit", null).setNegativeButton("Cancel", null).create()
         dialog.setOnShowListener { dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val mime = when (file.extension) { "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"; else -> "image/webp" }
             try {
-                if (app.edit(e, instruction.text.toString(), chosen.model, { Triple(file.inputStream().use { readLimited(it) }, mime, file.name) })) {
-                    dialog.dismiss(); snack("Editing with ${chosen.title}. The result appears as a new card."); renderFeed()
+                if (app.edit(e, instruction.text.toString(), chosen.model, { Triple(file.inputStream().use { readLimited(it) }, mime, file.name) }, extras = references.map { uri -> { readPhoto(uri) } })) {
+                    dialog.dismiss(); snack("Editing with ${chosen.title}${if (references.isEmpty()) "" else " and ${references.size} reference photo(s)"}. The result appears as a new card."); renderFeed()
                 } else ui.layoutOf(instruction)?.error = "Wait for the current operation to finish."
             } catch (ex: UserError) { ui.layoutOf(instruction)?.error = ex.message }
         } }

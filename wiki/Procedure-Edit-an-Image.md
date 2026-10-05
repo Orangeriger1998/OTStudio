@@ -17,6 +17,19 @@ This procedure changes one thing in a finished picture, such as a color or an ob
 5. Tap **Edit**. The app uploads the picture to your Replicate account and starts the edit.
 6. The edited picture appears as a new card that begins with **Edit of:** and the original's prompt. Save or share it as usual.
 
+## Use reference photos
+
+Seedream 4.5, Qwen Image Edit Plus and 2511, FLUX.2 dev and klein, and P-Image Edit take more than one picture. The picture being edited is image 1, and reference photos from the phone become image 2, image 3, and so on.
+
+1. Tap **Edit...** on the picture and choose one of those models.
+2. Tap **Add a reference photo** and pick a photo, such as an outfit, a logo, or a place. Repeat for more, up to the model's limit: 14 pictures in all for Seedream 4.5, 5 for FLUX.2, and 3 for the others.
+3. Name the pictures in the instruction, for example: `Dress her in the outfit from image 2. Keep her face and the background the same.`
+4. Tap **Edit**.
+
+Say what to take from each reference photo and what to leave. In a test, `Put the tiger logo from image 2 as a small patch on her denim jacket` also borrowed the tiger's glasses and tie; adding `only the logo, nothing else from image 2` keeps the rest out.
+
+In API CALL, these models show each attached picture as Image 1, Image 2, and so on, with Remove on each and **Add another photo**.
+
 ## Change the shape of a picture
 
 Editing keeps a picture's own shape. To make a picture wider, taller, or square without changing what is in it, expand it instead.

@@ -49,7 +49,7 @@ object SchemaCodec {
             InputKind.BOOLEAN -> v.value.toBooleanStrict()
             InputKind.INTEGER -> v.value.toLong()
             InputKind.NUMBER -> v.value.toDouble()
-            InputKind.TEXT -> if (schema.fields.first { it.name == v.name }.list) JSONArray().put(v.value) else v.value
+            InputKind.TEXT -> if (schema.fields.first { it.name == v.name }.list) JSONArray(PictureList.split(v.value)) else v.value
         }) }
     }
 

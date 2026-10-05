@@ -15,6 +15,24 @@ data class InputSchema(val fields: List<InputDefinition>, val unsupported: List<
 data class ModelPreset(val mode: Mode, val model: String, val schema: InputSchema, val fixedResolution: String? = null)
 data class SetupSuggestion(val model: String, val options: List<InputValue>, val reason: String)
 
+/**
+ * Several pictures in one list input (such as Seedream's image_input), kept as one link per line. The model calls them
+ * image 1, image 2, and so on, in this order; the first is the picture being worked on.
+ */
+object PictureList {
+    fun split(value: String): List<String> = value.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+    fun join(links: List<String>): String = links.joinToString("\n")
+    fun add(value: String?, link: String): String = join(split(value.orEmpty()) + link)
+    fun remove(value: String, index: Int): String = join(split(value).filterIndexed { i, _ -> i != index })
+
+    /** How many pictures a model's list input takes, from Replicate's model pages (2026-10-05). */
+    fun max(model: String): Int = when (model) {
+        "bytedance/seedream-4.5" -> 14
+        "black-forest-labs/flux-2-dev", "black-forest-labs/flux-2-klein-9b", "black-forest-labs/flux-2-klein-4b" -> 5
+        else -> 3
+    }
+}
+
 object ModelOptions {
     private val fieldName = Regex("[A-Za-z][A-Za-z0-9_]{0,79}")
     private val reserved = setOf("prompt", "model", "messages", "stream", "tools", "tool_choice", "api_key", "authorization", "webhook", "webhook_events_filter")
@@ -34,6 +52,10 @@ object ModelOptions {
     fun validateForModel(model: String, schema: InputSchema, values: List<InputValue>) {
         validate(schema, values, true)
         fun has(name: String) = values.any { it.name == name && it.value.isNotBlank() }
+        schema.fields.filter { it.list && it.uri }.forEach { d ->
+            val count = values.firstOrNull { it.name == d.name }?.value?.let(PictureList::split)?.size ?: 0
+            if (count > PictureList.max(model)) throw UserError("This model takes at most ${PictureList.max(model)} pictures.")
+        }
         if (model == "wan-video/wan-2.7-i2v") {
             if (has("first_frame") == has("first_clip")) throw UserError("WAN 2.7 I2V needs either a first frame or a first clip, with only one selected.")
             if (has("last_frame") && !has("first_frame")) throw UserError("An ending frame requires a starting frame.")
@@ -55,8 +77,13 @@ object ModelOptions {
         }
         if (number != null && ((def.minimum != null && number < def.minimum) || (def.maximum != null && number > def.maximum))) throw UserError("${def.name}: value is outside the model's supported range.")
         if (def.uri && v.isNotBlank()) {
-            val u = try { URI(v) } catch (_: Exception) { throw UserError("${def.name}: enter an HTTPS media URL.") }
-            if (u.scheme != "https" || u.host.isNullOrBlank() || u.userInfo != null) throw UserError("${def.name}: enter an HTTPS media URL without embedded credentials.")
+            // A list input may hold several links, one per line; a single input takes exactly one.
+            val links = if (def.list) PictureList.split(v) else listOf(v)
+            if (!def.list && '\n' in v.trim()) throw UserError("${def.name}: this input takes one picture.")
+            links.forEach { link ->
+                val u = try { URI(link) } catch (_: Exception) { throw UserError("${def.name}: enter an HTTPS media URL.") }
+                if (u.scheme != "https" || u.host.isNullOrBlank() || u.userInfo != null) throw UserError("${def.name}: enter an HTTPS media URL without embedded credentials.")
+            }
         }
         if (def.required && v.isBlank()) throw UserError("${def.name} is required by this model.")
         return InputValue(def.name, def.kind, v)
@@ -118,7 +145,10 @@ object ModelOptions {
 
     fun summary(model: String, values: List<InputValue>): String = buildString {
         ModelCatalog.find(Mode.VIDEO, model)?.fixedResolution?.let { append("$it model; ") }
-        append(values.joinToString("; ") { "${it.name}=${if (it.value.length > 60) it.value.take(57) + "..." else it.value}" }.ifEmpty { "Provider defaults" })
+        append(values.joinToString("; ") { v ->
+            val links = PictureList.split(v.value)
+            "${v.name}=${if (links.size > 1) "${links.size} pictures" else if (v.value.length > 60) v.value.take(57) + "..." else v.value}"
+        }.ifEmpty { "Provider defaults" })
     }
 }
 

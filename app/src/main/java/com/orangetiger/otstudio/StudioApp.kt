@@ -407,7 +407,8 @@ class StudioApp : Application() {
      * on [editModel] with the image in that model's image input. The result appears as a new Image entry linked to [source].
      * The user's tap on Edit in the dialog is the confirmation for this paid request. No automatic retry.
      */
-    fun edit(source: Entry, instruction: String, editModel: String, read: () -> Triple<ByteArray, String, String>, chatId: Long = 0): Boolean {
+    fun edit(source: Entry, instruction: String, editModel: String, read: () -> Triple<ByteArray, String, String>, chatId: Long = 0,
+             extras: List<() -> Triple<ByteArray, String, String>> = emptyList()): Boolean {
         if (busy.get()) return false
         val text = Rules.prompt(instruction)
         val preset = ModelCatalog.edit(editModel) ?: throw UserError("Choose an editing model.")
@@ -415,12 +416,17 @@ class StudioApp : Application() {
         val image = settings.resolve(Mode.IMAGE)
         // Checked before the upload, so a settings problem never leaves an orphan file at the provider.
         val chosen = keepShape(settings.forModel(image.settings, preset.model))
+        val listInput = chosen.schema?.fields?.firstOrNull { it.name == preset.imageField }?.list == true
+        if (extras.isNotEmpty() && !listInput) throw UserError("This editing model takes one picture. Choose Seedream 4.5, Qwen Image Edit Plus, FLUX.2, or P-Image Edit for reference photos.")
+        if (1 + extras.size > PictureList.max(preset.model)) throw UserError("This editing model takes at most ${PictureList.max(preset.model)} pictures in all.")
         ModelOptions.validateForModel(preset.model, chosen.schema ?: throw UserError("This editing model has no input list."), chosen.options.filter { it.name != preset.imageField } + InputValue(preset.imageField, InputKind.TEXT, "https://api.replicate.com/v1/files/check"))
         settings.editModel = preset.model
         run {
             val (bytes, mime, name) = read()
             val url = api.uploadFile(image.settings.baseUrl, image.key, name, mime, bytes)
-            val model = image.copy(settings = chosen.copy(options = chosen.options.filter { it.name != preset.imageField } + InputValue(preset.imageField, InputKind.TEXT, url)))
+            // The picture being edited is image 1; reference photos follow as image 2, image 3, and so on.
+            val more = extras.map { extra -> extra().let { (b, m, n) -> api.uploadFile(image.settings.baseUrl, image.key, n, m, b) } }
+            val model = image.copy(settings = chosen.copy(options = chosen.options.filter { it.name != preset.imageField } + InputValue(preset.imageField, InputKind.TEXT, PictureList.join(listOf(url) + more))))
             val id = history.insert(Mode.IMAGE, text, model, parentId = source.id)
             if (chatId != 0L) history.setJob(chatId, id)
             changed()

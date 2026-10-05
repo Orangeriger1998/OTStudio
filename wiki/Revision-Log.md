@@ -10,6 +10,10 @@ This log lists the main changes from one version to the next. It records what a 
 
 **Any photo format.** The trainer now accepts JPG, PNG, WebP, HEIC, and most other photo files, and converts them itself, so a photo saved under the wrong file type no longer stops it. Photos it cannot use are left out and named with the reason, and the accepted formats show under Choose photos. Choosing again adds photos, and Clear starts over.
 
+## 1.6.0 (October 2026)
+
+**Several pictures at once.** Models that take more than one picture (Seedream 4.5 up to 14, FLUX.2 up to 5, Qwen Image Edit Plus and P-Image Edit up to 3) now get them all. Edit... has Add a reference photo, so an outfit, logo, or place can join the picture being edited as image 2, image 3, and so on. In API CALL, each attached picture is listed with its own Remove, and Add another photo adds the next.
+
 ## 1.5.1 (October 2026)
 
 **Open folder.** After Save, the message offers Open folder beside Change, and the Save folder card in Settings has Open folder too. Android opens the folder in the phone's file manager, such as Files.

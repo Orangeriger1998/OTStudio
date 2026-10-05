@@ -263,10 +263,24 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
             readValue = { if (changed || d.required) ModelOptions.value(d, (if (inverted) !toggle.isChecked else toggle.isChecked).toString()) else null }
         } else if (photoField(d) && !allSettings) {
             // The simple view shows a picture input as attached or not, never as a web address.
-            card.addView(ui.text(if (stored != null) "A picture is attached. It goes with every request on this model until you remove it." else "No picture attached.", Ui.Type.BODY).apply { setPadding(0, dp(4), 0, 0) })
-            if (stored != null) card.addView(ui.textButton("Remove the picture") {
-                safely { remember(); draft = draft.copy(options = draft.options.filter { it.name != d.name }); render() }
-            }.apply { isEnabled = !waiting }, LinearLayout.LayoutParams(-2, -2))
+            val links = stored?.value?.let(PictureList::split).orEmpty()
+            if (d.list) {
+                val max = PictureList.max(draft.model)
+                card.addView(ui.text(when (links.size) { 0 -> "No pictures attached. This model takes up to $max."; else -> "${links.size} of up to $max pictures attached. In your words, call them image 1, image 2, and so on." }, Ui.Type.BODY).apply { setPadding(0, dp(4), 0, 0) })
+                links.forEachIndexed { index, _ ->
+                    val row = ui.row()
+                    row.addView(ui.text("Image ${index + 1}", Ui.Type.BODY), ui.weight())
+                    row.addView(ui.textButton("Remove") {
+                        safely { remember(); val rest = PictureList.remove(stored!!.value, index); draft = draft.copy(options = draft.options.filter { it.name != d.name } + listOfNotNull(rest.takeIf { it.isNotEmpty() }?.let { InputValue(d.name, InputKind.TEXT, it) })); render() }
+                    }.apply { isEnabled = !waiting; contentDescription = "Remove image ${index + 1}" })
+                    card.addView(row)
+                }
+            } else {
+                card.addView(ui.text(if (stored != null) "A picture is attached. It goes with every request on this model until you remove it." else "No picture attached.", Ui.Type.BODY).apply { setPadding(0, dp(4), 0, 0) })
+                if (stored != null) card.addView(ui.textButton("Remove the picture") {
+                    safely { remember(); draft = draft.copy(options = draft.options.filter { it.name != d.name }); render() }
+                }.apply { isEnabled = !waiting }, LinearLayout.LayoutParams(-2, -2))
+            }
             readValue = { stored }
         } else {
             val hint = d.defaultValue?.takeIf { it.isNotEmpty() }?.let { "Empty uses the model default: $it" } ?: "Empty leaves it to the model"
@@ -276,7 +290,8 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
             readValue = { edit.text.toString().let { if (d.kind == InputKind.NUMBER) it.replace(',', '.') else it }.trim().takeIf { it.isNotEmpty() }?.let { ModelOptions.value(d, it) } }
         }
         if (help.isNotEmpty()) card.addView(ui.text(help, Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(4), 0, 0) })
-        if (photoField(d)) card.addView(ui.tonal("Choose photo", R.drawable.ic_add_photo_alternate) { choosePhoto(d) }.apply {
+        val full = d.list && (stored?.value?.let(PictureList::split)?.size ?: 0) >= PictureList.max(draft.model)
+        if (photoField(d) && !full) card.addView(ui.tonal(if (d.list && stored != null) "Add another photo" else "Choose photo", R.drawable.ic_add_photo_alternate) { choosePhoto(d) }.apply {
             isEnabled = !waiting; contentDescription = "Choose a photo for ${d.name}"; layoutParams = LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) }
         })
         readers.add(readValue)
@@ -292,8 +307,11 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
                 if (gone()) return@uploadPhoto
                 waiting = false
                 if (url != null) {
-                    draft = draft.copy(options = draft.options.filter { it.name != d.name } + InputValue(d.name, InputKind.TEXT, url))
-                    notice = "Photo uploaded and set as ${d.name}. Apply to save."
+                    // A list input gains the photo as its next image; a single input is replaced.
+                    val before = draft.options.firstOrNull { it.name == d.name }?.value
+                    val value = if (d.list) PictureList.add(before, url) else url
+                    draft = draft.copy(options = draft.options.filter { it.name != d.name } + InputValue(d.name, InputKind.TEXT, value))
+                    notice = if (d.list) "Photo uploaded as image ${PictureList.split(value).size}. Apply to save." else "Photo uploaded and set as ${d.name}. Apply to save."
                 } else notice = error ?: "Could not upload the photo."
                 render()
             }
