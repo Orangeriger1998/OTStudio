@@ -1040,6 +1040,13 @@ class MainActivity : AppCompatActivity() {
     private fun upscale(e: Entry, file: File) {
         if (!file.exists()) { showError("The private media file is missing."); return }
         val mime = when (file.extension) { "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"; else -> "image/webp" }
+        val (w, h) = try { Outpainter.size(file) } catch (ex: UserError) { showError(ex.message.orEmpty()); return }
+        // The upscaler refuses pictures above about 2 megapixels. Those are already large, so nothing is sent.
+        if (w.toLong() * h > Outpainter.UPSCALE_MAX_PIXELS) {
+            MaterialAlertDialogBuilder(this).setTitle("Already large").setMessage("This picture is $w by $h pixels. Upscale 2x works on pictures up to about 1400 by 1400 and makes them about 2800 by 2800. This one is already large enough, so it does not need upscaling. Nothing was sent.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
         try {
             if (app.upscale(e) { Triple(file.inputStream().use { readLimited(it) }, mime, file.name) }) { snack("Upscaling to twice the size. The result appears as a new card."); renderFeed() }
         } catch (ex: UserError) { showError(ex.message.orEmpty()) }

@@ -16,7 +16,7 @@ Every image and video card carries two rows of buttons. The first row acts on th
 | Share | Opens Android's share sheet with the file | Sends a result to another app, such as email or a chat app, without saving a copy first |
 | Edit... (images) | Asks what should change, then sends the image and that instruction to an editing model | Changes one thing, such as a color or an object, and keeps the rest. The result appears as a new card that names the image it came from. |
 | Use as... (images) | Uploads the image and places it in a model input of your choice | Chains work together. One image can become the reference for the next image, or a starting or ending frame for a video. |
-| Upscale 2x (images) | Doubles the width and height with Real-ESRGAN | FLUX images come out at about 1024 by 1024. Upscaling reaches about 2048 by 2048 for a fifth of a cent. The result appears as a new card. |
+| Upscale 2x (images) | Doubles the width and height with Real-ESRGAN | FLUX images come out at about 1024 by 1024. Upscaling reaches about 2048 by 2048 for a fifth of a cent. The result appears as a new card. The upscaler takes pictures up to about 2 megapixels; a larger picture gets a message that it is already large enough, and nothing is sent. |
 
 <img src="images/action-use-as.png" width="260" alt="The Use this image as dialog with its three roles">
 

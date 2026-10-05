@@ -33,6 +33,12 @@ object Outpainter {
         return exact to Outpaint.layout(exact.width, exact.height, ratio)
     }
 
+    /** Real-ESRGAN on Replicate refuses inputs above 2,096,704 pixels (its GPU limit); Upscale is offered only below this. */
+    const val UPSCALE_MAX_PIXELS = 2_000_000
+
+    /** The picture's upright size in pixels, without decoding it. */
+    fun size(file: File): Pair<Int, Int> = upright(file).let { it.first to it.second }
+
     /** Checks the shape before anything is uploaded: reads only the picture's size and orientation. */
     fun check(file: File, ratio: String): Outpaint.Layout { val (w, h, _) = upright(file); return Outpaint.layout(w, h, ratio) }
 
