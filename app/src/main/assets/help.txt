@@ -64,7 +64,7 @@ One minute of video takes about 12 clips, because video models make clips of 5 t
 
 # What OT Studio does not do
 
-OT Studio makes one photo or one clip at a time. It does not join clips into a longer video. Music and titles need another app as well. Use a video editor for that final step. CapCut works on a phone. Any desktop video editor works on a computer.
+OT Studio makes one photo or one clip at a time. Make it longer on a finished video adds about 5 seconds that start from its last frame, and the phone joins the parts into one video; tap it again for more. Music and titles need another app. Use a video editor for that final step. CapCut works on a phone. Any desktop video editor works on a computer.
 
 LoRA training runs on a Windows computer with the OT Studio LoRA Trainer from the GitHub Releases page. The phone cannot train a LoRA.
 

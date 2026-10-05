@@ -740,9 +740,69 @@ class StudioApp : Application() {
         outputs.forEach { output ->
             if (output.localFile.isEmpty() || !File(File(filesDir, "media"), output.localFile).exists()) download(id, mode, output.url, output.position)
         }
-        val note = finishExpand(id)
+        val note = finishExpand(id) ?: finishJoin(id)
         val first = history.outputs(listOf(id))[id]?.firstOrNull()?.localFile.orEmpty()
         history.update(id, "succeeded", note ?: "${outputs.size} output(s) ready to preview or save.", localFile = first)
+    }
+
+    /** The model that makes the next part of a video: the Video model when it starts from a picture, otherwise WAN 2.2 fast. */
+    private fun nextPartSettings(source: Entry): ModelSettings {
+        val current = settings.get(Mode.VIDEO)
+        val base = if (ModelCatalog.needsStartPicture(current.model)) current else settings.forModel(current, "wan-video/wan-2.2-i2v-fast")
+        // Every part keeps the first part's resolution, so the parts can be joined.
+        val resolution = Regex("resolution=(\\w+)").find(source.requestSummary)?.groupValues?.get(1)
+        val sized = if (resolution != null && base.schema?.fields?.firstOrNull { it.name == "resolution" }?.choices?.contains(resolution) == true)
+            base.copy(options = base.options.filter { it.name != "resolution" } + InputValue("resolution", InputKind.TEXT, resolution)) else base
+        // Pictures saved in the profile stay out; the clip's last frame is the only picture.
+        val pictureNames = sized.schema?.fields.orEmpty().filter { it.uri }.map { it.name }.toSet()
+        return safetyOff(sized.copy(options = sized.options.filter { it.name !in pictureNames }))
+    }
+
+    /**
+     * Make it longer: takes [source]'s last frame, starts the next part from it with [prompt], and joins the two when
+     * the new part arrives. One paid request.
+     */
+    fun extendVideo(source: Entry, prompt: String): Boolean {
+        if (busy.get()) return false
+        if (history.list(pendingOnly = true).any { it.mode != Mode.CHAT }) throw UserError("Finish or cancel the pending media job before starting another.")
+        val text = Rules.prompt(prompt)
+        val file = mediaFile(source)
+        val video = settings.resolve(Mode.VIDEO)
+        val next = nextPartSettings(source)
+        MediaRole.START_FRAME.apply(next, uploadCheck) { error("The next-part model starts from a picture.") }
+        run {
+            val frame = VideoJoiner.lastFrame(file)
+            val url = api.uploadFile(video.settings.baseUrl, video.key, "last-frame.jpg", "image/jpeg", frame)
+            val settingsWithFrame = MediaRole.START_FRAME.apply(next, url) { error("The next-part model starts from a picture.") }
+            ModelOptions.validateForModel(settingsWithFrame.model, settingsWithFrame.schema ?: throw UserError("Load this model's inputs first."), settingsWithFrame.options)
+            val model = video.copy(settings = settingsWithFrame)
+            val id = history.insert(Mode.VIDEO, text, model, parentId = source.id)
+            history.setFinish(id, "join|${source.id}")
+            changed()
+            try { applyPrediction(id, Mode.VIDEO, api.create(model, text)) }
+            catch (e: ProviderRejected) { history.update(id, "failed", "${e.message} No job was created.") }
+            catch (e: Exception) { history.update(id, "uncertain", "${friendly(e)} No job ID was saved. The provider may have accepted the request; inspect its dashboard before retrying.") }
+        }
+        return true
+    }
+
+    /** For a Make it longer job: joins the earlier video and the new part into one file. Runs once. Returns a note, or null. */
+    private fun finishJoin(id: Long): String? {
+        val parts = history.finishOf(id).split('|')
+        if (parts.size != 2 || parts[0] != "join") return null
+        val folder = File(filesDir, "media")
+        val output = history.outputs(listOf(id))[id]?.firstOrNull() ?: return null
+        val made = File(folder, output.localFile)
+        try {
+            val source = history.entry(parts[1].toLongOrNull() ?: 0) ?: throw UserError("The earlier video is gone.")
+            val out = File(folder, "${UUID.randomUUID()}.mp4")
+            try { VideoJoiner.join(listOf(mediaFile(source), made), out) } catch (e: Throwable) { out.delete(); throw e }
+            history.savedOutput(id, output.position, out.name)
+            made.delete()
+            return "Joined with the earlier video into one clip. Make it longer again to add more."
+        } catch (e: Throwable) {
+            return "The new part is ready, but it could not be joined (${(e as? UserError)?.message ?: e.javaClass.simpleName}). This card holds the new part alone."
+        } finally { history.setFinish(id, "") }
     }
 
     /** For an Expand job: rebuilds the result at full size with the original pixels in the middle. Runs once. Returns a note, or null. */

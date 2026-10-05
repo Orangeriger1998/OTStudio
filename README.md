@@ -59,7 +59,7 @@ These typical figures come from the providers' price pages in October 2026. Pric
 
 ## Limits
 
-OT Studio makes one photo or one clip at a time. It cannot join clips into a longer video. Music and titles need another app as well. Use a video editor for that final step, such as CapCut on a phone or any desktop video editor.
+OT Studio makes one photo or one clip at a time. Make it longer extends a video part by part from its last frame and joins the parts on the phone. Music and titles need another app. Use a video editor for that final step, such as CapCut on a phone or any desktop video editor.
 
 LoRA training runs on a computer with `scripts/train_lora.py`, not on the phone. WAN video models cannot load a FLUX LoRA, so the wiki shows how to keep a face consistent with LoRA keyframes instead.
 

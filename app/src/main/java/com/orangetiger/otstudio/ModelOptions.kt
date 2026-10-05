@@ -294,7 +294,7 @@ object InputLabels {
         "lora_weights" to "LoRA", "duration" to "Length in seconds", "resolution" to "Resolution", "negative_prompt" to "Avoid",
         "image" to "Picture", "input_image" to "Picture", "image_input" to "Pictures", "input_images" to "Pictures", "images" to "Pictures",
         "first_frame" to "Starting picture", "last_frame" to "Ending picture", "first_clip" to "Clip to continue",
-        "frames_per_second" to "Frames per second", "fps" to "Frames per second", "num_frames" to "Number of frames",
+        "frames_per_second" to "Frames per second", "fps" to "Frames per second", "num_frames" to "Length in frames (81 is 5 s, 121 is 7.5 s)",
         "safety_tolerance" to "Safety tolerance", "size" to "Size", "width" to "Width", "height" to "Height"
     )
 
@@ -335,7 +335,7 @@ object ModelNames {
     fun title(model: String): String = names[model] ?: model
 
     /** The settings the simple view shows: the ones most people change. Pictures and required inputs always show. */
-    val simple = setOf("aspect_ratio", "num_outputs", "duration", "resolution", "disable_safety_checker")
+    val simple = setOf("aspect_ratio", "num_outputs", "duration", "num_frames", "resolution", "disable_safety_checker")
 }
 
 /** The shapes Expand offers, with plain names. The first is the usual choice. */

@@ -70,7 +70,7 @@ The chat prices count tokens, which are pieces of words, so the "words" in the t
 
 ## What OT Studio does not do
 
-OT Studio makes one photo or one clip at a time. It does not join clips into a longer video. Music and titles also need another app. CapCut handles both on a phone. On a computer, any desktop video editor does the same job.
+OT Studio makes one photo or one clip at a time. Make it longer extends a video about 5 seconds at a time and joins the parts on the phone. Music and titles need another app. CapCut handles both on a phone. On a computer, any desktop video editor does the same job.
 
 LoRA training runs on a Windows computer with the OT Studio LoRA Trainer from the Releases page, or anywhere with the `train_lora.py` script. A phone cannot train a LoRA.
 

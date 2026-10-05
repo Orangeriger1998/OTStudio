@@ -619,6 +619,7 @@ class MainActivity : AppCompatActivity() {
             }
             card.addView(actionRow(
                 if (e.mode == Mode.IMAGE) ui.textButton("View", R.drawable.ic_visibility) { previewImage(file) } else ui.textButton("Play", R.drawable.ic_play_arrow) { previewVideo(file) },
+                if (e.mode == Mode.VIDEO && e.state == "succeeded") ui.textButton("Make it longer", R.drawable.ic_movie) { makeLonger(e) } else null,
                 ui.textButton("Save", R.drawable.ic_download) { saveMedia(mediaEntry) },
                 ui.textButton("Share", R.drawable.ic_share) { shareMedia(mediaEntry) },
                 if (e.mode == Mode.IMAGE && mode == Mode.CHAT) ui.textButton("Talk about this", R.drawable.ic_chat) { app.selectedImage = e.id; renderFeed(); prompt.requestFocus() } else null,
@@ -1003,6 +1004,23 @@ class MainActivity : AppCompatActivity() {
                     dialog.dismiss(); snack("Expanding. The result appears as a new card."); renderFeed()
                 } else ui.layoutOf(words)?.error = "Wait for the current operation to finish."
             } catch (ex: UserError) { ui.layoutOf(words)?.error = ex.message }
+        } }
+        dialog.show()
+    }
+
+    /** Asks what happens next, then starts the next part of this video from its last frame. One paid request. */
+    private fun makeLonger(e: Entry) {
+        val content = ui.column(20)
+        val previous = e.prompt.removePrefix("Continues: ")
+        val next = ui.field(content, "What happens next?", previous, multiline = true, helper = "For example: she keeps dancing and turns toward the sea.")
+        content.addView(ui.text("The next part starts from this video's last frame and runs about 5 seconds. With WAN 2.2 fast it costs about 5 to 11 cents. The phone joins it to this video, so the new card holds the whole video.", Ui.Type.SMALL, ui.muted))
+        val dialog = MaterialAlertDialogBuilder(this).setTitle("Make this video longer").setView(ScrollView(this).apply { addView(content) })
+            .setPositiveButton("Make it longer", null).setNegativeButton("Cancel", null).create()
+        dialog.setOnShowListener { dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            try {
+                if (app.extendVideo(e, next.text.toString())) { dialog.dismiss(); snack("Making the next part. The joined video appears as a new card."); renderFeed() }
+                else ui.layoutOf(next)?.error = "Wait for the current operation to finish."
+            } catch (ex: UserError) { ui.layoutOf(next)?.error = ex.message }
         } }
         dialog.show()
     }
