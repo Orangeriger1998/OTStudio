@@ -192,6 +192,13 @@ class StudioApp : Application() {
         changed()
     }
 
+    /** A SpicyAPI model runs against SpicyAPI's address with its own key; every other model is left as it is. */
+    private fun withSpicy(model: ResolvedModel): ResolvedModel {
+        if (!ModelCatalog.spicy(model.settings.model)) return model
+        val key = settings.spicyKey().takeIf { it.isNotBlank() } ?: throw UserError("Save your SpicyAPI key first: Settings, Image or Video, SpicyAPI.")
+        return model.copy(settings = model.settings.copy(baseUrl = Rules.SPICY_BASE), key = key)
+    }
+
     fun isBusy() = busy.get()
     fun stopWaiting() { stopRequested = true; engine.cancel(); transport.cancel(); activeDownload?.disconnect() }
     private fun changed() { main.post { listener?.invoke() } }
@@ -214,7 +221,7 @@ class StudioApp : Application() {
         // Reset here, before the task is queued, so a Stop tapped while it waits is kept.
         stopRequested = false
         if (mode == Mode.CHAT && local.engine == ChatEngine.LOCAL) return sendLocal(p)
-        val model = settings.resolve(mode)
+        val model = withSpicy(settings.resolve(mode))
         ModelOptions.validateForModel(model.settings.model, model.settings.schema ?: throw UserError("Open API CALL and load this model's inputs first."), model.settings.options)
         if (mode != Mode.CHAT && history.list(pendingOnly = true).any { it.mode != Mode.CHAT }) {
             throw UserError("Finish or cancel the pending media job before starting another. You can still use text chat.")
@@ -486,7 +493,7 @@ class StudioApp : Application() {
         if (plan.action == "expand") return expand(source ?: throw UserError("This plan has no picture."), ratio ?: Planner.expandRatio(plan.shape), text, chat.id)
         val mode = if (plan.action == "video") Mode.VIDEO else Mode.IMAGE
         val (planned, _) = planSettings(plan, modelId)
-        val resolved = Rules.resolve(mode, { if (it == mode) planned else settings.get(it) }, settings::key)
+        val resolved = withSpicy(Rules.resolve(mode, { if (it == mode) planned else settings.get(it) }, settings::key))
         ModelOptions.validateForModel(planned.model, planned.schema ?: throw UserError("Load this model's inputs in API CALL first."), planned.options)
         run {
             var model = resolved

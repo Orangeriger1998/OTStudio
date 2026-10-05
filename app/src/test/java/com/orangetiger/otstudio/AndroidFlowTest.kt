@@ -244,7 +244,7 @@ class AndroidFlowTest {
         checkbox.isChecked = true
         click(activity, "Save image settings")
         assertEquals(KeySource.OWN, SettingsStore(activity).get(Mode.IMAGE).keySource)
-        assertFalse(views(activity.window.decorView).filterIsInstance<EditText>().last().isEnabled)
+        assertFalse(views(activity.window.decorView).filterIsInstance<EditText>().last { (it.parent?.parent as? com.google.android.material.textfield.TextInputLayout)?.hint?.toString() != "SpicyAPI key" }.isEnabled)
         controller.pause().stop().destroy()
     }
 

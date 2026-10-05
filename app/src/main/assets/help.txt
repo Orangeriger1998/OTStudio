@@ -52,6 +52,8 @@ OpenRouter runs the chat models. Create an account at openrouter.ai, then buy cr
 
 For images and video you need Replicate. Sign in at replicate.com with a GitHub account. Replicate bills in advance, so add a payment method and buy credit on the Billing page first. Your API token sits on the API tokens page under your account. It starts with r8_.
 
+SpicyAPI is optional. It adds four adult models that work from words only: Spicy Image 1 and Spicy Image 1 Pro for pictures, and Spicy Video 1 and Spicy Cinema 1 for video. Create a key in your SpicyAPI dashboard and paste it in Settings, under Image or Video, in the SpicyAPI card. It starts with sk-spicy-. These models never take a photo, and SpicyAPI refuses photos of real people.
+
 # What it costs
 
 These are typical prices from October 2026. Providers change their prices, so check their pages before a large project.

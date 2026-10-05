@@ -113,3 +113,19 @@ Live test on 2026-10-03 (owner-approved, about $0.07): one watercolor image, one
 Choose photo, Use as..., and Upscale 2x upload an image to POST `/v1/files` as multipart form data. The app accepts only a reply whose `urls.get` equals `https://api.replicate.com/v1/files/{id}` for the returned ID, then passes that URL as the model input. File IDs may contain letters, digits, dots, hyphens, and underscores. Replicate began issuing dotted IDs of about 53 characters in October 2026. An ID that starts with a dot, ends with a dot, or contains two dots in a row is refused, so it can never act as a path step. Uploads require the Replicate origin, a JPG, PNG, or WebP image, and at most 20 MB.
 
 Upscale 2x runs `nightmareai/real-esrgan` with `scale` 2 and no prompt. That model stays out of the model lists because it takes an image instead of a prompt.
+
+## SpicyAPI (text only)
+
+Owner decision, 2026-10-05: four SpicyAPI models are offered, all working from words alone. They appear in the Image and Video model lists under the `spicyapi/` prefix.
+
+| Model | Mode | Settings the app sends | Price |
+|---|---|---|---|
+| `spicy-image-1` | Image | `size` (eleven sizes), `n` 1 to 4, `style`, `negative_prompt`, `seed`, `enhance_prompt` | $0.06 per picture |
+| `spicy-image-1-pro` | Image | the same | $0.09 per picture |
+| `spicy-video-1` | Video | `aspect_ratio` | from $0.20 per second |
+| `spicy-cinema-1` | Video | `duration` 3 to 15, `resolution` 480P/720P/1080P, `aspect_ratio` | from $0.14 per second |
+
+Pictures: `POST https://api.spicyapi.com/v1/images/generations`, answered at once with `data[].url`. Videos: `POST /v1/videos/generations` returns a task; the app checks `GET /v1/videos/tasks/{id}` (`queued`, `processing`, `succeeded` with `output.video_url`, `failed` with `error` and `error_code`). Tasks cannot be canceled. Results download from `cdn.spicyapi.com` only.
+
+SpicyAPI's photo-based models (actions, edits, image-to-video, motion transfer, character and reference video, voice cloning) are deliberately not offered: OT Studio works with photos of real people, and it cannot check who is in a photo or whether they agreed. The schemas of the four offered models have no picture inputs, and a test checks that.
+

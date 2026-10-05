@@ -140,6 +140,7 @@ class ProviderApi(private val transport: Transport) {
         // model, so that model's own version runs instead. It already carries the LoRA.
         val reference = s.options.firstOrNull { it.name == "lora_weights" }?.value?.let { OWN_LORA.matchEntire(it) }
         if (s.model == LoraCodec.MODEL && reference != null) return createOnVersion(model, prompt, reference.groupValues[1], reference.groupValues[2], reference.groupValues[3])
+        if (ModelCatalog.spicy(s.model)) return createSpicy(model, prompt ?: throw UserError("SpicyAPI needs a prompt."))
         val input = JSONObject()
         if (prompt != null) input.put("prompt", Rules.prompt(prompt))
         ModelOptions.validateForModel(s.model, s.schema ?: throw UserError("Load model inputs first."), s.options)
@@ -189,9 +190,46 @@ class ProviderApi(private val transport: Transport) {
         return SchemaCodec.suggestion(chat(setupModel, listOf(Turn("system", system), Turn("user", Rules.prompt(prompt)))), candidates)
     }
 
-    fun status(base: String, key: String, id: String): Prediction = prediction(checked(transport.request("GET", "${base.trimEnd('/')}/predictions/${Rules.remoteId(id)}", key, null)))
+    /**
+     * A SpicyAPI request. Only the model, the prompt, and the model's own listed settings are sent: never a picture.
+     * A picture comes back at once; a video comes back as a task to check.
+     */
+    private fun createSpicy(model: ResolvedModel, prompt: String): Prediction {
+        val s = model.settings
+        val text = Rules.prompt(prompt)
+        if (text.length > 2000) throw UserError("SpicyAPI takes prompts of up to 2000 characters.")
+        val schema = s.schema ?: throw UserError("Load this model's inputs first.")
+        if (schema.fields.any { it.uri }) throw UserError("SpicyAPI models in OT Studio take words only.")
+        ModelOptions.validate(schema, s.options, true)
+        val body = JSONObject().put("model", s.model.removePrefix("spicyapi/")).put("prompt", text)
+        SchemaCodec.append(body, schema, s.options)
+        val base = Rules.SPICY_BASE
+        return if (s.mode == Mode.IMAGE) {
+            val root = checked(transport.request("POST", "$base/images/generations", model.key, body.toString()))
+            val urls = root.optJSONArray("data")?.let { a -> (0 until minOf(a.length(), 4)).mapNotNull { a.optJSONObject(it)?.optString("url")?.takeIf(String::isNotEmpty)?.let(Rules::outputUrl) } }.orEmpty()
+            if (urls.isEmpty()) throw UserError("SpicyAPI returned no picture.")
+            Prediction(Rules.remoteId(root.optString("id")), "succeeded", urls, false)
+        } else spicyTask(checked(transport.request("POST", "$base/videos/generations", model.key, body.toString())))
+    }
 
-    fun cancel(base: String, key: String, id: String): Prediction = prediction(checked(transport.request("POST", "${base.trimEnd('/')}/predictions/${Rules.remoteId(id)}/cancel", key, "{}")))
+    /** A SpicyAPI video task as a job state: queued and processing wait, succeeded carries the video, failed its reason. */
+    private fun spicyTask(root: JSONObject): Prediction {
+        val id = Rules.remoteId(root.optString("id"))
+        return when (val status = root.optString("status")) {
+            "queued" -> Prediction(id, "starting", emptyList(), false)
+            "processing" -> Prediction(id, "processing", emptyList(), false)
+            "succeeded" -> root.optJSONObject("output")?.optString("video_url")?.takeIf { it.isNotEmpty() }
+                ?.let { Prediction(id, "succeeded", listOf(Rules.outputUrl(it)), false) } ?: Prediction(id, "unusable", emptyList(), true, "The finished task has no video link.")
+            "failed" -> Prediction(id, "failed", emptyList(), true, listOf(root.optString("error"), root.optString("error_code")).filter { it.isNotBlank() }.joinToString(" ").replace(Regex("[\\p{Cntrl}]+"), " ").take(300))
+            else -> throw UserError("SpicyAPI returned an unknown task state: ${status.take(40)}.")
+        }
+    }
+
+    private fun spicyBase(base: String) = Rules.origin(base) == Rules.origin(Rules.SPICY_BASE)
+
+    fun status(base: String, key: String, id: String): Prediction = if (spicyBase(base)) spicyTask(checked(transport.request("GET", "${Rules.SPICY_BASE}/videos/tasks/${Rules.remoteId(id)}", key, null))) else prediction(checked(transport.request("GET", "${base.trimEnd('/')}/predictions/${Rules.remoteId(id)}", key, null)))
+
+    fun cancel(base: String, key: String, id: String): Prediction = if (spicyBase(base)) throw UserError("SpicyAPI tasks cannot be canceled from the app. It finishes on its own.") else prediction(checked(transport.request("POST", "${base.trimEnd('/')}/predictions/${Rules.remoteId(id)}/cancel", key, "{}")))
 
     private fun prediction(root: JSONObject): Prediction {
         val id = Rules.remoteId(root.optString("id"))

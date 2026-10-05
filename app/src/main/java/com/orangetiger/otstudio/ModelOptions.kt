@@ -259,7 +259,25 @@ object ModelCatalog {
             number("lora_scale_transformer", "1", integer = false), number("lora_scale_transformer_2", "1", integer = false)
         )))
     )
-    val presets: List<ModelPreset> = basePresets + editPresets
+    /**
+     * SpicyAPI text-only models (owner decision, 2026-10-05). They are listed under the "spicyapi/" prefix and run
+     * against api.spicyapi.com with their own key. None of them has a picture input, and the app never sends one:
+     * models that take a photo of a person are deliberately not offered.
+     */
+    private val spicySizes = listOf("832*1216", "1216*832", "1024*1024", "1280*1280", "1440*1440", "1024*1536", "1536*1024", "1080*1920", "1920*1080", "1152*2048", "2048*1152")
+    private fun spicyImage() = InputSchema(listOf(choice("size", spicySizes, "832*1216", note = "Width by height in pixels."), number("n", "1", 1.0, 4.0, note = "Pictures per request, each billed."),
+        choice("style", listOf("photorealistic", "studio", "anime", "3d", "cartoon"), "photorealistic"), text("negative_prompt", note = "What to keep out of the picture."),
+        number("seed"), bool("enhance_prompt", false, "Let SpicyAPI plan the shot from your words first.")))
+    val spicyPresets = listOf(
+        ModelPreset(Mode.IMAGE, "spicyapi/spicy-image-1", spicyImage()),
+        ModelPreset(Mode.IMAGE, "spicyapi/spicy-image-1-pro", spicyImage()),
+        ModelPreset(Mode.VIDEO, "spicyapi/spicy-video-1", InputSchema(listOf(choice("aspect_ratio", listOf("16:9", "9:16", "1:1", "4:3", "3:4"), "16:9")))),
+        ModelPreset(Mode.VIDEO, "spicyapi/spicy-cinema-1", InputSchema(listOf(number("duration", "5", 3.0, 15.0, note = "3 to 15 seconds."),
+            choice("resolution", listOf("480P", "720P", "1080P"), "720P"), choice("aspect_ratio", listOf("16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21", "4:5"), "16:9"))))
+    )
+    fun spicy(model: String) = model.startsWith("spicyapi/")
+
+    val presets: List<ModelPreset> = basePresets + editPresets + spicyPresets
     fun find(mode: Mode, model: String): ModelPreset? = presets.firstOrNull { it.mode == mode && it.model == model }
         ?: listOf(upscaler, expander).firstOrNull { mode == it.mode && model == it.model }
 
@@ -296,7 +314,8 @@ object InputLabels {
         "first_frame" to "Starting picture", "last_frame" to "Ending picture", "last_image" to "Ending picture", "end_image" to "Ending picture",
         "start_image" to "Starting picture", "first_frame_image" to "Starting picture", "first_clip" to "Clip to continue",
         "frames_per_second" to "Frames per second", "fps" to "Frames per second", "num_frames" to "Length in frames (81 is 5 s, 121 is 7.5 s)",
-        "safety_tolerance" to "Safety tolerance", "size" to "Size", "width" to "Width", "height" to "Height"
+        "safety_tolerance" to "Safety tolerance", "size" to "Size", "width" to "Width", "height" to "Height",
+        "n" to "Number of pictures", "style" to "Style", "enhance_prompt" to "Plan the shot first"
     )
 
     fun title(name: String): String = names[name] ?: name.replace('_', ' ').trim().replaceFirstChar { it.uppercase() }
@@ -334,12 +353,16 @@ object ModelNames {
         "wan-video/wan-2.7-t2v" to "Video from words (WAN 2.7), about 50 cents",
         "wan-video/wan-2.7-i2v" to "Video from a picture (WAN 2.7), about 50 cents",
         "wan-video/wan-2.1-1.3b" to "Older small video model (WAN 2.1)",
-        "wavespeedai/wan-2.1-t2v-480p" to "Older video model (WAN 2.1, 480p)", "wavespeedai/wan-2.1-t2v-720p" to "Older video model (WAN 2.1, 720p)"
+        "wavespeedai/wan-2.1-t2v-480p" to "Older video model (WAN 2.1, 480p)", "wavespeedai/wan-2.1-t2v-720p" to "Older video model (WAN 2.1, 720p)",
+        "spicyapi/spicy-image-1" to "Adult picture from words (Spicy Image 1), 6 cents",
+        "spicyapi/spicy-image-1-pro" to "Adult picture from words, best (Spicy Image 1 Pro), 9 cents",
+        "spicyapi/spicy-video-1" to "Adult video from words (Spicy Video 1), from 20 cents a second",
+        "spicyapi/spicy-cinema-1" to "Adult video from words, cinematic (Spicy Cinema 1), from 14 cents a second"
     )
     fun title(model: String): String = names[model] ?: model
 
     /** The settings the simple view shows: the ones most people change. Pictures and required inputs always show. */
-    val simple = setOf("aspect_ratio", "num_outputs", "duration", "num_frames", "resolution", "disable_safety_checker")
+    val simple = setOf("aspect_ratio", "num_outputs", "duration", "num_frames", "resolution", "disable_safety_checker", "size", "n", "style")
 }
 
 /** The shapes Expand offers, with plain names. The first is the usual choice. */

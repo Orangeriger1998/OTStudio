@@ -21,6 +21,7 @@ class SettingsStore(private val context: Context) {
         const val KEY_FILE = "credentials"
         const val KEY_ALIAS = "otstudio-keys-v1"
         const val SEARCH_SLOT = "SEARCH"
+        const val SPICY_SLOT = "SPICY"
         fun slot(mode: Mode) = mode.name
         fun aad(slot: String, origin: String) = "$slot|$origin"
     }
@@ -122,6 +123,17 @@ class SettingsStore(private val context: Context) {
         writeKey(searchSlot, v, searchOrigin)
     }
 
+    // The SpicyAPI key has its own slot, bound to SpicyAPI's origin, so it never replaces or reaches Replicate.
+    private val spicyOrigin get() = Rules.origin(Rules.SPICY_BASE)
+    fun spicyKey(): String = readKey(SPICY_SLOT, spicyOrigin)
+    fun hasSpicyKey(): Boolean = keys.contains(SPICY_SLOT)
+    /** Saves the SpicyAPI key; an empty value removes it. */
+    fun saveSpicyKey(value: String) {
+        val v = value.trim()
+        if (v.isNotEmpty() && !v.startsWith("sk-spicy-")) throw UserError("SpicyAPI keys start with sk-spicy-.")
+        writeKey(SPICY_SLOT, v, spicyOrigin)
+    }
+
     /** Allow web search (default on): the chat may search Wikipedia, or Tavily with a key. */
     var allowSearch: Boolean
         get() = prefs.getBoolean("search.allow", true)
@@ -154,6 +166,7 @@ class SettingsStore(private val context: Context) {
         set(v) { require(ModelCatalog.edit(v) != null); prefs.edit().putString("edit.model", v).apply() }
 
     fun keyForEntry(entry: Entry): String {
+        if (Rules.origin(entry.baseUrl) == Rules.origin(Rules.SPICY_BASE)) return spicyKey().takeIf { it.isNotBlank() } ?: throw UserError("Restore the SpicyAPI key to refresh this job.")
         if (Rules.origin(entry.baseUrl) != Rules.origin(get(entry.credentialMode).baseUrl)) throw UserError("This job used a different provider. Restore that provider's API URL and key before refreshing it.")
         return key(entry.credentialMode).takeIf { it.isNotBlank() } ?: throw UserError("Restore the ${entry.credentialMode.title.lowercase()} API key to refresh this job.")
     }

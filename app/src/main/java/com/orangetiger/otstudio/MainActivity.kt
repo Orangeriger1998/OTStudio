@@ -721,6 +721,16 @@ class MainActivity : AppCompatActivity() {
         content.addView(actions, ui.matchWrap(4))
         content.addView(note, ui.matchWrap(12))
         if (selected != Mode.CHAT) {
+            val spicy = ui.card(content)
+            ui.sectionTitle(spicy, "SpicyAPI", "Adult pictures and videos from words, with SpicyAPI's four text-only models in the model list. Its key is kept apart from your Replicate key and goes only to api.spicyapi.com. These models take no photo.")
+            val spicyHelper = { if (app.settings.hasSpicyKey()) "Saved securely. Leave blank to keep." else "Starts with sk-spicy-." }
+            val spicyKey = ui.field(spicy, "SpicyAPI key", "", secret = true, helper = spicyHelper())
+            val spicyNote = ui.text("", Ui.Type.BODY, ui.orange)
+            spicy.addView(actionRow(
+                ui.tonal("Save key") { try { if (spicyKey.text.toString().isNotBlank()) { app.settings.saveSpicyKey(spicyKey.text.toString()); spicyKey.setText(""); ui.layoutOf(spicyKey)?.helperText = spicyHelper(); spicyNote.text = "Saved." } } catch (e: UserError) { spicyNote.text = e.message } },
+                ui.danger("Remove key", R.drawable.ic_delete) { try { app.settings.saveSpicyKey(""); ui.layoutOf(spicyKey)?.helperText = spicyHelper(); spicyNote.text = "Key removed." } catch (e: UserError) { spicyNote.text = e.message } }
+            ))
+            spicy.addView(spicyNote)
             val kind = selected.title.lowercase()
             val history = ui.card(content)
             val count = app.history.list(selected).size

@@ -97,6 +97,10 @@ The card refuses to reuse a key across different provider addresses, because eac
 | Remove key | A red text button with a trash icon | Deletes the stored key after a confirmation dialog. The dialog notes that this does not revoke the key at the provider. |
 | Status line | "Saved.", "Key removed.", or the reason a save failed | Confirms the result in place |
 
+## SpicyAPI card
+
+On the Image and Video pages. It holds the optional SpicyAPI key, which starts with `sk-spicy-`, with Save key and Remove key. The key has its own encrypted slot, so it never replaces the Replicate key, and it goes only to api.spicyapi.com. With a key saved, SpicyAPI's four text-only models in the model lists can generate: Adult picture from words (Spicy Image 1 and Spicy Image 1 Pro) and Adult video from words (Spicy Video 1 and Spicy Cinema 1). They take no photo.
+
 ## Image history and Video history cards
 
 The Image and Video pages each show how many cards their list holds, with **Clear image history** or **Clear video history**. After a confirmation, every card of that kind and its file in private storage are deleted, including photos added from the phone. Copies saved with Save, the originals in the phone's gallery, chat, and memory all stay. A job that is still running must finish or be canceled first.

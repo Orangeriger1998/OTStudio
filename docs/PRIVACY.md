@@ -16,6 +16,10 @@ Memory instructions are stored as plain text in the app's private database. They
 
 Save chat history is on by default. When it is off, new chat messages live only in the app's memory and vanish when the app closes, and the processed conversation is not kept either. Images and videos are still saved. Clear chat history deletes every chat message on the phone.
 
+## SpicyAPI
+
+When an Image or Video model from SpicyAPI is chosen, the prompt and that model's listed settings go to api.spicyapi.com with the SpicyAPI key. No photo, saved picture, or LoRA is ever sent there; the app offers only SpicyAPI's text-only models. Finished pictures and videos come back from cdn.spicyapi.com and are stored like any other result. The SpicyAPI key has its own encrypted slot, bound to SpicyAPI's address.
+
 ## Keys
 
 The app encrypts each key with AES-GCM under a key held in the Android Keystore. Keys never appear in the source code, the APK, the logs, or Android backups. Release builds block screenshots of Settings. Each key is bound to the provider address it was saved with, and the app refuses to send it anywhere else.

@@ -127,6 +127,35 @@ class ProviderApiTest {
         assertEquals(3.5, input.getDouble("guidance_scale"), 0.0); assertTrue(input.getBoolean("disable_safety_checker"))
         assertFalse(input.has("lora_weights")); assertFalse(input.has("guidance"))
     }
+    @Test fun spicyApiPicturesAndVideosUseWordsOnly() {
+        val calls = ArrayList<Triple<String, String, String?>>()
+        val api = ProviderApi { method, url, _, body ->
+            calls.add(Triple(method, url, body))
+            when {
+                url.endsWith("/images/generations") -> HttpReply(200, """{"id":"sj_img1","object":"image.generation","data":[{"url":"https://cdn.spicyapi.com/outputs/a.png"}],"cost_usd":0.06}""")
+                url.endsWith("/videos/generations") -> HttpReply(200, """{"id":"sj_vid1","status":"queued","cost_usd":0.7}""")
+                else -> HttpReply(200, """{"id":"sj_vid1","status":"succeeded","output":{"video_url":"https://cdn.spicyapi.com/outputs/v.mp4"}}""")
+            }
+        }
+        val image = ModelSettings(Mode.IMAGE, Protocol.REPLICATE, Rules.SPICY_BASE, "spicyapi/spicy-image-1").let { it.copy(options = it.options + InputValue("size", InputKind.TEXT, "1024*1024")) }
+        val picture = api.create(ResolvedModel(image, Mode.IMAGE, "sk-spicy-test"), "a woman on a beach at golden hour")
+        assertEquals("succeeded", picture.state); assertEquals(listOf("https://cdn.spicyapi.com/outputs/a.png"), picture.outputUrls)
+        val sent = JSONObject(calls[0].third!!)
+        assertEquals("https://api.spicyapi.com/v1/images/generations", calls[0].second)
+        assertEquals("spicy-image-1", sent.getString("model")); assertEquals("1024*1024", sent.getString("size"))
+        assertFalse(sent.has("image_url")); assertFalse(sent.has("image"))
+        val video = ModelSettings(Mode.VIDEO, Protocol.REPLICATE, Rules.SPICY_BASE, "spicyapi/spicy-cinema-1")
+        val task = api.create(ResolvedModel(video, Mode.VIDEO, "sk-spicy-test"), "a city street at night, slow camera")
+        assertEquals("starting", task.state)
+        val body = JSONObject(calls[1].third!!)
+        assertEquals("spicy-cinema-1", body.getString("model")); assertEquals(5, body.getInt("duration")); assertEquals("720P", body.getString("resolution"))
+        val done = api.status(Rules.SPICY_BASE, "sk-spicy-test", "sj_vid1")
+        assertEquals("https://api.spicyapi.com/v1/videos/tasks/sj_vid1", calls[2].second)
+        assertEquals(listOf("https://cdn.spicyapi.com/outputs/v.mp4"), done.outputUrls)
+        val failed = ProviderApi { _, _, _, _ -> HttpReply(200, """{"id":"sj_vid2","status":"failed","error":"Blocked by screening","error_code":"blocked"}""") }.status(Rules.SPICY_BASE, "k", "sj_vid2")
+        assertEquals("failed", failed.state); assertEquals("Blocked by screening blocked", failed.problem)
+        assertTrue(ModelCatalog.spicyPresets.all { p -> p.schema.fields.none { it.uri } })
+    }
     @Test fun nonTextChatOutputIsNotPresentedAsSuccess() {
         for (body in listOf("{}", """{"choices":[{"message":{"content":null}}]}""", """{"choices":[{"message":{"content":[]}}]}""")) {
             val api = ProviderApi { _, _, _, _ -> HttpReply(200, body) }

@@ -131,12 +131,15 @@ object Rules {
     private fun replicateDelivery(host: String) = host == "replicate.delivery" || host.endsWith(".replicate.delivery")
     // Observed 2026-10-02: api.replicate.com returned outputs as presigned links on this Cloudflare R2 bucket.
     // Pinned to the exact account so a look-alike bucket in another account is refused.
+    /** SpicyAPI serves finished pictures and videos from this host. */
+    private const val SPICY_CDN = "cdn.spicyapi.com"
+    const val SPICY_BASE = "https://api.spicyapi.com/v1"
     private const val REPLICATE_R2_OUTPUTS = "ai-gateway-outputs.0d37909e38d3e99c29fa2cd343ac421a.r2.cloudflarestorage.com"
 
     fun outputUrl(url: String): String {
         val uri = try { URI(url) } catch (_: Exception) { throw UserError("The provider returned an invalid media URL.") }
         val host = uri.host?.lowercase().orEmpty()
-        if (uri.scheme != "https" || uri.userInfo != null || (!replicateDelivery(host) && host != REPLICATE_R2_OUTPUTS) || (uri.port != -1 && uri.port != 443)) {
+        if (uri.scheme != "https" || uri.userInfo != null || (!replicateDelivery(host) && host != REPLICATE_R2_OUTPUTS && host != SPICY_CDN) || (uri.port != -1 && uri.port != 443)) {
             // Naming the scheme and host (never the full URL or its query) makes a provider change diagnosable.
             throw UserError("Media must be hosted on Replicate's HTTPS delivery service (received ${uri.scheme ?: "no scheme"}://${host.ifEmpty { "no host" }.take(80)}${if (uri.port != -1) ":${uri.port}" else ""}). A different delivery host needs an adapter update.")
         }

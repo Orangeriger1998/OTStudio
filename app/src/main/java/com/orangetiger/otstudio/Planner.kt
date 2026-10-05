@@ -274,6 +274,12 @@ object Prices {
         val count = v("num_outputs")?.toIntOrNull() ?: 1
         ModelCatalog.edit(model)?.let { return it.price }
         if (model == ModelCatalog.expander.model) return "about 4 cents"
+        when (model) {
+            "spicyapi/spicy-image-1" -> return cents(0.06 * (v("n")?.toIntOrNull() ?: 1))
+            "spicyapi/spicy-image-1-pro" -> return cents(0.09 * (v("n")?.toIntOrNull() ?: 1))
+            "spicyapi/spicy-video-1" -> return "from 20 cents a second"
+            "spicyapi/spicy-cinema-1" -> return "from ${cents(0.14 * (v("duration")?.toDoubleOrNull() ?: 5.0))} at 480P; more at higher resolutions"
+        }
         val dollars = when (model) {
             "black-forest-labs/flux-schnell" -> 0.003 * count
             "black-forest-labs/flux-dev" -> 0.025 * count

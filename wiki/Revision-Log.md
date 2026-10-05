@@ -10,6 +10,10 @@ This log lists the main changes from one version to the next. It records what a 
 
 **Any photo format.** The trainer now accepts JPG, PNG, WebP, HEIC, and most other photo files, and converts them itself, so a photo saved under the wrong file type no longer stops it. Photos it cannot use are left out and named with the reason, and the accepted formats show under Choose photos. Choosing again adds photos, and Clear starts over.
 
+## 1.4.0 (October 2026)
+
+**SpicyAPI, words only.** Four adult models from SpicyAPI join the model lists: Spicy Image 1 and Spicy Image 1 Pro for pictures, and Spicy Video 1 and Spicy Cinema 1 for video. They work from words alone and never take a photo. Their key goes in a new SpicyAPI card in Settings, apart from the Replicate key.
+
 ## 1.3.1 (October 2026)
 
 **Remove one picture at a time.** Each attached picture has its own line and Remove button on the Image and Video screens, so the ending picture can go while the starting picture stays. Pictures are named plainly: Starting picture and Ending picture.
