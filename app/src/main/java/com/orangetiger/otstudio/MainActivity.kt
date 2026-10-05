@@ -633,7 +633,8 @@ class MainActivity : AppCompatActivity() {
         }
         val busy = app.isBusy()
         card.addView(actionRow(
-            if (e.baseUrl != History.PHONE_BASE) ui.textButton("Use prompt") { prompt.setText(e.prompt); prompt.requestFocus() } else null,
+            if (e.baseUrl != History.PHONE_BASE && e.model != ModelCatalog.upscaler.model && e.state !in listOf("processing", "submitting", "canceling"))
+                ui.textButton("Repeat", R.drawable.ic_refresh) { repeat(e) }.apply { isEnabled = !busy; contentDescription = "Repeat with the same settings" } else null,
             if (e.state == "processing") ui.textButton("Refresh", R.drawable.ic_refresh) { app.refresh(e) }.apply { isEnabled = !busy } else null,
             if (e.state == "processing") ui.textButton("Cancel") { app.refresh(e, true) }.apply { isEnabled = !busy } else null,
             if (e.state == "processing") ui.textButton("Stop tracking") { confirmStopTracking(e) }.apply { isEnabled = !busy } else null,
@@ -972,12 +973,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Asks for a plain instruction and an editing model, then edits this image. The Edit tap starts one paid request. */
-    private fun editImage(e: Entry, file: File) {
+    private fun editImage(e: Entry, file: File, words: String = "", model: String? = null) {
         if (!file.exists()) { showError("The private media file is missing."); return }
         val content = ui.column(20)
-        val instruction = ui.field(content, "What should change?", "", multiline = true, helper = "For example: change her jacket to a red sweater. Keep her face the same.")
+        val instruction = ui.field(content, "What should change?", words, multiline = true, helper = "For example: change her jacket to a red sweater. Keep her face the same.")
         val models = ModelCatalog.edits
-        var chosen = models.firstOrNull { it.model == app.settings.editModel } ?: ModelCatalog.defaultEdit
+        var chosen = models.firstOrNull { it.model == (model ?: app.settings.editModel) } ?: ModelCatalog.defaultEdit
         val cost = ui.text("", Ui.Type.SMALL, ui.muted)
         fun showCost() { cost.text = "One edit with ${chosen.title} costs ${chosen.price} at Replicate. The edited image appears as a new card. Replicate's usage policy still applies, whatever the safety setting says." }
         ui.dropdown(content, "Editing model", models.map { it.title }, chosen.title) { title -> chosen = models.first { it.title == title }; showCost() }
@@ -997,16 +998,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Asks for a new shape and, optionally, what the new area should show. The Expand tap starts one paid request. */
-    private fun expandImage(e: Entry, file: File) {
+    private fun expandImage(e: Entry, file: File, startRatio: String? = null, startWords: String = "") {
         if (!file.exists()) { showError("The private media file is missing."); return }
         val content = ui.column(20)
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.path, bounds)
         if (bounds.outWidth > 0) content.addView(ui.text("This picture is ${bounds.outWidth} by ${bounds.outHeight} pixels. It stays as it is, in the middle, and new picture fills the rest of the new shape.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, 0, 0, dp(8)) })
         val labels = EXPAND_RATIOS.map { "${it.second} ${it.first}" }
-        var ratio = EXPAND_RATIOS.first().first
-        ui.dropdown(content, "New shape", labels, labels.first()) { label -> ratio = EXPAND_RATIOS[labels.indexOf(label)].first }
-        val words = ui.field(content, "What should the new area show? (optional)", "", multiline = true, helper = "For example: more of the beach and the sky.")
+        var ratio = startRatio?.takeIf { r -> EXPAND_RATIOS.any { it.first == r } } ?: EXPAND_RATIOS.first().first
+        ui.dropdown(content, "New shape", labels, labels[EXPAND_RATIOS.indexOfFirst { it.first == ratio }]) { label -> ratio = EXPAND_RATIOS[labels.indexOf(label)].first }
+        val words = ui.field(content, "What should the new area show? (optional)", startWords, multiline = true, helper = "For example: more of the beach and the sky.")
         content.addView(ui.text("One expansion with FLUX Fill dev costs about 4 cents at Replicate. The phone then puts the full-size result together, so the picture keeps its own quality. The result appears as a new card.", Ui.Type.SMALL, ui.muted))
         val dialog = MaterialAlertDialogBuilder(this).setTitle("Expand this image").setView(ScrollView(this).apply { addView(content) })
             .setPositiveButton("Expand", null).setNegativeButton("Cancel", null).create()
@@ -1020,10 +1021,37 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    /**
+     * Repeat: the same job again, with the words ready to change. An edit, an expansion, or a longer video opens its
+     * dialog filled in; any other picture or video gets its model and inputs back, pictures included, and its words
+     * in the message box. Nothing is sent until the user taps the button.
+     */
+    private fun repeat(e: Entry) {
+        val parent = e.parentId.takeIf { it > 0 }?.let { app.history.entry(it) }
+        val parentFile = parent?.let { p -> try { localMedia(p).takeIf { it.isFile } } catch (_: UserError) { null } }
+        when {
+            ModelCatalog.edit(e.model) != null && parent != null -> parentFile?.let { editImage(parent, it, e.prompt, e.model) } ?: showError("The picture this edit started from is gone.")
+            e.model == ModelCatalog.expander.model && parent != null -> {
+                val match = Regex("Expanded to \\S+ (\\d+:\\d+)(?:: (.*))?").find(e.prompt)
+                parentFile?.let { expandImage(parent, it, match?.groupValues?.get(1), match?.groupValues?.get(2).orEmpty()) } ?: showError("The picture this expansion started from is gone.")
+            }
+            e.mode == Mode.VIDEO && parent?.mode == Mode.VIDEO -> makeLonger(parent, e.prompt)
+            else -> try {
+                app.restoreSettings(e)
+                drafts[mode] = prompt.text.toString()
+                mode = e.mode
+                drafts[e.mode] = e.prompt
+                showChat()
+                prompt.setSelection(prompt.text?.length ?: 0); prompt.requestFocus()
+                snack("Same model and settings as that ${e.mode.title.lowercase()}, pictures included. Change the words, then send.")
+            } catch (ex: UserError) { showError(ex.message.orEmpty()) }
+        }
+    }
+
     /** Asks what happens next, then starts the next part of this video from its last frame. One paid request. */
-    private fun makeLonger(e: Entry) {
+    private fun makeLonger(e: Entry, words: String? = null) {
         val content = ui.column(20)
-        val previous = e.prompt.removePrefix("Continues: ")
+        val previous = words ?: e.prompt.removePrefix("Continues: ")
         val next = ui.field(content, "What happens next?", previous, multiline = true, helper = "For example: she keeps dancing and turns toward the sea.")
         content.addView(ui.text("The next part starts from this video's last frame and runs about 5 seconds. With WAN 2.2 fast it costs about 5 to 11 cents. The phone joins it to this video, so the new card holds the whole video.", Ui.Type.SMALL, ui.muted))
         val dialog = MaterialAlertDialogBuilder(this).setTitle("Make this video longer").setView(ScrollView(this).apply { addView(content) })

@@ -47,7 +47,7 @@ The edited image's card starts with "Edit of:" and the prompt of the image it ca
 
 | Button | When it shows | What it does | Why |
 |---|---|---|---|
-| Use prompt | Always | Copies the prompt into the message bar | Makes a variation without retyping |
+| Repeat | On every finished or failed picture and video, except photos from the phone and upscales | For a plain picture or video: switches to its tab, puts back its model and exact inputs (shape, resolution, starting and ending pictures), and puts its words in the message bar to edit before sending. For an edit, an expansion, or a longer video: opens that dialog again, filled in. Nothing is sent until the user taps the button. | When a result is not what was hoped for, the next try starts from the same setup instead of from scratch |
 | Refresh | While Working | Asks the provider for the job's state now | The app already checks every six seconds. This button is for the impatient. |
 | Cancel | While Working | Asks the provider to stop the job | Stops paying for a job that is clearly wrong |
 | Stop tracking | While Working | Releases a job that cannot be refreshed or canceled | Without it, one stuck job would block every new image and video. A dialog warns that the provider job may still run and charge. |

@@ -328,6 +328,11 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 7
         writableDatabase.update("entries", ContentValues().apply { put("finish", value) }, "id = ?", arrayOf(id.toString()))
     }
 
+    /** The exact inputs a job was sent with, such as its shape and its starting and ending pictures. */
+    @Synchronized fun requestInputs(id: Long): List<InputValue> = readableDatabase.query("request_inputs", arrayOf("name", "kind", "value"), "entry_id = ?", arrayOf(id.toString()), null, null, "name").use { c ->
+        buildList { while (c.moveToNext()) add(InputValue(c.getString(0), InputKind.valueOf(c.getString(1)), c.getString(2))) }
+    }
+
     @Synchronized fun savedOutput(id: Long, position: Int, file: String) {
         if (writableDatabase.update("media_outputs", ContentValues().apply { put("local_file", file) }, "entry_id = ? AND position = ?", arrayOf(id.toString(), position.toString())) != 1) throw UserError("Could not save media metadata.")
     }

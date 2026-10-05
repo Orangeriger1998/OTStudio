@@ -199,6 +199,19 @@ class StudioApp : Application() {
         return model.copy(settings = model.settings.copy(baseUrl = Rules.SPICY_BASE), key = key)
     }
 
+    /**
+     * Repeat for a plain picture or video: puts that job's model and exact inputs back as the mode's settings, pictures
+     * included. Inputs the model no longer takes are left out. Nothing is sent; the user edits the words and sends.
+     */
+    fun restoreSettings(entry: Entry) {
+        val base = settings.get(entry.mode)
+        val target = if (base.model == entry.model) base else settings.forModel(base, entry.model)
+        val schema = target.schema ?: throw UserError("This model's inputs are not loaded. Open API CALL and refresh them first.")
+        val kept = history.requestInputs(entry.id).filter { v -> schema.fields.any { it.name == v.name } && try { ModelOptions.validate(schema, listOf(v)); true } catch (_: UserError) { false } }
+        settings.save(target.copy(options = kept), null)
+        changed()
+    }
+
     fun isBusy() = busy.get()
     fun stopWaiting() { stopRequested = true; engine.cancel(); transport.cancel(); activeDownload?.disconnect() }
     private fun changed() { main.post { listener?.invoke() } }

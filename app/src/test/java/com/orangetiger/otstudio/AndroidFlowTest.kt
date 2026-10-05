@@ -493,4 +493,23 @@ class AndroidFlowTest {
         assertEquals(listOf("image"), app.attachedPictures(Mode.VIDEO))
         assertEquals("Starting picture", InputLabels.title("image", Mode.VIDEO)); assertEquals("Ending picture", InputLabels.title("last_image", Mode.VIDEO))
     }
+
+    @Test fun repeatBringsBackTheModelInputsPicturesAndWords() {
+        val app = RuntimeEnvironment.getApplication() as StudioApp
+        val wan = app.settings.forModel(app.settings.get(Mode.VIDEO), "wan-video/wan-2.2-i2v-fast")
+        val used = wan.copy(options = wan.options.filter { it.name !in listOf("image", "last_image", "resolution") } + listOf(InputValue("image", InputKind.TEXT, "https://api.replicate.com/v1/files/first"),
+            InputValue("last_image", InputKind.TEXT, "https://api.replicate.com/v1/files/last"), InputValue("resolution", InputKind.TEXT, "720p")))
+        val id = app.history.insert(Mode.VIDEO, "she dances on the beach", ResolvedModel(used, Mode.VIDEO, "synthetic"))
+        app.history.update(id, "failed", "No.")
+        // The Video settings move on to something else, then Repeat brings that job's back.
+        app.settings.save(app.settings.forModel(app.settings.get(Mode.VIDEO), "wan-video/wan-2.7-t2v"), null)
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        click(activity, "Video"); shadowOf(Looper.getMainLooper()).idle()
+        click(activity, "Repeat"); shadowOf(Looper.getMainLooper()).idle()
+        val s = app.settings.get(Mode.VIDEO)
+        assertEquals("wan-video/wan-2.2-i2v-fast", s.model)
+        val values = s.options.associate { it.name to it.value }
+        assertEquals("https://api.replicate.com/v1/files/first", values["image"]); assertEquals("https://api.replicate.com/v1/files/last", values["last_image"]); assertEquals("720p", values["resolution"])
+        assertTrue(views(activity.window.decorView).filterIsInstance<EditText>().any { it.text.toString() == "she dances on the beach" })
+    }
 }
