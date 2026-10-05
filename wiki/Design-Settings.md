@@ -97,6 +97,10 @@ The card refuses to reuse a key across different provider addresses, because eac
 | Remove key | A red text button with a trash icon | Deletes the stored key after a confirmation dialog. The dialog notes that this does not revoke the key at the provider. |
 | Status line | "Saved.", "Key removed.", or the reason a save failed | Confirms the result in place |
 
+## Image history and Video history cards
+
+The Image and Video pages each show how many cards their list holds, with **Clear image history** or **Clear video history**. After a confirmation, every card of that kind and its file in private storage are deleted, including photos added from the phone. Copies saved with Save, the originals in the phone's gallery, chat, and memory all stay. A job that is still running must finish or be canceled first.
+
 ## Save folder card
 
 | Box | What it holds | Why |

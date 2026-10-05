@@ -70,7 +70,7 @@ LoRA training runs on a Windows computer with the OT Studio LoRA Trainer from th
 
 Replicate deletes results made through its API after about an hour. OT Studio downloads each result the moment it finishes. Save anything you want to keep.
 
-OT Studio needs Android 10 or later and an internet connection. It has no cloud backup. Updating the app keeps your history and your saved keys. Removing the app deletes them.
+OT Studio needs Android 10 or later and an internet connection. It has no cloud backup. Updating the app keeps your history and your saved keys. Removing the app deletes them. Delete on a card removes that one result, and Settings, Image or Video, has Clear image history and Clear video history.
 
 # Full guide
 

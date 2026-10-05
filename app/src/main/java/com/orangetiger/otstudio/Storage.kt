@@ -359,6 +359,28 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 7
         } finally { db.endTransaction() }
     }
 
+    /** Deletes image or video entries ([ids], or every entry of [mode] when null) and returns their private file names. */
+    @Synchronized fun deleteMedia(mode: Mode, ids: List<Long>? = null): List<String> {
+        require(mode != Mode.CHAT)
+        val db = writableDatabase
+        val where = "mode = ?" + if (ids != null) " AND id IN (${ids.joinToString(",") { "?" }})" else ""
+        val args = arrayOf(mode.name) + ids.orEmpty().map { it.toString() }
+        val selected = db.query("entries", arrayOf("id", "local_file"), where, args, null, null, null).use { c -> buildList { while (c.moveToNext()) add(c.getLong(0) to c.getString(1)) } }
+        if (selected.isEmpty()) return emptyList()
+        val idList = selected.joinToString(",") { it.first.toString() }
+        val files = HashSet<String>()
+        selected.forEach { if (it.second.isNotEmpty()) files.add(it.second) }
+        db.query("media_outputs", arrayOf("local_file"), "entry_id IN ($idList)", null, null, null, null).use { c -> while (c.moveToNext()) c.getString(0).takeIf { it.isNotEmpty() }?.let(files::add) }
+        db.beginTransaction()
+        try {
+            db.execSQL("DELETE FROM media_outputs WHERE entry_id IN ($idList)")
+            db.execSQL("DELETE FROM request_inputs WHERE entry_id IN ($idList)")
+            db.execSQL("DELETE FROM entries WHERE id IN ($idList)")
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+        return files.toList()
+    }
+
     /** Standing instructions, kept in this database as plain text. They are not secrets. */
     val memory: MemoryStore = object : MemoryStore {
         override fun lines(): List<MemoryLine> = synchronized(this@History) {

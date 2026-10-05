@@ -11,6 +11,7 @@ Every image and video card carries two rows of buttons. The first row acts on th
 | View (images) | Opens the image full size in a dialog | Checks detail before saving. Tapping the preview does the same. |
 | Play (videos) | Plays the clip in a dialog with play controls | Checks a clip without leaving the app |
 | Save | Copies the file into the remembered save folder | The first Save asks for a folder. Later saves go straight there, so nobody browses from the top of storage each time. A snackbar confirms the folder and offers Change. |
+| Delete | Deletes this card and its private file, after a confirmation. Not shown while a job runs. | Removes failed or unwanted results one at a time. A copy saved with Save stays. |
 | Share | Opens Android's share sheet with the file | Sends a result to another app, such as email or a chat app, without saving a copy first |
 | Edit... (images) | Asks what should change, then sends the image and that instruction to an editing model | Changes one thing, such as a color or an object, and keeps the rest. The result appears as a new card that names the image it came from. |
 | Use as... (images) | Uploads the image and places it in a model input of your choice | Chains work together. One image can become the reference for the next image, or a starting or ending frame for a video. |

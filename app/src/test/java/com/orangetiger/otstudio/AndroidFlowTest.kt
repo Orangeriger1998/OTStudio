@@ -453,4 +453,21 @@ class AndroidFlowTest {
         assertTrue(app.attachedPictures(Mode.IMAGE).isEmpty())
         assertFalse(views(activity.window.decorView).filterIsInstance<Button>().any { it.text.toString() == "Remove picture" })
     }
+
+    @Test fun imageHistoryCanBeClearedOneCardOrAll() {
+        val app = RuntimeEnvironment.getApplication() as StudioApp
+        val keep = app.importPhoto(byteArrayOf(1, 2), "image/jpeg")
+        val gone = app.importPhoto(byteArrayOf(3, 4), "image/png")
+        val media = java.io.File(app.filesDir, "media")
+        val goneFile = java.io.File(media, app.history.entry(gone)!!.localFile)
+        val video = app.history.insert(Mode.VIDEO, "a clip", Rules.resolve(Mode.VIDEO, Rules::defaults) { "synthetic" })
+        app.history.update(video, "failed", "No.")
+        app.selectedImage = gone
+        app.clearMedia(Mode.IMAGE, listOf(gone))
+        assertNull(app.history.entry(gone)); assertFalse(goneFile.exists()); assertNotNull(app.history.entry(keep)); assertNull(app.selectedImage)
+        app.clearMedia(Mode.IMAGE)
+        assertTrue(app.history.list(Mode.IMAGE).isEmpty())
+        // Clearing images leaves videos alone.
+        assertEquals(1, app.history.list(Mode.VIDEO).size)
+    }
 }

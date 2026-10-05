@@ -635,7 +635,12 @@ class MainActivity : AppCompatActivity() {
             if (e.state == "processing") ui.textButton("Cancel") { app.refresh(e, true) }.apply { isEnabled = !busy } else null,
             if (e.state == "processing") ui.textButton("Stop tracking") { confirmStopTracking(e) }.apply { isEnabled = !busy } else null,
             if (e.state in listOf("download", "unavailable")) ui.textButton("Download again", R.drawable.ic_refresh) { app.refresh(e) }.apply { isEnabled = !busy } else null,
-            if (e.state == "download") ui.textButton("Skip download") { app.skipDownload(e) }.apply { isEnabled = !busy } else null
+            if (e.state == "download") ui.textButton("Skip download") { app.skipDownload(e) }.apply { isEnabled = !busy } else null,
+            if (e.state !in listOf("processing", "submitting", "canceling", "download")) ui.textButton("Delete", R.drawable.ic_delete) {
+                MaterialAlertDialogBuilder(this).setTitle("Delete this ${e.mode.title.lowercase()}?").setMessage("The card and its file in OT Studio's private storage are deleted. A copy you saved with Save stays.")
+                    .setPositiveButton("Delete") { _, _ -> try { app.clearMedia(e.mode, listOf(e.id)); renderFeed() } catch (ex: UserError) { showError(ex.message.orEmpty()) } }
+                    .setNegativeButton("Keep", null).show()
+            }.apply { isEnabled = !busy } else null
         ))
     }
 
@@ -712,6 +717,18 @@ class MainActivity : AppCompatActivity() {
         }.apply { contentDescription = "Remove saved ${selected.title.lowercase()} key" })
         content.addView(actions, ui.matchWrap(4))
         content.addView(note, ui.matchWrap(12))
+        if (selected != Mode.CHAT) {
+            val kind = selected.title.lowercase()
+            val history = ui.card(content)
+            val count = app.history.list(selected).size
+            ui.sectionTitle(history, "${selected.title} history", if (count == 0) "No ${kind}s yet." else "$count ${kind}${if (count == 1) "" else "s"} in the ${selected.title} list.")
+            history.addView(ui.danger("Clear $kind history", R.drawable.ic_delete) {
+                MaterialAlertDialogBuilder(this).setTitle("Clear $kind history?")
+                    .setMessage("This deletes every ${kind} card and its file in OT Studio's private storage${if (selected == Mode.IMAGE) ", including photos added from your phone" else ""}. Copies you saved with Save stay where you saved them, and the originals in your phone's gallery are not touched. Chat and memory stay.")
+                    .setPositiveButton("Clear") { _, _ -> try { app.clearMedia(selected); snack("${selected.title} history cleared."); showSettings(selected) } catch (e: UserError) { showError(e.message.orEmpty()) } }
+                    .setNegativeButton("Keep", null).show()
+            }, LinearLayout.LayoutParams(-2, -2))
+        }
         val downloads = ui.card(content)
         ui.sectionTitle(downloads, "Save folder", "Save puts images and videos here. Android remembers the folder, so you don't have to browse from the top each time.")
         downloads.addView(ui.text(savedTree()?.let(::folderName) ?: "Not chosen yet. You'll pick one the first time you tap Save.", Ui.Type.BODY))

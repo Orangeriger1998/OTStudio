@@ -10,6 +10,10 @@ This log lists the main changes from one version to the next. It records what a 
 
 **Any photo format.** The trainer now accepts JPG, PNG, WebP, HEIC, and most other photo files, and converts them itself, so a photo saved under the wrong file type no longer stops it. Photos it cannot use are left out and named with the reason, and the accepted formats show under Choose photos. Choosing again adds photos, and Clear starts over.
 
+## 1.2.10 (October 2026)
+
+**Clear image and video history.** Settings, Image and Video, now have Clear image history and Clear video history, like Clear chat history. Each picture and video card also has Delete. Copies saved with Save stay.
+
 ## 1.2.9 (October 2026)
 
 **A clear word on WAN 2.7 refusals.** WAN 2.7 runs on Alibaba's service, which checks every input picture with a check that cannot be switched off. When it refuses a picture, the card now says so and points to WAN 2.2 fast, which runs on Replicate's own servers with its safety checker under your control.

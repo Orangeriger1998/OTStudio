@@ -178,6 +178,20 @@ class StudioApp : Application() {
         changed()
     }
 
+    /** Deletes image or video entries and their private files: [ids], or every entry of [mode] when null. Saved copies stay. */
+    fun clearMedia(mode: Mode, ids: List<Long>? = null) {
+        if (busy.get()) throw UserError("Wait for the current request to finish.")
+        val pending = history.list(pendingOnly = true).filter { it.mode == mode && (ids == null || it.id in ids) }
+        if (pending.isNotEmpty()) throw UserError("A ${mode.title.lowercase()} job is still running. Wait for it, or cancel it, first.")
+        val folder = File(filesDir, "media")
+        history.deleteMedia(mode, ids).forEach { name ->
+            val file = File(folder, name)
+            if (file.parentFile?.canonicalPath == folder.canonicalPath) file.delete()
+        }
+        selectedImage?.let { id -> if (history.entry(id) == null) selectedImage = null }
+        changed()
+    }
+
     fun isBusy() = busy.get()
     fun stopWaiting() { stopRequested = true; engine.cancel(); transport.cancel(); activeDownload?.disconnect() }
     private fun changed() { main.post { listener?.invoke() } }
