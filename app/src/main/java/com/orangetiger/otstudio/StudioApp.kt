@@ -480,7 +480,7 @@ class StudioApp : Application() {
      * The settings a plan's job would use with [modelId], as the card shows them. A picture to start from or edit
      * is a placeholder here; the real upload happens on Generate.
      */
-    fun planSettings(plan: JobPlan, modelId: String, ratio: String? = null): Pair<ModelSettings, List<String>> {
+    fun planSettings(plan: JobPlan, modelId: String, ratio: String? = null, words: String = ""): Pair<ModelSettings, List<String>> {
         if (plan.action == "expand") return expandSettings(settings.get(Mode.IMAGE), uploadCheck, uploadCheck) to emptyList()
         val mode = if (plan.action == "video") Mode.VIDEO else Mode.IMAGE
         val current = settings.get(mode)
@@ -493,7 +493,7 @@ class StudioApp : Application() {
             plan.action == "image" && modelId == LoraCodec.MODEL -> LoraCodec.matching(loras.list(), plan.prompt)?.let { LoraCodec.apply(chosen, it) } ?: chosen
             else -> chosen
         }
-        return JobBuilder.apply(safetyOff(withPicture), plan)
+        return JobBuilder.apply(safetyOff(withPicture), plan, words)
     }
 
     /**
@@ -511,7 +511,7 @@ class StudioApp : Application() {
         if (plan.action == "edit") return edit(source ?: throw UserError("This edit has no picture."), text, modelId, { mediaBytes(source) }, chat.id)
         if (plan.action == "expand") return expand(source ?: throw UserError("This plan has no picture."), ratio ?: Planner.expandRatio(plan.shape), text, chat.id)
         val mode = if (plan.action == "video") Mode.VIDEO else Mode.IMAGE
-        val (planned, _) = planSettings(plan, modelId)
+        val (planned, _) = planSettings(plan, modelId, words = chat.prompt)
         val resolved = withSpicy(Rules.resolve(mode, { if (it == mode) planned else settings.get(it) }, settings::key))
         ModelOptions.validateForModel(planned.model, planned.schema ?: throw UserError("Load this model's inputs in API CALL first."), planned.options)
         run {

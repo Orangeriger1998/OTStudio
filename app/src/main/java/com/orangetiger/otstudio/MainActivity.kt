@@ -201,6 +201,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun localChat() = mode == Mode.CHAT && app.local.engine == ChatEngine.LOCAL
+
+    /** A crossed-out eye for a model on this phone, a cloud for OpenRouter, so it is always clear where messages go. */
+    private fun privacyBadge(local: Boolean): View = (if (local) ui.pill("Private: runs on this phone", R.color.ot_surface_high, R.color.ot_success)
+        else ui.pill("OpenRouter: your messages go online", R.color.ot_blue_container, R.color.ot_on_blue_container)).apply {
+        setCompoundDrawablesRelativeWithIntrinsicBounds(if (local) R.drawable.ic_private else R.drawable.ic_online, 0, 0, 0)
+        compoundDrawablePadding = dp(6)
+        gravity = Gravity.CENTER_VERTICAL
+        contentDescription = if (local) "Private chat model: your messages stay on this phone" else "Online chat model at OpenRouter: your messages go online"
+    }
     private fun localStatus(): String {
         val m = app.local.selected() ?: return "No model on this phone yet. Download one in Manage models."
         return when (app.localState) {
@@ -237,6 +246,7 @@ class MainActivity : AppCompatActivity() {
         if (localChat()) setupRow.addView(ui.tonal("Models", R.drawable.ic_memory) { drafts[mode] = prompt.text.toString(); showModels() }.apply { contentDescription = "Manage on-device models" })
         else setupRow.addView(ui.tonal("API CALL", R.drawable.ic_tune) { openCallPanel() }.apply { contentDescription = "API CALL: choose models and generation inputs" })
         setup.addView(setupRow)
+        if (mode == Mode.CHAT) setup.addView(privacyBadge(localChat()), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(6) })
         // A saved picture shapes every request on this model, so it is shown here with a way to remove it.
         // One line per picture, each with its own Remove, so one can go and the other stay.
         if (mode != Mode.CHAT) app.attachedPictures(mode).forEach { name ->
@@ -354,6 +364,7 @@ class MainActivity : AppCompatActivity() {
             r.addView(ui.textButton(if (writing || (localChat() && app.localState == "loading")) "Stop" else "Stop waiting", R.drawable.ic_stop_circle) { app.stopWaiting() }); statusArea.addView(r)
         }
         if (app.lastError.isNotEmpty()) ui.card(statusArea, 12, R.color.ot_error_container, 8).addView(ui.text(app.lastError, Ui.Type.BODY, ui.color(R.color.ot_on_error_container)))
+        autoSaveNew()
         feed.removeAllViews()
         if (entries.isEmpty()) emptyState()
         val prompts = entries.associate { it.id to it.prompt }
@@ -564,7 +575,7 @@ class MainActivity : AppCompatActivity() {
         val details = ui.text("", Ui.Type.SMALL, ui.muted)
         fun refresh() {
             try {
-                val (s, notes) = app.planSettings(plan, modelId, cardRatios[e.id])
+                val (s, notes) = app.planSettings(plan, modelId, cardRatios[e.id], e.prompt)
                 title.text = PlainSummary.describe(if (plan.action == "video") Mode.VIDEO else Mode.IMAGE, s.model, s.options)
                 details.text = (listOf("Model: ${s.model}", "Likely cost: ${Prices.estimate(s.model, s.options) ?: "see the model's page at Replicate"}") + notes).joinToString("\n")
             } catch (ex: UserError) { title.text = "This plan cannot run with this model"; details.text = ex.message }
@@ -622,7 +633,7 @@ class MainActivity : AppCompatActivity() {
             card.addView(actionRow(
                 if (e.mode == Mode.IMAGE) ui.textButton("View", R.drawable.ic_visibility) { previewImage(file) } else ui.textButton("Play", R.drawable.ic_play_arrow) { previewVideo(file) },
                 if (e.mode == Mode.VIDEO && e.state == "succeeded") ui.textButton("Make it longer", R.drawable.ic_movie) { makeLonger(e) } else null,
-                ui.textButton("Save", R.drawable.ic_download) { saveMedia(mediaEntry) },
+                ui.textButton(if (prefs.getString(savedKey(mediaEntry, file), null) != null) "Saved" else "Save", R.drawable.ic_download) { saveMedia(mediaEntry) },
                 ui.textButton("Share", R.drawable.ic_share) { shareMedia(mediaEntry) },
                 if (e.mode == Mode.IMAGE && mode == Mode.CHAT) ui.textButton("Talk about this", R.drawable.ic_chat) { app.selectedImage = e.id; renderFeed(); prompt.requestFocus() } else null,
                 if (e.mode == Mode.IMAGE) ui.textButton("Edit...", R.drawable.ic_edit) { editImage(e, file) } else null,
@@ -746,6 +757,10 @@ class MainActivity : AppCompatActivity() {
         val downloads = ui.card(content)
         ui.sectionTitle(downloads, "Save folder", "Save puts images and videos here. Android remembers the folder, so you don't have to browse from the top each time.")
         downloads.addView(ui.text(savedTree()?.let(::folderName) ?: "Not chosen yet. You'll pick one the first time you tap Save.", Ui.Type.BODY))
+        downloads.addView(ui.switch("Save every finished picture and video here automatically", prefs.getBoolean("auto_save", true)).apply {
+            setOnCheckedChangeListener { _, on -> prefs.edit().putBoolean("auto_save", on).apply() }
+        })
+        if (savedTree() == null) downloads.addView(ui.text("Automatic saving starts once you choose a folder.", Ui.Type.SMALL, ui.muted))
         downloads.addView(actionRow(
             ui.outlined("Choose folder", R.drawable.ic_folder_open) { pickFolder { uri -> if (uri != null) { rememberTree(uri); showSettings(selected) } } },
             savedTree()?.let { tree -> ui.textButton("Open folder", R.drawable.ic_open_in_new) { openFolder(tree) } }
@@ -996,7 +1011,7 @@ class MainActivity : AppCompatActivity() {
             if (!listInput) {
                 referenceNote.text = if (references.isEmpty()) "${chosen.title} edits one picture. Seedream 4.5, Qwen Image Edit Plus, FLUX.2, and P-Image Edit also take reference photos." else "${chosen.title} takes one picture, so the ${references.size} reference photo(s) would be left out. Choose another model, or clear them."
             } else {
-                referenceNote.text = if (references.isEmpty()) "You can add up to $takes reference photos, such as an outfit or a place. This picture is image 1, and they become image 2, image 3, and so on." else "This picture is image 1; ${references.indices.joinToString(" and ") { "image ${it + 2}" }} ${if (references.size == 1) "comes" else "come"} from your phone. Name them in your words, for example: dress her in the outfit from image 2."
+                referenceNote.text = if (references.isEmpty()) "You can add up to $takes reference photos, such as an outfit or a place. This picture is @img1, and they become @img2, @img3, and so on." else "This picture is @img1; ${references.indices.joinToString(" and ") { "@img${it + 2}" }} ${if (references.size == 1) "comes" else "come"} from your phone. Name them in your words, for example: dress her in the outfit from @img2. The model reads image 1, image 2."
                 if (references.size < takes) referenceButtons.addView(ui.textButton("Add a reference photo", R.drawable.ic_add_photo_alternate) { pickPhoto { uri -> if (uri != null) { references.add(uri); showReferences() } } })
             }
             if (references.isNotEmpty()) referenceButtons.addView(ui.textButton("Clear references") { references.clear(); showReferences() })
@@ -1233,25 +1248,68 @@ class MainActivity : AppCompatActivity() {
         showError("No app on this phone can open folders directly. Open the Files app and go to ${folderName(tree)}.")
     }
 
-    private fun saveMedia(e: Entry) {
+    private fun savedKey(e: Entry, file: File) = "saved:${e.id}:${file.name}"
+    private fun documentExists(uri: Uri): Boolean = try {
+        contentResolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null)?.use { it.moveToFirst() } == true
+    } catch (_: Exception) { false }
+    private val saving = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    /**
+     * Saves every finished picture and video that is new since automatic saving began, once each. It needs a save
+     * folder; until one is chosen, Save asks for it. Photos added from the phone are not copied back.
+     */
+    private fun autoSaveNew() {
+        if (!prefs.getBoolean("auto_save", true)) return
+        // The history and file checks run on the background thread, never on the screen's thread.
+        io.execute { try { autoSaveScan() } catch (_: Exception) { } }
+    }
+
+    private fun autoSaveScan() {
+        savedTree() ?: return
+        val entries = listOf(Mode.IMAGE, Mode.VIDEO).flatMap { app.history.list(it) }
+        val floor = prefs.getLong("auto_save_from", -1L).let { if (it >= 0) it else (entries.maxOfOrNull { e -> e.id } ?: 0L).also { max -> prefs.edit().putLong("auto_save_from", max).apply() } }
+        val fresh = entries.filter { it.id > floor && it.state == "succeeded" && it.baseUrl != History.PHONE_BASE }
+        if (fresh.isEmpty()) return
+        val outputs = app.history.outputs(fresh.map { it.id })
+        fresh.forEach { e -> outputs[e.id].orEmpty().filter { it.localFile.isNotEmpty() }.forEach { o ->
+            val each = e.copy(localFile = o.localFile)
+            val file = localMedia(each)
+            if (file.exists() && prefs.getString(savedKey(each, file), null) == null) saveMedia(each, quiet = true)
+        } }
+    }
+
+    private fun saveMedia(e: Entry, quiet: Boolean = false) {
         val file = localMedia(e)
-        if (!file.exists()) { showError("The private media file is missing."); return }
-        val tree = savedTree() ?: run { pickFolder { uri -> if (uri != null) { rememberTree(uri); saveMedia(e) } }; return }
+        if (!file.exists()) { if (!quiet) showError("The private media file is missing."); return }
+        val tree = savedTree() ?: run { if (!quiet) pickFolder { uri -> if (uri != null) { rememberTree(uri); saveMedia(e) } }; return }
+        val key = savedKey(e, file)
+        if (!saving.add(key)) return
         io.execute {
             var created: Uri? = null
             try {
+                // A copy saved earlier (by hand or automatically) that is still there is not made again.
+                prefs.getString(key, null)?.let(Uri::parse)?.takeIf(::documentExists)?.let {
+                    if (!quiet) runOnUiThread { alreadySavedSnack(tree) }
+                    return@execute
+                }
                 val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
                 created = DocumentsContract.createDocument(contentResolver, parent, mimeOf(file), "OTStudio-${e.id}-${file.name}") ?: throw UserError("Android could not create the saved file.")
                 contentResolver.openOutputStream(created)?.use { output -> file.inputStream().use { it.copyTo(output) } } ?: throw UserError("Android could not write the saved file.")
-                runOnUiThread { savedSnack(tree) }
+                prefs.edit().putString(key, created.toString()).apply()
+                if (!quiet) runOnUiThread { savedSnack(tree) }
             } catch (ex: Exception) {
                 created?.let { try { DocumentsContract.deleteDocument(contentResolver, it) } catch (_: Exception) { } }
-                runOnUiThread {
+                if (!quiet) runOnUiThread {
                     if (ex is SecurityException) { prefs.edit().remove("save_tree").apply(); showError("OT Studio lost access to the save folder. Tap Save again to choose it.") }
                     else showError((ex as? UserError)?.message ?: "Could not save the media. Check the folder and available storage.")
                 }
-            }
+            } finally { saving.remove(key) }
         }
+    }
+
+    private fun alreadySavedSnack(tree: Uri) {
+        if (isFinishing || isDestroyed) return
+        Snackbar.make(screen, "Already saved in ${folderName(tree)}", Snackbar.LENGTH_LONG).setAction("Open folder") { openFolder(tree) }.show()
     }
     private fun shareMedia(e: Entry) {
         val file = localMedia(e)

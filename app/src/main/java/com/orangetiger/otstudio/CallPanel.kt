@@ -158,7 +158,8 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
             }
             content.addView(ui.text("Inputs", Ui.Type.SUBTITLE).apply { setPadding(dp(4), dp(4), 0, 0) })
             content.addView(ui.text("Each setting starts at the model's default. Change only what you need; Use default puts a setting back.", Ui.Type.SMALL, ui.muted).apply { setPadding(dp(4), 0, 0, dp(8)) })
-            val visible = schema.fields.filter { d -> allSettings || d.required || photoField(d) || d.name in ModelNames.simple }
+            // A setting that does not count with the current choices (Seedream's width without a custom size) is hidden.
+            val visible = schema.fields.filter { d -> (allSettings || d.required || photoField(d) || d.name in ModelNames.simple) && LinkedSettings.active(d, schema, draft.options) }
             visible.forEach { definition -> shown.add(definition.name); option(content, definition) }
             val hidden = schema.fields.size - visible.size
             content.addView(ui.outlined(if (allSettings) "Show fewer settings" else if (hidden > 0) "Show all settings ($hidden more)" else "Show all settings") {
@@ -250,7 +251,10 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
         if (d.choices.isNotEmpty()) {
             val default = InputLabels.defaultChoice(d)
             val items = (if (d.required) emptyList() else listOf(default)) + d.choices
-            val box: MaterialAutoCompleteTextView = ui.dropdown(card, "Choose", items, stored?.value ?: if (d.required) (d.defaultValue ?: d.choices.first()) else default)
+            // Other settings depend on this one (Size decides whether Width and Height count), so a change redraws the panel.
+            val owns = draft.schema?.let { s -> s.fields.any { LinkedSettings.rule(it, s)?.owner == d.name } } == true
+            val box: MaterialAutoCompleteTextView = ui.dropdown(card, "Choose", items, stored?.value ?: if (d.required) (d.defaultValue ?: d.choices.first()) else default,
+                if (owns) { _ -> safely { remember(); render() } } else null)
             box.isEnabled = !waiting
             readValue = { box.text.toString().takeIf { it != default }?.let { ModelOptions.value(d, it) } }
         } else if (d.kind == InputKind.BOOLEAN) {
@@ -266,10 +270,10 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
             val links = stored?.value?.let(PictureList::split).orEmpty()
             if (d.list) {
                 val max = PictureList.max(draft.model)
-                card.addView(ui.text(when (links.size) { 0 -> "No pictures attached. This model takes up to $max."; else -> "${links.size} of up to $max pictures attached. In your words, call them image 1, image 2, and so on." }, Ui.Type.BODY).apply { setPadding(0, dp(4), 0, 0) })
+                card.addView(ui.text(when (links.size) { 0 -> "No pictures attached. This model takes up to $max."; else -> "${links.size} of up to $max pictures attached. In your words, call them @img1, @img2, and so on; the model reads image 1, image 2." }, Ui.Type.BODY).apply { setPadding(0, dp(4), 0, 0) })
                 links.forEachIndexed { index, _ ->
                     val row = ui.row()
-                    row.addView(ui.text("Image ${index + 1}", Ui.Type.BODY), ui.weight())
+                    row.addView(ui.text("@img${index + 1}  (image ${index + 1})", Ui.Type.BODY, ui.orange), ui.weight())
                     row.addView(ui.textButton("Remove") {
                         safely { remember(); val rest = PictureList.remove(stored!!.value, index); draft = draft.copy(options = draft.options.filter { it.name != d.name } + listOfNotNull(rest.takeIf { it.isNotEmpty() }?.let { InputValue(d.name, InputKind.TEXT, it) })); render() }
                     }.apply { isEnabled = !waiting; contentDescription = "Remove image ${index + 1}" })
@@ -311,7 +315,7 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
                     val before = draft.options.firstOrNull { it.name == d.name }?.value
                     val value = if (d.list) PictureList.add(before, url) else url
                     draft = draft.copy(options = draft.options.filter { it.name != d.name } + InputValue(d.name, InputKind.TEXT, value))
-                    notice = if (d.list) "Photo uploaded as image ${PictureList.split(value).size}. Apply to save." else "Photo uploaded and set as ${d.name}. Apply to save."
+                    notice = if (d.list) "Photo uploaded as @img${PictureList.split(value).size}. Apply to save." else "Photo uploaded and set as ${d.name}. Apply to save."
                 } else notice = error ?: "Could not upload the photo."
                 render()
             }

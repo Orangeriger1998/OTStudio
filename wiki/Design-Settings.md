@@ -112,6 +112,10 @@ The Image and Video pages each show how many cards their list holds, with **Clea
 | Current folder | The folder name, or "Not chosen yet" | Shows where Save puts files |
 | Choose folder | Opens Android's folder picker at the current folder | Changes the folder without starting from the top of storage. Android remembers the permission, so the folder works after a restart. |
 
+| Save automatically | A switch, on at first: "Save every finished picture and video here automatically" | Keeps every new result without a tap. It starts once a folder is chosen and covers results made from then on, not older ones. |
+
+Save makes one copy of each result. Tapping Save again, or saving a result that was already saved automatically, makes no second copy; the message says "Already saved in" the folder, with Open folder, and the button reads Saved.
+
 **Open folder** opens the save folder in the phone's file manager. Android lets the user pick which file manager when more than one is installed. The message after each Save offers Open folder and Change as well.
 
 ## About card

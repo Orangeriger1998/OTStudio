@@ -431,6 +431,33 @@ class AndroidFlowTest {
         shadowOf(Looper.getMainLooper()).idle()
     }
 
+    @Test fun seedreamShowsWidthAndHeightOnlyForACustomSize() {
+        val app = RuntimeEnvironment.getApplication() as StudioApp
+        val seed = app.settings.forModel(app.settings.get(Mode.IMAGE), "bytedance/seedream-4.5")
+        app.settings.save(seed.copy(options = seed.options.filter { it.name != "size" }), null)
+        fun titles(): List<String> {
+            val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+            click(activity, "Image"); shadowOf(Looper.getMainLooper()).idle()
+            click(activity, "API CALL"); shadowOf(Looper.getMainLooper()).idle()
+            val panel: Dialog = ShadowDialog.getLatestDialog()
+            // The panel remembers "Show all settings" between openings.
+            views(panel.window!!.decorView).filterIsInstance<Button>().firstOrNull { it.text.toString().startsWith("Show all settings") }?.performClick()
+            shadowOf(Looper.getMainLooper()).idle()
+            return views(panel.window!!.decorView).filterIsInstance<TextView>().map { it.text.toString() }
+        }
+        val standard = titles()
+        assertTrue(standard.contains("Shape")); assertFalse(standard.contains("Width")); assertFalse(standard.contains("Height"))
+        app.settings.save(app.settings.get(Mode.IMAGE).let { s -> s.copy(options = s.options.filter { it.name !in listOf("size", "width", "height", "aspect_ratio") } + InputValue("size", InputKind.TEXT, "custom") + InputValue("width", InputKind.INTEGER, "2048") + InputValue("height", InputKind.INTEGER, "1536")) }, null)
+        val custom = titles()
+        assertTrue(custom.contains("Width")); assertTrue(custom.contains("Height")); assertFalse(custom.contains("Shape"))
+    }
+
+    @Test fun theChatSaysWhetherItsModelIsPrivateOrOnline() {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(views(activity.window.decorView).filterIsInstance<TextView>().any { it.text.toString() == "OpenRouter: your messages go online" })
+    }
+
     @Test fun aSavedSeedreamProfileStillSendsItsPictureAsAList() {
         val app = RuntimeEnvironment.getApplication() as StudioApp
         val seed = app.settings.forModel(app.settings.get(Mode.IMAGE), "bytedance/seedream-4.5")

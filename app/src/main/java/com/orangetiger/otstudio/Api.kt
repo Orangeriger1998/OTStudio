@@ -142,7 +142,7 @@ class ProviderApi(private val transport: Transport) {
         if (s.model == LoraCodec.MODEL && reference != null) return createOnVersion(model, prompt, reference.groupValues[1], reference.groupValues[2], reference.groupValues[3])
         if (ModelCatalog.spicy(s.model)) return createSpicy(model, prompt ?: throw UserError("SpicyAPI needs a prompt."))
         val input = JSONObject()
-        if (prompt != null) input.put("prompt", Rules.prompt(prompt))
+        if (prompt != null) input.put("prompt", PictureRefs.rewrite(Rules.prompt(prompt), s.schema?.let { PictureRefs.count(it, s.options) } ?: 0))
         ModelOptions.validateForModel(s.model, s.schema ?: throw UserError("Load model inputs first."), s.options)
         SchemaCodec.append(input, s.schema ?: throw UserError("Load this model's inputs in API CALL before generating."), s.options)
         val body = JSONObject().put("input", input)
@@ -169,7 +169,7 @@ class ProviderApi(private val transport: Transport) {
         }
         ModelOptions.validate(schema, options, true)
         val input = JSONObject()
-        if (prompt != null) input.put("prompt", Rules.prompt(prompt))
+        if (prompt != null) input.put("prompt", PictureRefs.rewrite(Rules.prompt(prompt), PictureRefs.count(schema, options)))
         SchemaCodec.append(input, schema, options)
         val body = JSONObject().put("version", version).put("input", input)
         return prediction(checked(transport.request("POST", "$base/predictions", model.key, body.toString())))
@@ -201,7 +201,7 @@ class ProviderApi(private val transport: Transport) {
         val schema = s.schema ?: throw UserError("Load this model's inputs first.")
         if (schema.fields.any { it.uri }) throw UserError("SpicyAPI models in OT Studio take words only.")
         ModelOptions.validate(schema, s.options, true)
-        val body = JSONObject().put("model", s.model.removePrefix("spicyapi/")).put("prompt", text)
+        val body = JSONObject().put("model", s.model.removePrefix("spicyapi/")).put("prompt", PictureRefs.rewrite(text, 0))
         SchemaCodec.append(body, schema, s.options)
         val base = Rules.SPICY_BASE
         return if (s.mode == Mode.IMAGE) {

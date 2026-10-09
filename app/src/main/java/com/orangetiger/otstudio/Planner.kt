@@ -196,17 +196,34 @@ object JobBuilder {
         "landscape" to listOf("16:9", "3:2", "4:3", "5:4")
     )
 
-    fun apply(settings: ModelSettings, plan: JobPlan): Pair<ModelSettings, List<String>> {
+    /**
+     * [words] is the user's own message. A ratio typed there ("4:3") and settings named there ("2 pictures", "safety off",
+     * "seed 42") are read from it, never from the chat model, and checked against this model's real settings.
+     */
+    fun apply(settings: ModelSettings, plan: JobPlan, words: String = ""): Pair<ModelSettings, List<String>> {
         val schema = settings.schema ?: return settings to listOf("Load this model's inputs in API CALL first.")
         val notes = ArrayList<String>()
+        val shown = ArrayList<String>()
         var options = settings.options
         fun set(name: String, value: String) {
             val def = schema.fields.firstOrNull { it.name == name } ?: return
             val v = try { ModelOptions.value(def, value) } catch (_: UserError) { return }
             options = options.filter { it.name != name } + v
         }
+        val typed = Ratios.fromText(words)
+        if (typed != null && plan.action != "edit" && plan.action != "expand") {
+            val aspect = schema.fields.firstOrNull { it.name == "aspect_ratio" && it.choices.isNotEmpty() }
+            val size = schema.fields.firstOrNull { it.name == "size" && it.choices.isNotEmpty() }
+            val pick = aspect?.let { a -> a.choices.firstOrNull { it == typed } ?: Ratios.nearest(typed, a.choices) }
+            val sized = if (pick == null) size?.let { Ratios.nearest(typed, it.choices) } else null
+            when {
+                pick != null -> { set("aspect_ratio", pick); shown.add(if (pick == typed) "Shape $pick" else "Shape $pick (the closest this model offers to $typed)") }
+                sized != null -> { set("size", sized); shown.add("Size ${sized.replace("*", " by ")}") }
+                else -> notes.add("This model has no shape setting, so it chooses its own shape.")
+            }
+        }
         // An edit keeps the picture's own shape; chat models sometimes add a shape nobody asked for.
-        if (plan.shape != "default" && plan.action != "edit") {
+        if (typed == null && plan.shape != "default" && plan.action != "edit") {
             val aspect = schema.fields.firstOrNull { it.name == "aspect_ratio" }
             val pick = preferred[plan.shape]?.firstOrNull { aspect != null && it in aspect.choices }
             if (pick != null) set("aspect_ratio", pick) else notes.add("This model has no ${plan.shape} shape, so it keeps its own.")
@@ -220,7 +237,14 @@ object JobBuilder {
                 else -> notes.add("This model sets its own length.")
             }
         }
-        return settings.copy(options = options) to notes
+        if (words.isNotBlank()) {
+            val found = SettingWords.extract(words, schema.fields)
+            found.values.forEach { v -> options = options.filter { it.name != v.name } + v }
+            shown.addAll(found.shown)
+            if (found.missing.isNotEmpty()) notes.add("Not on this model: ${found.missing.joinToString()}.")
+            if (found.problems.isNotEmpty()) notes.add("Left at the model default: ${found.problems.joinToString("; ")}.")
+        }
+        return settings.copy(options = options) to (if (shown.isNotEmpty()) listOf("Settings: ${shown.joinToString(" \u00b7 ")}.") else emptyList<String>()) + notes
     }
 }
 

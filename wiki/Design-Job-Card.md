@@ -20,11 +20,15 @@ The chat model never picks a provider model, never writes a web address, and nev
 | Picture line | "Edits the picture:" or "Starts from the picture:" with that picture's prompt | Shows which picture "that one" became. The app chose it, not the model. |
 | Prompt | The exact text the media model receives, in an editable field | The chat model helps but never decides. The user can fix any word before paying. |
 | Model | A dropdown of models that can do this job, starting with the user's current one | An edit lists editing models. A video from a picture lists only models that start from a frame. |
-| Details | The model ID, the likely cost, and notes on dropped wishes | Each Generate is a paid request, so the price shows first |
+| Details | The model ID, the likely cost, a Settings line, and notes | Each Generate is a paid request, so the price shows first. The Settings line lists every setting read from the user's own message, such as "Settings: Shape 4:3 · Number of pictures 2 · Safety checker off.". Notes name settings the model does not have ("Not on this model: Sound.") and values left at the model's default, with the reason. |
 | Generate | Starts the job | The only way a plan turns into a paid request. Each plan runs once. |
 | Cancel | Closes the plan | Leaves the line "Plan canceled. Nothing was sent." in the chat |
 
 After Generate, the result card appears in place of the job card, under the plan, with the usual [output actions](Design-Output-Actions.md). The same result also appears in the Image or Video feed.
+
+## Settings from the user's words
+
+The chat model never sets a model's settings. The app reads them from the user's own message and checks each one against the chosen model: a shape typed as a ratio (4:3, 16x9, 3 by 2, with a clock time such as "10:30 pm" ignored), the number of pictures, the length, sound, resolution or size, safety, seed, steps, guidance, file type and quality, style, "negative prompt:", LoRA strength, fast mode, and any setting by its own name or label, such as "prompt strength 0.7". A model that counts frames, such as Wan 2.2, gets the length as frames. A model without the exact shape gets its closest one, and the Settings line says so.
 
 ## When no plan comes back
 

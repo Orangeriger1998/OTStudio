@@ -44,8 +44,9 @@ object SchemaCodec {
 
     fun append(target: JSONObject, schema: InputSchema, values: List<InputValue>) {
         ModelOptions.validate(schema, values, true)
-        // A checked but empty optional text field means "no value", the same as unchecked.
-        values.filterNot { it.kind == InputKind.TEXT && it.value.isBlank() }.forEach { v -> target.put(v.name, when (v.kind) {
+        // A checked but empty optional text field means "no value", the same as unchecked. A setting that does not
+        // count with the other choices (Seedream's width without a custom size) is left out.
+        LinkedSettings.keep(schema, values).filterNot { it.kind == InputKind.TEXT && it.value.isBlank() }.forEach { v -> target.put(v.name, when (v.kind) {
             InputKind.BOOLEAN -> v.value.toBooleanStrict()
             InputKind.INTEGER -> v.value.toLong()
             InputKind.NUMBER -> v.value.toDouble()

@@ -4,6 +4,18 @@
 
 This log lists the main changes from one version to the next. It records what a user would notice, not every code change.
 
+## 1.7.0 (October 2026)
+
+**Settings from your own words.** In Chat, settings you name in your message go into the job card's request, checked against the model: a shape such as 4:3, "2 pictures", "10 seconds", "with sound", "1080p", "safety off", "seed 42", "30 steps", "as PNG", "anime style", "negative prompt: blurry", or any setting by its name, such as "prompt strength 0.7". The card lists every setting it will send, names the ones the model does not have, and says when a value stays at the model's default. A shape typed as a ratio no longer stays in the prompt.
+
+**Picture labels.** Pictures are called @img1, @img2, and so on, in API CALL and in Edit.... Write "the smile from @img1 on the woman in @img2", and the model receives "image 1" and "image 2". A label with no picture stops the request before anything is sent. Your own wording stays on the card.
+
+**Settings that belong together.** For Seedream 4.5, Width and Height appear only when Size is custom, and Shape only when it is not. A setting that does not apply is never sent.
+
+**Saving.** Save no longer makes a second copy of a result that is already in your folder; the button reads Saved, and a tap shows the folder. A new switch in Settings saves every finished picture and video to your save folder automatically.
+
+**Private or online.** The Chat screen shows where your messages go: a crossed-out eye with "Private: runs on this phone", or a cloud with "OpenRouter: your messages go online".
+
 ## LoRA Trainer update (October 2026)
 
 **Real progress.** A bar at the bottom of the window shows how far the training is, from Replicate's own step count, with the time so far and an estimate of the time left. A line there says that closing the window does not stop the training. The rest of the window scrolls, so the bar stays in view.

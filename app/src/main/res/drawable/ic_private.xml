@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An eye with a line through it: the chat model runs on this phone, so nothing is seen online. Drawn for OT Studio. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:strokeColor="#8CD5A5"
+      android:strokeWidth="2"
+      android:strokeLineCap="round"
+      android:strokeLineJoin="round"
+      android:fillColor="#00000000"
+      android:pathData="M2,12C4.6,7.8 8,5.7 12,5.7S19.4,7.8 22,12C19.4,16.2 16,18.3 12,18.3S4.6,16.2 2,12Z" />
+  <path
+      android:strokeColor="#8CD5A5"
+      android:strokeWidth="2"
+      android:fillColor="#00000000"
+      android:pathData="M12,9A3,3 0,1 1,12 15A3,3 0,1 1,12 9Z" />
+  <path
+      android:strokeColor="#8CD5A5"
+      android:strokeWidth="2"
+      android:strokeLineCap="round"
+      android:pathData="M4,20L20,4" />
+</vector>
