@@ -178,6 +178,8 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 7
         /** The base URL and model label of a photo the user added from the phone. It has no provider job. */
         const val PHONE_BASE = "phone"
         const val PHONE_MODEL = "Photo from this phone"
+        /** The output link of a picture that came inside the answer. There is nothing to download again. */
+        const val INLINE_URL = "inline:answer"
     }
     /**
      * When false, new chat turns live only in this list and vanish when the app process ends.
@@ -308,6 +310,19 @@ class History(context: Context) : SQLiteOpenHelper(context, "studio.db", null, 7
             db.delete("media_outputs", "entry_id = ?", arrayOf(id.toString()))
             urls.forEachIndexed { index, url -> db.insertOrThrow("media_outputs", null, ContentValues().apply { put("entry_id", id); put("position", index); put("url", Rules.outputUrl(url)) }) }
             update(id, "download", "Generated. Saving local copies...", Rules.remoteId(prediction.id), urls.first())
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    /** Pictures that came inside the provider's answer: already saved as [files], so nothing is downloaded. */
+    @Synchronized fun completeInline(id: Long, remoteId: String, files: List<String>) {
+        if (files.isEmpty() || files.size > 4) throw UserError("Unsupported output count.")
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("media_outputs", "entry_id = ?", arrayOf(id.toString()))
+            files.forEachIndexed { index, file -> db.insertOrThrow("media_outputs", null, ContentValues().apply { put("entry_id", id); put("position", index); put("url", INLINE_URL); put("local_file", file) }) }
+            update(id, "succeeded", "${files.size} output(s) ready to preview or save.", Rules.remoteId(remoteId), "", files.first())
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
     }

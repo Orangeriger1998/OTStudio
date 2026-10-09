@@ -120,7 +120,9 @@ class ModelOptionsTest {
     }
     @Test fun startingAndEndingFramesSelectOnlyImageToVideoModels() {
         val matches = ModelCatalog.presets.filter { ModelOptions.supports(it, setOf("Starting frame", "Ending frame"), "720p") }
-        assertEquals(setOf("wan-video/wan-2.2-i2v-fast", "wan-video/wan-2.7-i2v"), matches.map { it.model }.toSet())
+        // Every OpenRouter video model at 720p takes a starting and an ending picture too.
+        assertEquals(setOf("wan-video/wan-2.2-i2v-fast", "wan-video/wan-2.7-i2v", "openrouter/alibaba/wan-2.7", "openrouter/kwaivgi/kling-v3.0-pro",
+            "openrouter/bytedance/seedance-1-5-pro", "openrouter/google/veo-3.1-lite"), matches.map { it.model }.toSet())
     }
     @Test fun missingOrConflictingStartingInputsNeverDispatch() {
         var calls = 0

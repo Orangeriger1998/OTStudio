@@ -18,7 +18,9 @@ data class ModelSettings(
 
 data class ResolvedModel(val settings: ModelSettings, val credentialMode: Mode, val key: String)
 data class Turn(val role: String, val content: String)
-data class Prediction(val id: String, val state: String, val outputUrls: List<String>, val failed: Boolean, val problem: String = "")
+data class Prediction(val id: String, val state: String, val outputUrls: List<String>, val failed: Boolean, val problem: String = "",
+    /** Pictures that came inside the answer itself (OpenRouter), saved without a download. */
+    val inline: List<ByteArray> = emptyList())
 data class Entry(
     val id: Long, val mode: Mode, val prompt: String, val response: String,
     val state: String, val model: String, val baseUrl: String, val credentialMode: Mode,
@@ -48,6 +50,7 @@ object Rules {
     val UPLOAD_MIMES = setOf("image/jpeg", "image/png", "image/webp")
     private val modelId = Regex("[A-Za-z0-9_.:/+-]{1,180}")
     private val replicateId = Regex("[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+")
+    private val openRouterId = Regex("openrouter/[a-z0-9-]+/[a-z0-9._-]+")
     private val predictionId = Regex("[A-Za-z0-9_-]{1,160}")
 
     fun defaults(mode: Mode): ModelSettings = when (mode) {
@@ -82,7 +85,7 @@ object Rules {
         if (!modelId.matches(s.model) || s.model.contains("..")) throw UserError("Enter a model ID using letters, numbers, slashes, dashes, periods, colons, or underscores.")
         if (s.mode == Mode.CHAT && s.protocol != Protocol.CHAT_COMPLETIONS) throw UserError("Text chat requires the Chat Completions protocol.")
         if (s.mode != Mode.CHAT && s.protocol != Protocol.REPLICATE) throw UserError("This build supports the Replicate protocol for image and video generation.")
-        if (s.protocol == Protocol.REPLICATE && !replicateId.matches(s.model)) throw UserError("Use an official Replicate model ID in owner/model format. Versioned community models need another adapter.")
+        if (s.protocol == Protocol.REPLICATE && !replicateId.matches(s.model) && !(s.mode != Mode.CHAT && openRouterId.matches(s.model))) throw UserError("Use an official Replicate model ID in owner/model format. Versioned community models need another adapter.")
         if (s.mode == Mode.CHAT && s.keySource != KeySource.OWN) throw UserError("The text LLM needs its own API key.")
         if (s.mode != Mode.VIDEO && s.keySource == KeySource.IMAGE) throw UserError("Only video can reuse the image API key.")
         if (s.schema != null) ModelOptions.validate(s.schema, s.options)
@@ -134,23 +137,27 @@ object Rules {
     /** SpicyAPI serves finished pictures and videos from this host. */
     private const val SPICY_CDN = "cdn.spicyapi.com"
     const val SPICY_BASE = "https://api.spicyapi.com/v1"
+    /** OpenRouter serves finished videos from its own API host, to the same key that made them. */
+    private const val OPENROUTER_HOST = "openrouter.ai"
     private const val REPLICATE_R2_OUTPUTS = "ai-gateway-outputs.0d37909e38d3e99c29fa2cd343ac421a.r2.cloudflarestorage.com"
 
     fun outputUrl(url: String): String {
         val uri = try { URI(url) } catch (_: Exception) { throw UserError("The provider returned an invalid media URL.") }
         val host = uri.host?.lowercase().orEmpty()
-        if (uri.scheme != "https" || uri.userInfo != null || (!replicateDelivery(host) && host != REPLICATE_R2_OUTPUTS && host != SPICY_CDN) || (uri.port != -1 && uri.port != 443)) {
+        if (uri.scheme != "https" || uri.userInfo != null || (!replicateDelivery(host) && host != REPLICATE_R2_OUTPUTS && host != SPICY_CDN && host != OPENROUTER_HOST) || (uri.port != -1 && uri.port != 443)) {
             // Naming the scheme and host (never the full URL or its query) makes a provider change diagnosable.
             throw UserError("Media must be hosted on Replicate's HTTPS delivery service (received ${uri.scheme ?: "no scheme"}://${host.ifEmpty { "no host" }.take(80)}${if (uri.port != -1) ":${uri.port}" else ""}). A different delivery host needs an adapter update.")
         }
         return url
     }
 
-    // The API key may follow a 401/403 only to replicate.delivery. Presigned storage links answer 403 when they
-    // expire, and the key must never be sent to a storage host.
+    // The API key may follow a 401/403 only to replicate.delivery, or from OpenRouter's API to OpenRouter's own host.
+    // Presigned storage links answer 403 when they expire, and the key must never be sent to a storage host.
     fun authorizeDelivery(baseUrl: String, rawUrl: String): Boolean {
         outputUrl(rawUrl)
-        return origin(baseUrl) == "https://api.replicate.com:443" && replicateDelivery(URI(rawUrl).host.lowercase())
+        val host = URI(rawUrl).host.lowercase()
+        return (origin(baseUrl) == "https://api.replicate.com:443" && replicateDelivery(host)) ||
+            (origin(baseUrl) == origin(OpenRouterMedia.BASE) && host == OPENROUTER_HOST)
     }
 
     fun afterProcessRestart(state: String, id: String): String = when {

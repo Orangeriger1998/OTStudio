@@ -114,6 +114,25 @@ Choose photo, Use as..., and Upscale 2x upload an image to POST `/v1/files` as m
 
 Upscale 2x runs `nightmareai/real-esrgan` with `scale` 2 and no prompt. That model stays out of the model lists because it takes an image instead of a prompt.
 
+## OpenRouter pictures and videos
+
+Owner decision, 2026-10-09, matching OT Studio for Windows: eight OpenRouter models appear in the Image and Video lists under the `openrouter/` prefix. They run at `https://openrouter.ai/api/v1` with the key saved for Chat, and only while Chat's address is OpenRouter's. Settings and prices come from OpenRouter's model lists, checked 2026-10-09.
+
+| Model | Mode | Settings | Price |
+|---|---|---|---|
+| `bytedance-seed/seedream-4.5` | Image | `aspect_ratio`, `resolution` 1K/2K/4K, `n` 1 to 4, `seed`, up to 14 references | $0.04 per picture |
+| `google/gemini-2.5-flash-image` | Image | `aspect_ratio`, up to 3 references | about $0.039 per picture (tokens) |
+| `black-forest-labs/flux.2-pro` | Image | `aspect_ratio`, `seed`, up to 8 references | $0.03 per megapixel |
+| `qwen/qwen-image-3` | Image | `aspect_ratio`, `resolution` 1K/2K, `n` 1 to 4, `seed`, up to 4 references | $0.03 per picture |
+| `alibaba/wan-2.7` | Video | 2 to 10 seconds, 720p/1080p, five shapes, sound, `seed`, first and last frame | $0.10 per second |
+| `kwaivgi/kling-v3.0-pro` | Video | 3 to 15 seconds, 720p, three shapes, sound, first and last frame | $0.112 per second, $0.168 with sound |
+| `bytedance/seedance-1-5-pro` | Video | 4 to 12 seconds, 480p to 1080p, seven shapes, sound, `seed`, first and last frame | tokens |
+| `google/veo-3.1-lite` | Video | 4, 6, or 8 seconds, 720p/1080p, 16:9 or 9:16, sound, `seed`, first and last frame | $0.03 to $0.08 per second |
+
+Pictures: `POST /images` with `model`, `prompt`, the settings, and `input_references` as `[{type: "image_url", image_url: {url}}]`. The answer carries the pictures themselves in `data[].b64_json`; the app accepts up to 64 MB and keeps only PNG, JPG, or WebP files. Videos: `POST /videos` with `frame_images` entries that add `frame_type` `first_frame` or `last_frame`. It answers 202 with a task; the app checks `GET /videos/{id}` about every 30 seconds (`pending`, `in_progress`, `completed` with `unsigned_urls`, `failed`, `cancelled`, `expired`). Tasks cannot be canceled from the app. Finished videos download from openrouter.ai, and the key may follow only to that host.
+
+Photos go inside the request as `data:image/jpeg;base64,` addresses, redrawn upright at up to 2048 pixels. OpenRouter cannot open Replicate's private upload links, so a Replicate upload is refused for these models.
+
 ## SpicyAPI (text only)
 
 Owner decision, 2026-10-05: four SpicyAPI models are offered, all working from words alone. They appear in the Image and Video model lists under the `spicyapi/` prefix.

@@ -101,6 +101,10 @@ The card refuses to reuse a key across different provider addresses, because eac
 
 On the Image and Video pages. It holds the optional SpicyAPI key, which starts with `sk-spicy-`, with Save key and Remove key. The key has its own encrypted slot, so it never replaces the Replicate key, and it goes only to api.spicyapi.com. With a key saved, SpicyAPI's four text-only models in the model lists can generate: Adult picture from words (Spicy Image 1 and Spicy Image 1 Pro) and Adult video from words (Spicy Video 1 and Spicy Cinema 1). They take no photo.
 
+## OpenRouter card
+
+On the Image and Video pages, below the SpicyAPI card. It names the OpenRouter models in that list and explains that they use the OpenRouter key saved for Chat, which goes only to openrouter.ai. An orange line says whether they are ready: "Ready: your OpenRouter key is saved.", a request to save the key under Chat, or a note that Chat uses another address. The card has no key field of its own, so one OpenRouter key serves chat, pictures, and video.
+
 ## Image history and Video history cards
 
 The Image and Video pages each show how many cards their list holds, with **Clear image history** or **Clear video history**. After a confirmation, every card of that kind and its file in private storage are deleted, including photos added from the phone. Copies saved with Save, the originals in the phone's gallery, chat, and memory all stay. A job that is still running must finish or be canceled first.

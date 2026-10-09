@@ -16,6 +16,10 @@ Memory instructions are stored as plain text in the app's private database. They
 
 Save chat history is on by default. When it is off, new chat messages live only in the app's memory and vanish when the app closes, and the processed conversation is not kept either. Images and videos are still saved. Clear chat history deletes every chat message on the phone.
 
+## OpenRouter pictures and videos
+
+When an Image or Video model from OpenRouter is chosen, the prompt, the model's listed settings, and any picture chosen for it go to openrouter.ai with the OpenRouter key saved for Chat. A picture is redrawn as a new JPEG before it leaves, so its location and camera details stay behind. Nothing is uploaded to Replicate for these models. Finished pictures arrive inside OpenRouter's answer, and finished videos download from openrouter.ai; both are stored like any other result.
+
 ## SpicyAPI
 
 When an Image or Video model from SpicyAPI is chosen, the prompt and that model's listed settings go to api.spicyapi.com with the SpicyAPI key. No photo, saved picture, or LoRA is ever sent there; the app offers only SpicyAPI's text-only models. Finished pictures and videos come back from cdn.spicyapi.com and are stored like any other result. The SpicyAPI key has its own encrypted slot, bound to SpicyAPI's address.
@@ -24,7 +28,7 @@ When an Image or Video model from SpicyAPI is chosen, the prompt and that model'
 
 The app encrypts each key with AES-GCM under a key held in the Android Keystore. Keys never appear in the source code, the APK, the logs, or Android backups. Release builds block screenshots of Settings. Each key is bound to the provider address it was saved with, and the app refuses to send it anywhere else.
 
-Downloads start without a key. Only when Replicate's own delivery host answers 401 or 403 does the app retry with the Replicate key. It never sends a key to a storage host such as Cloudflare R2. A lost or unlocked phone sits outside this protection, as it would for any app.
+Downloads start without a key. Only when Replicate's own delivery host answers 401 or 403 does the app retry with the Replicate key, and only when openrouter.ai answers that way for an OpenRouter video does it retry with the OpenRouter key. It never sends a key to a storage host such as Cloudflare R2. A lost or unlocked phone sits outside this protection, as it would for any app.
 
 ## What stays on the phone
 

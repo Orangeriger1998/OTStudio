@@ -52,6 +52,8 @@ OpenRouter runs the chat models. Create an account at openrouter.ai, then buy cr
 
 For images and video you need Replicate. Sign in at replicate.com with a GitHub account. Replicate bills in advance, so add a payment method and buy credit on the Billing page first. Your API token sits on the API tokens page under your account. It starts with r8_.
 
+Your OpenRouter key also makes pictures and videos. The Image list offers Seedream 4.5, Nano Banana, FLUX.2 pro, and Qwen Image 3 on OpenRouter, and the Video list offers Wan 2.7, Kling v3.0 Pro, Seedance 1.5 Pro, and Veo 3.1 Lite. They need Chat set to OpenRouter with its key saved. A photo you choose for them stays on the phone and goes inside each request instead of being uploaded to Replicate.
+
 SpicyAPI is optional. It adds four adult models that work from words only: Spicy Image 1 and Spicy Image 1 Pro for pictures, and Spicy Video 1 and Spicy Cinema 1 for video. Create a key in your SpicyAPI dashboard and paste it in Settings, under Image or Video, in the SpicyAPI card. It starts with sk-spicy-. These models never take a photo, and SpicyAPI refuses photos of real people.
 
 # What it costs

@@ -4,6 +4,12 @@
 
 This log lists the main changes from one version to the next. It records what a user would notice, not every code change.
 
+## 1.8.0 (October 2026)
+
+**OpenRouter pictures and videos.** The Image list adds Seedream 4.5, Nano Banana, FLUX.2 pro, and Qwen Image 3 on OpenRouter. The Video list adds Wan 2.7, Kling v3.0 Pro, Seedance 1.5 Pro, and Veo 3.1 Lite on OpenRouter, each with a starting and an ending picture, a length, a resolution, a shape, and sound. They use the OpenRouter key you saved for Chat, so one account covers chat, pictures, and video. The job card shows the likely cost, which follows the length, the resolution, and sound.
+
+**Photos stay on the phone.** A photo chosen for an OpenRouter model is not uploaded anywhere first. It joins your Image feed and travels inside each request, redrawn upright at up to 2048 pixels, which also leaves out its location and camera details. Name several reference pictures @img1, @img2 in your words, as with the other models.
+
 ## 1.7.0 (October 2026)
 
 **Settings from your own words.** In Chat, settings you name in your message go into the job card's request, checked against the model: a shape such as 4:3, "2 pictures", "10 seconds", "with sound", "1080p", "safety off", "seed 42", "30 steps", "as PNG", "anime style", "negative prompt: blurry", or any setting by its name, such as "prompt strength 0.7". The card lists every setting it will send, names the ones the model does not have, and says when a value stays at the model's default. A shape typed as a ratio no longer stays in the prompt.

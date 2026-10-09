@@ -26,7 +26,7 @@ object PictureList {
     fun remove(value: String, index: Int): String = join(split(value).filterIndexed { i, _ -> i != index })
 
     /** How many pictures a model's list input takes, from Replicate's model pages (2026-10-05). */
-    fun max(model: String): Int = when (model) {
+    fun max(model: String): Int = OpenRouterMedia.maxPictures(model) ?: when (model) {
         "bytedance/seedream-4.5" -> 14
         "black-forest-labs/flux-2-dev", "black-forest-labs/flux-2-klein-9b", "black-forest-labs/flux-2-klein-4b" -> 5
         else -> 3
@@ -52,6 +52,9 @@ object ModelOptions {
     fun validateForModel(model: String, schema: InputSchema, values: List<InputValue>) {
         validate(schema, values, true)
         fun has(name: String) = values.any { it.name == name && it.value.isNotBlank() }
+        // A photo kept on the phone goes to OpenRouter inside the request. Replicate models need an uploaded copy.
+        if (!OpenRouterMedia.isModel(model) && values.any { v -> schema.fields.any { it.name == v.name && it.uri } && PictureList.split(v.value).any { it.startsWith("phone:") } })
+            throw UserError("A photo chosen for an OpenRouter model cannot go to this model. Choose the photo again in API CALL.")
         schema.fields.filter { it.list && it.uri }.forEach { d ->
             val count = values.firstOrNull { it.name == d.name }?.value?.let(PictureList::split)?.size ?: 0
             if (count > PictureList.max(model)) throw UserError("This model takes at most ${PictureList.max(model)} pictures.")
@@ -81,6 +84,7 @@ object ModelOptions {
             val links = if (def.list) PictureList.split(v) else listOf(v)
             if (!def.list && '\n' in v.trim()) throw UserError("${def.name}: this input takes one picture.")
             links.forEach { link ->
+                if (OpenRouterMedia.PHONE_PICTURE.matches(link)) return@forEach
                 val u = try { URI(link) } catch (_: Exception) { throw UserError("${def.name}: enter an HTTPS media URL.") }
                 if (u.scheme != "https" || u.host.isNullOrBlank() || u.userInfo != null) throw UserError("${def.name}: enter an HTTPS media URL without embedded credentials.")
             }
@@ -126,7 +130,7 @@ object ModelOptions {
             "Frame rate" -> names.any { it in setOf("frames_per_second", "frame_per_second", "fps") }
             "Fast generation" -> "fast_mode" in names || "go_fast" in names
             "LoRA" -> names.any { it.startsWith("lora_weights") }
-            "Image guidance" -> names.any { it in setOf("image", "image_prompt", "start_image", "first_frame_image", "first_frame", "input_image", "input_images", "images", "image_input") }
+            "Image guidance" -> names.any { it in setOf("image", "image_prompt", "start_image", "first_frame_image", "first_frame", "input_image", "input_images", "images", "image_input", "input_references") }
             "Audio input" -> names.any { it in setOf("audio", "audio_url") }
             "Negative prompt" -> "negative_prompt" in names
             "Seed" -> "seed" in names
@@ -307,7 +311,7 @@ object ModelCatalog {
     )
     fun spicy(model: String) = model.startsWith("spicyapi/")
 
-    val presets: List<ModelPreset> = basePresets + editPresets + spicyPresets
+    val presets: List<ModelPreset> = basePresets + editPresets + spicyPresets + OpenRouterMedia.presets
     fun find(mode: Mode, model: String): ModelPreset? = presets.firstOrNull { it.mode == mode && it.model == model }
         ?: listOf(upscaler, expander).firstOrNull { mode == it.mode && model == it.model }
 
@@ -345,7 +349,8 @@ object InputLabels {
         "start_image" to "Starting picture", "first_frame_image" to "Starting picture", "first_clip" to "Clip to continue",
         "frames_per_second" to "Frames per second", "fps" to "Frames per second", "num_frames" to "Length in frames (81 is 5 s, 121 is 7.5 s)",
         "safety_tolerance" to "Safety tolerance", "size" to "Size", "width" to "Width", "height" to "Height",
-        "n" to "Number of pictures", "style" to "Style", "enhance_prompt" to "Plan the shot first"
+        "n" to "Number of pictures", "style" to "Style", "enhance_prompt" to "Plan the shot first",
+        "input_references" to "Pictures", "generate_audio" to "Sound"
     )
 
     fun title(name: String): String = names[name] ?: name.replace('_', ' ').trim().replaceFirstChar { it.uppercase() }
@@ -389,10 +394,10 @@ object ModelNames {
         "spicyapi/spicy-video-1" to "Adult video from words (Spicy Video 1), from 20 cents a second",
         "spicyapi/spicy-cinema-1" to "Adult video from words, cinematic (Spicy Cinema 1), from 14 cents a second"
     )
-    fun title(model: String): String = names[model] ?: model
+    fun title(model: String): String = names[model] ?: OpenRouterMedia.titles[model] ?: model
 
     /** The settings the simple view shows: the ones most people change. Pictures and required inputs always show. */
-    val simple = setOf("aspect_ratio", "num_outputs", "duration", "num_frames", "resolution", "disable_safety_checker", "size", "n", "style")
+    val simple = setOf("aspect_ratio", "num_outputs", "duration", "num_frames", "resolution", "disable_safety_checker", "size", "n", "style", "generate_audio")
 }
 
 /** The shapes Expand offers, with plain names. The first is the usual choice. */
@@ -450,7 +455,7 @@ data class EditModel(val model: String, val title: String, val imageField: Strin
 
 /** Where a photo can be used: the target mode, the model inputs that accept it, and a model to switch to if needed. */
 enum class MediaRole(val title: String, val mode: Mode, val fields: List<String>, val fallbackModel: String) {
-    REFERENCE("Reference for the next image", Mode.IMAGE, listOf("image", "image_prompt", "input_image", "input_images", "images", "image_input"), "black-forest-labs/flux-dev"),
+    REFERENCE("Reference for the next image", Mode.IMAGE, listOf("image", "image_prompt", "input_image", "input_images", "images", "image_input", "input_references"), "black-forest-labs/flux-dev"),
     START_FRAME("Starting frame for a video", Mode.VIDEO, listOf("first_frame", "image", "start_image", "first_frame_image"), "wan-video/wan-2.7-i2v"),
     END_FRAME("Ending frame for a video", Mode.VIDEO, listOf("last_frame", "last_image", "end_image"), "wan-video/wan-2.7-i2v");
 

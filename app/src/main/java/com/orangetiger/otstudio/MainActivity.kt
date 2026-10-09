@@ -89,10 +89,14 @@ class MainActivity : AppCompatActivity() {
     private val folderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> pendingFolder?.invoke(uri); pendingFolder = null }
     private val loraPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(::importLora) }
 
+    private var pollTick = 0
     private val poll = object : Runnable {
         override fun run() {
+            // OpenRouter asks for a check about every 30 seconds, so its videos are checked on every fifth round.
+            val openRouter = Rules.origin(OpenRouterMedia.BASE)
+            pollTick++
             if (!settingsOpen && !app.isBusy() && app.lastError.isEmpty()) {
-                app.history.list(pendingOnly = true).firstOrNull { it.state == "processing" && it.remoteId.isNotBlank() }?.let { app.refresh(it) }
+                app.history.list(pendingOnly = true).firstOrNull { it.state == "processing" && it.remoteId.isNotBlank() && (pollTick % 5 == 0 || runCatching { Rules.origin(it.baseUrl) }.getOrNull() != openRouter) }?.let { app.refresh(it) }
             }
             handler.postDelayed(this, 6000)
         }
@@ -743,6 +747,14 @@ class MainActivity : AppCompatActivity() {
                 ui.danger("Remove key", R.drawable.ic_delete) { try { app.settings.saveSpicyKey(""); ui.layoutOf(spicyKey)?.helperText = spicyHelper(); spicyNote.text = "Key removed." } catch (e: UserError) { spicyNote.text = e.message } }
             ))
             spicy.addView(spicyNote)
+            val openRouter = ui.card(content)
+            val chatOnOpenRouter = Rules.origin(app.settings.get(Mode.CHAT).baseUrl) == Rules.origin(OpenRouterMedia.BASE)
+            ui.sectionTitle(openRouter, "OpenRouter", "The model list also offers ${if (selected == Mode.IMAGE) "Seedream 4.5, Nano Banana, FLUX.2 pro, and Qwen Image 3" else "Wan 2.7, Kling v3.0 Pro, Seedance 1.5 Pro, and Veo 3.1 Lite"} on OpenRouter. They use the OpenRouter key saved for Chat, which goes only to openrouter.ai. Photos for them stay on this phone and travel inside each request.")
+            openRouter.addView(ui.text(when {
+                chatOnOpenRouter && app.settings.hasKey(Mode.CHAT) -> "Ready: your OpenRouter key is saved."
+                chatOnOpenRouter -> "Save your OpenRouter key under Chat to use them."
+                else -> "Chat uses another address. Set Chat to OpenRouter and save its key to use them."
+            }, Ui.Type.BODY, ui.orange))
             val kind = selected.title.lowercase()
             val history = ui.card(content)
             val count = app.history.list(selected).size
@@ -975,7 +987,9 @@ class MainActivity : AppCompatActivity() {
             if (which < extras.size) { extras[which].second(); return@setItems }
             val role = roles[which - extras.size]
             val mime = when (file.extension) { "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"; else -> "image/webp" }
-            app.uploadPhoto(role.mode, { Triple(file.inputStream().use { readLimited(it) }, mime, file.name) }) { url, error ->
+            // The model that will receive the photo: an OpenRouter model keeps it on the phone instead of uploading it.
+            val target = try { app.settings.get(role.mode).let { current -> role.apply(current, "https://api.replicate.com/v1/files/check") { app.settings.forModel(current, it) }.model } } catch (_: UserError) { null }
+            app.uploadPhoto(role.mode, { Triple(file.inputStream().use { readLimited(it) }, mime, file.name) }, target, file) { url, error ->
                 if (isFinishing || isDestroyed) return@uploadPhoto
                 if (url == null) { showError(error ?: "Could not upload the image."); return@uploadPhoto }
                 try {

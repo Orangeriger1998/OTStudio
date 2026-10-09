@@ -3,9 +3,15 @@ package com.orangetiger.otstudio
 import android.app.Activity
 import android.app.Application
 import android.content.ComponentCallbacks2
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Base64
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -48,7 +54,9 @@ class StudioApp : Application() {
         private set
     var modelsListener: (() -> Unit)? = null
     private val transport = HttpsTransport()
-    private val api = ProviderApi(transport)
+    /** OpenRouter returns pictures inside its answer: up to 64 MB, with up to 5 minutes for the model to draw them. */
+    private val largeTransport = HttpsTransport(64 * 1024 * 1024, 300, 240_000)
+    private val api = ProviderApi(transport).also { it.large = largeTransport; it.phonePicture = ::phonePicture }
     private val executor = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private val busy = AtomicBoolean(false)
@@ -200,6 +208,50 @@ class StudioApp : Application() {
     }
 
     /**
+     * An OpenRouter picture or video model runs at openrouter.ai with the OpenRouter key saved for Chat. That key goes
+     * only to OpenRouter: Chat must use OpenRouter's address, or nothing is sent.
+     */
+    private fun openRouterModel(s: ModelSettings): ResolvedModel {
+        if (Rules.origin(settings.get(Mode.CHAT).baseUrl) != Rules.origin(OpenRouterMedia.BASE)) throw UserError("OpenRouter models use the OpenRouter key saved for Chat. In Settings, set Chat to OpenRouter and save its key.")
+        val key = settings.key(Mode.CHAT).trim()
+        if (key.isEmpty()) throw UserError("Save your OpenRouter key first: Settings, Chat, OpenRouter.")
+        if (key.length > 4096 || key.any { it.isWhitespace() || it.code < 32 || it.code > 126 }) throw UserError("The API key contains invalid characters.")
+        val run = s.copy(baseUrl = OpenRouterMedia.BASE).also(Rules::validate)
+        return ResolvedModel(run, Mode.CHAT, key)
+    }
+
+    /** The model and key for a picture or video job: OpenRouter, SpicyAPI, or the mode's own provider. */
+    private fun resolveMedia(mode: Mode, s: (Mode) -> ModelSettings = settings::get): ResolvedModel =
+        if (OpenRouterMedia.isModel(s(mode).model)) openRouterModel(s(mode)) else withSpicy(Rules.resolve(mode, s, settings::key))
+
+    /**
+     * A photo kept on this phone, as a data: address for OpenRouter. It is redrawn as a JPEG of at most 2048 pixels on
+     * its long side, turned upright, so the request stays small and carries no photo details such as the place.
+     */
+    private fun phonePicture(ref: String): String {
+        if (!OpenRouterMedia.PHONE_PICTURE.matches(ref)) throw UserError("A chosen picture has an unknown name.")
+        val folder = File(filesDir, "media")
+        val file = File(folder, ref.removePrefix("phone:"))
+        if (file.parentFile?.canonicalPath != folder.canonicalPath || !file.isFile) throw UserError("A picture chosen for this model is gone from the phone. Choose it again in API CALL.")
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw UserError("A chosen picture could not be read.")
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 2048) sample *= 2
+        val decoded = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: throw UserError("A chosen picture could not be read.")
+        val turn = try { when (ExifInterface(file.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90f; ExifInterface.ORIENTATION_ROTATE_180 -> 180f; ExifInterface.ORIENTATION_ROTATE_270 -> 270f; else -> 0f
+        } } catch (_: Exception) { 0f }
+        val long = maxOf(decoded.width, decoded.height)
+        val scale = if (long > 2048) 2048f / long else 1f
+        val matrix = Matrix().apply { postScale(scale, scale); postRotate(turn) }
+        val ready = if (scale == 1f && turn == 0f) decoded else Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+        val out = ByteArrayOutputStream()
+        try { ready.compress(Bitmap.CompressFormat.JPEG, 90, out) } finally { if (ready !== decoded) ready.recycle(); decoded.recycle() }
+        return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    }
+
+    /**
      * Repeat for a plain picture or video: puts that job's model and exact inputs back as the mode's settings, pictures
      * included. Inputs the model no longer takes are left out. Nothing is sent; the user edits the words and sends.
      */
@@ -213,7 +265,7 @@ class StudioApp : Application() {
     }
 
     fun isBusy() = busy.get()
-    fun stopWaiting() { stopRequested = true; engine.cancel(); transport.cancel(); activeDownload?.disconnect() }
+    fun stopWaiting() { stopRequested = true; engine.cancel(); transport.cancel(); largeTransport.cancel(); activeDownload?.disconnect() }
     private fun changed() { main.post { listener?.invoke() } }
     private fun modelsChanged() { main.post { modelsListener?.invoke(); listener?.invoke() } }
     private fun friendly(e: Exception): String = (e as? UserError)?.message ?: "Connection or device storage failed. Check the provider dashboard before repeating a paid request."
@@ -234,7 +286,7 @@ class StudioApp : Application() {
         // Reset here, before the task is queued, so a Stop tapped while it waits is kept.
         stopRequested = false
         if (mode == Mode.CHAT && local.engine == ChatEngine.LOCAL) return sendLocal(p)
-        val model = withSpicy(settings.resolve(mode))
+        val model = if (mode == Mode.CHAT) settings.resolve(mode) else resolveMedia(mode)
         ModelOptions.validateForModel(model.settings.model, model.settings.schema ?: throw UserError("Open API CALL and load this model's inputs first."), model.settings.options)
         if (mode != Mode.CHAT && history.list(pendingOnly = true).any { it.mode != Mode.CHAT }) {
             throw UserError("Finish or cancel the pending media job before starting another. You can still use text chat.")
@@ -512,13 +564,14 @@ class StudioApp : Application() {
         if (plan.action == "expand") return expand(source ?: throw UserError("This plan has no picture."), ratio ?: Planner.expandRatio(plan.shape), text, chat.id)
         val mode = if (plan.action == "video") Mode.VIDEO else Mode.IMAGE
         val (planned, _) = planSettings(plan, modelId, words = chat.prompt)
-        val resolved = withSpicy(Rules.resolve(mode, { if (it == mode) planned else settings.get(it) }, settings::key))
+        val resolved = resolveMedia(mode) { if (it == mode) planned else settings.get(it) }
         ModelOptions.validateForModel(planned.model, planned.schema ?: throw UserError("Load this model's inputs in API CALL first."), planned.options)
         run {
             var model = resolved
             if (mode == Mode.VIDEO && source != null) {
-                val (bytes, mime, name) = mediaBytes(source)
-                val url = api.uploadFile(resolved.settings.baseUrl, resolved.key, name, mime, bytes)
+                // An OpenRouter model takes the picture from the phone, inside the request; other models need an upload.
+                val url = if (OpenRouterMedia.isModel(resolved.settings.model)) "phone:${mediaFile(source).name}".also { if (!OpenRouterMedia.PHONE_PICTURE.matches(it)) throw UserError("This picture's file cannot be sent to OpenRouter.") }
+                    else mediaBytes(source).let { (bytes, mime, name) -> api.uploadFile(resolved.settings.baseUrl, resolved.key, name, mime, bytes) }
                 model = resolved.copy(settings = MediaRole.START_FRAME.apply(resolved.settings, url) { error("The planned model already starts from a picture.") })
             }
             val id = history.insert(mode, text, model, parentId = source?.id ?: 0)
@@ -629,6 +682,8 @@ class StudioApp : Application() {
 
     fun loadInputs(draft: ModelSettings, complete: (InputSchema?, String?) -> Unit) {
         if (isBusy()) { complete(null, "Wait for the current operation to finish."); return }
+        // OpenRouter and SpicyAPI models have fixed input lists in the app; Replicate's model pages do not describe them.
+        if (OpenRouterMedia.isModel(draft.model) || ModelCatalog.spicy(draft.model)) { complete(ModelCatalog.find(draft.mode, draft.model)?.schema, null); return }
         val model = try { Rules.resolve(draft.mode, { if (it == draft.mode) draft else settings.get(it) }, settings::key) }
         catch (e: UserError) { complete(null, e.message); return }
         run {
@@ -684,9 +739,24 @@ class StudioApp : Application() {
         return id
     }
 
-    /** Uploads a photo with [mode]'s Replicate key. [read] runs off the main thread and returns bytes, MIME type, and a file name. */
-    fun uploadPhoto(mode: Mode, read: () -> Triple<ByteArray, String, String>, complete: (String?, String?) -> Unit) {
+    /**
+     * Uploads a photo with [mode]'s Replicate key. [read] runs off the main thread and returns bytes, MIME type, and a file name.
+     * For an OpenRouter [model], nothing is uploaded: the photo stays on the phone ([existing], or a new copy in the
+     * Image feed), and the input holds "phone:<file>". It goes to OpenRouter inside each request.
+     */
+    fun uploadPhoto(mode: Mode, read: () -> Triple<ByteArray, String, String>, model: String? = null, existing: File? = null, complete: (String?, String?) -> Unit) {
         if (isBusy()) { complete(null, "Wait for the current operation to finish."); return }
+        if (model != null && OpenRouterMedia.isModel(model)) {
+            run {
+                try {
+                    val folder = File(filesDir, "media")
+                    val name = existing?.takeIf { it.isFile && it.parentFile?.canonicalPath == folder.canonicalPath && OpenRouterMedia.PHONE_PICTURE.matches("phone:${it.name}") }?.name
+                        ?: read().let { (bytes, mime, _) -> history.entry(importPhoto(bytes, mime))?.localFile } ?: throw UserError("The photo could not be kept on the phone.")
+                    main.post { complete("phone:$name", null) }
+                } catch (e: Exception) { main.post { complete(null, friendly(e)) } }
+            }
+            return
+        }
         val model = try { settings.resolve(mode) } catch (e: UserError) { complete(null, e.message); return }
         run {
             try {
@@ -726,6 +796,7 @@ class StudioApp : Application() {
     private fun applyPrediction(id: Long, mode: Mode, p: Prediction) {
         when (p.state) {
             "succeeded" -> {
+                if (p.inline.isNotEmpty()) { saveInline(id, p); return }
                 history.completePrediction(id, p)
                 changed()
                 try { downloadAll(id, mode) }
@@ -735,6 +806,27 @@ class StudioApp : Application() {
             "canceled" -> history.update(id, "canceled", "Canceled by the provider.", p.id)
             "unusable" -> history.update(id, "failed", "${p.problem} The job finished, but this app cannot save its output. Check the provider dashboard for it.", p.id)
             else -> history.update(id, "processing", "Generation is ${p.state}. Progress refreshes while this screen is open.", p.id)
+        }
+    }
+
+    /**
+     * Keeps pictures that came inside the answer. They are already made and billed, so a problem here says so plainly
+     * instead of suggesting the request may not have arrived.
+     */
+    private fun saveInline(id: Long, p: Prediction) {
+        val folder = File(filesDir, "media").apply { mkdirs() }
+        val made = ArrayList<File>()
+        try {
+            if (folder.listFiles().orEmpty().sumOf { it.length() } + p.inline.sumOf { it.size.toLong() } > Rules.MAX_STORAGE_BYTES) throw UserError("Private media storage is full (512 MB).")
+            p.inline.take(4).forEach { bytes ->
+                if (bytes.size > Rules.MAX_MEDIA_BYTES) throw UserError("A picture is larger than the per-file limit.")
+                val ext = listOf("png", "jpg", "webp").firstOrNull { Rules.mediaMatches(it, bytes.copyOf(minOf(16, bytes.size))) } ?: throw UserError("OpenRouter sent a file that is not a PNG, JPG, or WebP picture.")
+                made.add(File(folder, "${UUID.randomUUID()}.$ext").also { it.writeBytes(bytes) })
+            }
+            history.completeInline(id, p.id, made.map { it.name })
+        } catch (e: Exception) {
+            made.forEach { it.delete() }
+            history.update(id, "failed", "OpenRouter made the picture, and it is billed, but the phone could not keep it: ${friendly(e)}", p.id)
         }
     }
 
@@ -764,7 +856,10 @@ class StudioApp : Application() {
         val outputs = history.outputs(listOf(id))[id].orEmpty()
         if (outputs.isEmpty()) throw UserError("No saved output links are available.")
         outputs.forEach { output ->
-            if (output.localFile.isEmpty() || !File(File(filesDir, "media"), output.localFile).exists()) download(id, mode, output.url, output.position)
+            if (output.localFile.isEmpty() || !File(File(filesDir, "media"), output.localFile).exists()) {
+                if (output.url == History.INLINE_URL) throw UserError("This picture came inside OpenRouter's answer, and its file is gone. It cannot be downloaded again.")
+                download(id, mode, output.url, output.position)
+            }
         }
         val note = finishExpand(id) ?: finishJoin(id)
         val first = history.outputs(listOf(id))[id]?.firstOrNull()?.localFile.orEmpty()

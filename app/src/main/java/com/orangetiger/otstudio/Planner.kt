@@ -297,6 +297,7 @@ object Prices {
         fun v(name: String) = options.firstOrNull { it.name == name }?.value
         val count = v("num_outputs")?.toIntOrNull() ?: 1
         ModelCatalog.edit(model)?.let { return it.price }
+        if (OpenRouterMedia.isModel(model)) return OpenRouterMedia.dollars(model, options)?.let(::cents) ?: "billed by OpenRouter; see the model's page at openrouter.ai"
         if (model == ModelCatalog.expander.model) return "about 4 cents"
         when (model) {
             "spicyapi/spicy-image-1" -> return cents(0.06 * (v("n")?.toIntOrNull() ?: 1))

@@ -227,7 +227,7 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
 
     private fun readRemovedCount(old: InputSchema?, current: InputSchema): Int = old?.fields?.count { oldField -> current.fields.none { it.name == oldField.name } } ?: 0
 
-    private fun photoField(d: InputDefinition) = d.uri && (d.name.contains("image") || d.name.contains("frame"))
+    private fun photoField(d: InputDefinition) = d.uri && (d.name.contains("image") || d.name.contains("frame") || d.name == "input_references")
 
     /**
      * One control per setting. It shows what will be sent: the model's default until the user changes it.
@@ -301,13 +301,17 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
         readers.add(readValue)
     }
 
-    /** Picks a photo, uploads it to Replicate, and fills this input with the returned file URL. */
+    /**
+     * Picks a photo, uploads it to Replicate, and fills this input with the returned file URL. For an OpenRouter model
+     * the photo stays on the phone (it joins the Image feed) and goes to OpenRouter inside each request.
+     */
     private fun choosePhoto(d: InputDefinition) = safely {
         remember()
+        val onPhone = OpenRouterMedia.isModel(draft.model)
         activity.pickPhoto { uri ->
             if (uri == null || gone()) return@pickPhoto
-            waiting = true; notice = "Uploading the photo to your Replicate account..."; render()
-            app.uploadPhoto(mode, { activity.readPhoto(uri) }) { url, error ->
+            waiting = true; notice = if (onPhone) "Keeping the photo on this phone. It goes to OpenRouter with each request." else "Uploading the photo to your Replicate account..."; render()
+            app.uploadPhoto(mode, { activity.readPhoto(uri) }, draft.model) { url, error ->
                 if (gone()) return@uploadPhoto
                 waiting = false
                 if (url != null) {
@@ -315,7 +319,8 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
                     val before = draft.options.firstOrNull { it.name == d.name }?.value
                     val value = if (d.list) PictureList.add(before, url) else url
                     draft = draft.copy(options = draft.options.filter { it.name != d.name } + InputValue(d.name, InputKind.TEXT, value))
-                    notice = if (d.list) "Photo uploaded as @img${PictureList.split(value).size}. Apply to save." else "Photo uploaded and set as ${d.name}. Apply to save."
+                    val verb = if (onPhone) "added" else "uploaded"
+                    notice = if (d.list) "Photo $verb as @img${PictureList.split(value).size}. Apply to save." else "Photo $verb and set as ${d.name}. Apply to save."
                 } else notice = error ?: "Could not upload the photo."
                 render()
             }

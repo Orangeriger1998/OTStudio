@@ -13,7 +13,11 @@ fun interface Transport { fun request(method: String, url: String, key: String, 
 /** Sends a raw request body (used for photo uploads), with the same safety limits as JSON requests. */
 fun interface BinaryTransport { fun post(url: String, key: String, contentType: String, body: ByteArray): HttpReply }
 
-class HttpsTransport : Transport, BinaryTransport {
+/**
+ * [limit] caps the answer size, [seconds] the whole exchange, and [readMs] each wait for data. Pictures that come
+ * inside the answer (OpenRouter) need the larger values.
+ */
+class HttpsTransport(private val limit: Int = Rules.MAX_JSON_BYTES, private val seconds: Long = 90, private val readMs: Int = 60_000) : Transport, BinaryTransport {
     @Volatile private var active: HttpURLConnection? = null
     private val deadlines = Executors.newSingleThreadScheduledExecutor()
     fun cancel() { active?.disconnect() }
@@ -26,11 +30,11 @@ class HttpsTransport : Transport, BinaryTransport {
         Rules.origin(url)
         val c = URL(url).openConnection() as HttpURLConnection
         active = c
-        val deadline = deadlines.schedule({ c.disconnect() }, 90, TimeUnit.SECONDS)
+        val deadline = deadlines.schedule({ c.disconnect() }, seconds, TimeUnit.SECONDS)
         try {
             c.requestMethod = method
             c.connectTimeout = 15_000
-            c.readTimeout = 60_000
+            c.readTimeout = readMs
             c.instanceFollowRedirects = false
             c.setRequestProperty("Authorization", "Bearer $key")
             c.setRequestProperty("Accept", "application/json")
@@ -49,7 +53,7 @@ class HttpsTransport : Transport, BinaryTransport {
                 while (true) {
                     val n = input.read(buf)
                     if (n < 0) break
-                    if (output.size() + n > Rules.MAX_JSON_BYTES) throw UserError("Provider response exceeded the app's response limit.")
+                    if (output.size() + n > limit) throw UserError("Provider response exceeded the app's response limit.")
                     output.write(buf, 0, n)
                 }
             }
@@ -64,6 +68,10 @@ class ProviderApi(private val transport: Transport) {
     private var binary: BinaryTransport? = transport as? BinaryTransport
     /** For tests and alternative transports: a separate sender for photo uploads. */
     constructor(transport: Transport, binary: BinaryTransport) : this(transport) { this.binary = binary }
+    /** Sends requests whose answer carries the pictures themselves (OpenRouter pictures). */
+    var large: Transport = transport
+    /** Turns a photo kept on this phone ("phone:<file>") into a data: address for OpenRouter. Set by the app. */
+    var phonePicture: (String) -> String = { throw UserError("Photos kept on this phone cannot be sent from here.") }
 
     /**
      * Uploads a photo to Replicate's Files API and returns its file URL, which Replicate models accept as an image input.
@@ -141,6 +149,7 @@ class ProviderApi(private val transport: Transport) {
         val reference = s.options.firstOrNull { it.name == "lora_weights" }?.value?.let { OWN_LORA.matchEntire(it) }
         if (s.model == LoraCodec.MODEL && reference != null) return createOnVersion(model, prompt, reference.groupValues[1], reference.groupValues[2], reference.groupValues[3])
         if (ModelCatalog.spicy(s.model)) return createSpicy(model, prompt ?: throw UserError("SpicyAPI needs a prompt."))
+        if (OpenRouterMedia.isModel(s.model)) return createOpenRouter(model, prompt ?: throw UserError("OpenRouter needs a prompt."))
         val input = JSONObject()
         if (prompt != null) input.put("prompt", PictureRefs.rewrite(Rules.prompt(prompt), s.schema?.let { PictureRefs.count(it, s.options) } ?: 0))
         ModelOptions.validateForModel(s.model, s.schema ?: throw UserError("Load model inputs first."), s.options)
@@ -225,11 +234,42 @@ class ProviderApi(private val transport: Transport) {
         }
     }
 
+    /**
+     * An OpenRouter picture or video. Photos kept on the phone travel inside the request as data: addresses, because
+     * OpenRouter cannot open Replicate's private upload links. A picture comes back at once, inside the answer; a video
+     * comes back as a task to check.
+     */
+    private fun createOpenRouter(model: ResolvedModel, prompt: String): Prediction {
+        val s = model.settings
+        if (Rules.origin(s.baseUrl) != Rules.origin(OpenRouterMedia.BASE)) throw UserError("OpenRouter models run only at openrouter.ai.")
+        val schema = s.schema ?: throw UserError("Load this model's inputs first.")
+        ModelOptions.validateForModel(s.model, schema, s.options)
+        val text = PictureRefs.rewrite(Rules.prompt(prompt), PictureRefs.count(schema, s.options))
+        val pictures = schema.fields.filter { it.uri }.associate { d ->
+            d.name to s.options.firstOrNull { it.name == d.name }?.value?.let(PictureList::split).orEmpty().map { link ->
+                when {
+                    OpenRouterMedia.PHONE_PICTURE.matches(link) -> phonePicture(link)
+                    link.startsWith("https://api.replicate.com/") -> throw UserError("A picture on this model was uploaded to Replicate, and OpenRouter cannot open it. Remove it in API CALL and choose the photo again.")
+                    else -> link
+                }
+            }
+        }
+        val (url, body) = OpenRouterMedia.request(s.mode, s.model, text, schema, s.options, pictures)
+        if (s.mode == Mode.VIDEO) return OpenRouterMedia.videoTask(checked(transport.request("POST", url, model.key, body.toString())))
+        val root = checked(large.request("POST", url, model.key, body.toString()))
+        // The picture answer may carry no job ID. The app then names the job itself, so the card can still refer to it.
+        val id = root.optString("id").takeIf { Regex("[A-Za-z0-9_-]{1,160}").matches(it) } ?: "openrouter-${java.util.UUID.randomUUID().toString().replace("-", "")}"
+        return Prediction(id, "succeeded", emptyList(), false, inline = OpenRouterMedia.pictures(root))
+    }
+
     private fun spicyBase(base: String) = Rules.origin(base) == Rules.origin(Rules.SPICY_BASE)
+    private fun openRouterBase(base: String) = Rules.origin(base) == Rules.origin(OpenRouterMedia.BASE)
 
-    fun status(base: String, key: String, id: String): Prediction = if (spicyBase(base)) spicyTask(checked(transport.request("GET", "${Rules.SPICY_BASE}/videos/tasks/${Rules.remoteId(id)}", key, null))) else prediction(checked(transport.request("GET", "${base.trimEnd('/')}/predictions/${Rules.remoteId(id)}", key, null)))
+    fun status(base: String, key: String, id: String): Prediction = if (openRouterBase(base)) OpenRouterMedia.videoTask(checked(transport.request("GET", "${OpenRouterMedia.BASE}/videos/${Rules.remoteId(id)}", key, null)))
+        else if (spicyBase(base)) spicyTask(checked(transport.request("GET", "${Rules.SPICY_BASE}/videos/tasks/${Rules.remoteId(id)}", key, null))) else prediction(checked(transport.request("GET", "${base.trimEnd('/')}/predictions/${Rules.remoteId(id)}", key, null)))
 
-    fun cancel(base: String, key: String, id: String): Prediction = if (spicyBase(base)) throw UserError("SpicyAPI tasks cannot be canceled from the app. It finishes on its own.") else prediction(checked(transport.request("POST", "${base.trimEnd('/')}/predictions/${Rules.remoteId(id)}/cancel", key, "{}")))
+    fun cancel(base: String, key: String, id: String): Prediction = if (openRouterBase(base)) throw UserError("OpenRouter video tasks cannot be canceled from the app. It finishes on its own.")
+        else if (spicyBase(base)) throw UserError("SpicyAPI tasks cannot be canceled from the app. It finishes on its own.") else prediction(checked(transport.request("POST", "${base.trimEnd('/')}/predictions/${Rules.remoteId(id)}/cancel", key, "{}")))
 
     private fun prediction(root: JSONObject): Prediction {
         val id = Rules.remoteId(root.optString("id"))
