@@ -114,6 +114,17 @@ Choose photo, Use as..., and Upscale 2x upload an image to POST `/v1/files` as m
 
 Upscale 2x runs `nightmareai/real-esrgan` with `scale` 2 and no prompt. That model stays out of the model lists because it takes an image instead of a prompt.
 
+## LoRA training and Qwen Image with a LoRA
+
+Owner request, 2026-10-09, matching OT Studio for Windows: the phone trains LoRAs on Replicate. `GET /account` names the owner; `GET /models/{owner}/lora-<name>` finds the private destination, or `POST /models` creates it (visibility private, hardware cpu); a public model of that name is refused. The photo ZIP goes to `POST /files`, and `POST /models/{trainer}/versions/{version}/trainings` starts the training once. `GET /trainings/{id}` is checked about every 30 seconds; its log is read only for "done/total" step counts and stage words.
+
+| Trainer | Version | Input |
+|---|---|---|
+| `ostris/flux-dev-lora-trainer` | `26dce37a...9022d2` (pinned) | `input_images`, `trigger_word`, `steps`, `lora_rank` 16, `autocaption` true |
+| `qwen/qwen-image-lora-trainer` | newest, read from Replicate | `dataset`, `steps` (100 to 6000), `lora_rank` 64, `default_caption` "A photo of <words>", `batch_size` 1 |
+
+A finished training must return a version of its own private model (`output.version`). A Qwen training may return only `output.weights`, an HTTPS file. Qwen Image with a LoRA is `qwen/qwen-image-lora-trainer` run as a picture model (inputs from its predict.py, checked 2026-10-09): `replicate_weights`, `lora_scale` 0 to 3, `aspect_ratio`, `image_size`, `width`, `height`, `go_fast`, `num_inference_steps`, `guidance`, `seed`, `negative_prompt`, `enhance_prompt`, `output_format`, `output_quality`. It always runs by version: a LoRA trained into a private model runs that model's version, and a weights file runs on the trainer's newest version through `POST /predictions`. It never uses the model endpoint, and a FLUX LoRA never runs on it.
+
 ## OpenRouter pictures and videos
 
 Owner decision, 2026-10-09, matching OT Studio for Windows: eight OpenRouter models appear in the Image and Video lists under the `openrouter/` prefix. They run at `https://openrouter.ai/api/v1` with the key saved for Chat, and only while Chat's address is OpenRouter's. Settings and prices come from OpenRouter's model lists, checked 2026-10-09.

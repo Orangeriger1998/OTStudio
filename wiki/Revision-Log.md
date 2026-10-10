@@ -4,6 +4,14 @@
 
 This log lists the main changes from one version to the next. It records what a user would notice, not every code change.
 
+## 1.9.0 (October 2026)
+
+**Train a LoRA on the phone.** The LoRA library has a Train a LoRA form: a name, a trainer, the trigger word, the steps, and 1 to 20 photos. The phone turns the photos upright, packs them, and starts the training in your own Replicate account, in a private model. A card follows each training with its stage (describing the photos, loading the base model, training, or saving), how far it is, and the minutes left. It is checked about every 30 seconds while the app is open, and the finished LoRA joins your library by itself. The Windows LoRA Trainer still works.
+
+**Qwen Image LoRAs.** The alternate trainer makes Qwen Image LoRAs, which learn from plain words such as "a person named Anna" instead of a made-up word. The Image list adds Qwen Image with a LoRA, the only model that runs them. Qwen LoRA files from OT Studio for Windows import as well.
+
+**Library.** Each LoRA shows its base model, and Remove takes it out of the library. Your saved LoRAs carry over unchanged.
+
 ## 1.8.0 (October 2026)
 
 **OpenRouter pictures and videos.** The Image list adds Seedream 4.5, Nano Banana, FLUX.2 pro, and Qwen Image 3 on OpenRouter. The Video list adds Wan 2.7, Kling v3.0 Pro, Seedance 1.5 Pro, and Veo 3.1 Lite on OpenRouter, each with a starting and an ending picture, a length, a resolution, a shape, and sound. They use the OpenRouter key you saved for Chat, so one account covers chat, pictures, and video. The job card shows the likely cost, which follows the length, the resolution, and sound.

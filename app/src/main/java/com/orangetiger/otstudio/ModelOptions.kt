@@ -129,7 +129,7 @@ object ModelOptions {
             "Ending frame" -> preset.mode == Mode.VIDEO && names.any { it in setOf("last_image", "last_frame", "end_image") }
             "Frame rate" -> names.any { it in setOf("frames_per_second", "frame_per_second", "fps") }
             "Fast generation" -> "fast_mode" in names || "go_fast" in names
-            "LoRA" -> names.any { it.startsWith("lora_weights") }
+            "LoRA" -> names.any { it.startsWith("lora_weights") || it == "replicate_weights" }
             "Image guidance" -> names.any { it in setOf("image", "image_prompt", "start_image", "first_frame_image", "first_frame", "input_image", "input_images", "images", "image_input", "input_references") }
             "Audio input" -> names.any { it in setOf("audio", "audio_url") }
             "Negative prompt" -> "negative_prompt" in names
@@ -187,6 +187,18 @@ object ModelCatalog {
         number("lora_scale", "1", -1.0, 3.0, false, "With go_fast, the provider applies a 1.5 scale multiplier."),
         text("extra_lora", note = "Optional second FLUX dev LoRA."), number("extra_lora_scale", "1", -1.0, 3.0, false)
     ), listOf("hf_api_token", "civitai_api_token"))
+    /** Qwen Image with a LoRA: the trainer's own picture model (replicate/qwen-image-lora-trainer predict.py, checked 2026-10-09). */
+    private val qwenLoraSchema = InputSchema(listOf(
+        text("replicate_weights", note = "Choose a saved Qwen LoRA below. Qwen LoRAs run only on this model."),
+        number("lora_scale", "1", 0.0, 3.0, false, "0 is the plain model; 1 is the full LoRA."),
+        choice("aspect_ratio", listOf("1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"), "16:9"),
+        choice("image_size", listOf("optimize_for_quality", "optimize_for_speed"), "optimize_for_quality"),
+        number("width", min = 512.0, max = 2048.0, note = "Custom width. Give both width and height to set the size yourself."),
+        number("height", min = 512.0, max = 2048.0, note = "Custom height. Give both width and height to set the size yourself."),
+        bool("go_fast", false, "Much faster, with lower quality."), number("num_inference_steps", "50", 0.0, 50.0),
+        number("guidance", "4", 0.0, 10.0, false), number("seed"), text("negative_prompt", ""), bool("enhance_prompt", false),
+        choice("output_format", listOf("webp", "jpg", "png"), "webp"), number("output_quality", "80", 0.0, 100.0)
+    ))
     private val i2v22 = InputSchema(listOf(
         text("image", note = "Required starting frame HTTPS image URL.", uri = true).copy(required = true),
         text("last_image", note = "Optional ending frame HTTPS image URL.", uri = true),
@@ -264,7 +276,7 @@ object ModelCatalog {
         ModelPreset(Mode.CHAT, "mistralai/mistral-nemo", chatSchema), ModelPreset(Mode.CHAT, "qwen/qwen3-30b-a3b-instruct-2507", chatSchema),
         ModelPreset(Mode.CHAT, "gryphe/mythomax-l2-13b", chatSchema), ModelPreset(Mode.CHAT, "qwen/qwen3-8b", chatSchema),
         ModelPreset(Mode.IMAGE, "black-forest-labs/flux-schnell", flux(false)), ModelPreset(Mode.IMAGE, "black-forest-labs/flux-dev", flux(true)),
-        ModelPreset(Mode.IMAGE, "black-forest-labs/flux-dev-lora", loraSchema),
+        ModelPreset(Mode.IMAGE, "black-forest-labs/flux-dev-lora", loraSchema), ModelPreset(Mode.IMAGE, "qwen/qwen-image-lora-trainer", qwenLoraSchema),
         ModelPreset(Mode.VIDEO, "wan-video/wan-2.2-i2v-fast", i2v22), ModelPreset(Mode.VIDEO, "wan-video/wan-2.7-i2v", i2v27),
         ModelPreset(Mode.IMAGE, "black-forest-labs/flux-1.1-pro", InputSchema(listOf(
             choice("aspect_ratio", listOf("custom", "1:1", "16:9", "3:2", "2:3", "4:5", "5:4", "9:16", "3:4", "4:3"), "1:1"),
@@ -350,7 +362,7 @@ object InputLabels {
         "frames_per_second" to "Frames per second", "fps" to "Frames per second", "num_frames" to "Length in frames (81 is 5 s, 121 is 7.5 s)",
         "safety_tolerance" to "Safety tolerance", "size" to "Size", "width" to "Width", "height" to "Height",
         "n" to "Number of pictures", "style" to "Style", "enhance_prompt" to "Plan the shot first",
-        "input_references" to "Pictures", "generate_audio" to "Sound"
+        "input_references" to "Pictures", "generate_audio" to "Sound", "replicate_weights" to "LoRA", "image_size" to "Size"
     )
 
     fun title(name: String): String = names[name] ?: name.replace('_', ' ').trim().replaceFirstChar { it.uppercase() }
@@ -373,6 +385,7 @@ object ModelNames {
         "black-forest-labs/flux-schnell" to "Quick draft (FLUX schnell), under 1 cent",
         "black-forest-labs/flux-dev" to "Detailed picture (FLUX dev), 2.5 cents",
         "black-forest-labs/flux-dev-lora" to "Your trained face or style (FLUX dev LoRA), 3 cents",
+        "qwen/qwen-image-lora-trainer" to "Your Qwen LoRA (Qwen Image with a LoRA), a few cents",
         "black-forest-labs/flux-1.1-pro" to "Best quality (FLUX 1.1 pro), 4 cents",
         "black-forest-labs/flux-2-dev" to "FLUX.2 dev, about 3 cents",
         "black-forest-labs/flux-2-klein-9b" to "FLUX.2 klein 9B, about 1.5 cents",

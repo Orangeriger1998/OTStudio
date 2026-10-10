@@ -539,4 +539,26 @@ class AndroidFlowTest {
         assertEquals("https://api.replicate.com/v1/files/first", values["image"]); assertEquals("https://api.replicate.com/v1/files/last", values["last_image"]); assertEquals("720p", values["resolution"])
         assertTrue(views(activity.window.decorView).filterIsInstance<EditText>().any { it.text.toString() == "she dances on the beach" })
     }
+
+    /** Version 1.9.0 upgrades the LoRA library: every saved FLUX dev LoRA stays, and Qwen LoRAs and trainings can be kept. */
+    @Test fun theLoraLibraryUpgradeKeepsSavedLoras() {
+        val context = RuntimeEnvironment.getApplication()
+        // The app opened its own library at start; close it so this test can lay down a version 1 file.
+        (context as StudioApp).loras.close()
+        context.deleteDatabase("lora-library.db")
+        SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath("lora-library.db").apply { parentFile?.mkdirs() }, null).use { db ->
+            db.execSQL("CREATE TABLE loras (reference TEXT PRIMARY KEY, name TEXT NOT NULL, trigger_word TEXT NOT NULL, scale REAL NOT NULL CHECK(scale BETWEEN -1 AND 3), base_model TEXT NOT NULL CHECK(base_model = 'flux-dev'))")
+            db.execSQL("INSERT INTO loras VALUES ('anna/lora-anna/${"a".repeat(64)}', 'Anna', 'ANNAFACE', 0.9, 'flux-dev')")
+            db.version = 1
+        }
+        val store = LoraStore(context)
+        assertEquals(listOf(SavedLora("Anna", "anna/lora-anna/${"a".repeat(64)}", "ANNAFACE", 0.9, "flux-dev")), store.list())
+        store.save(SavedLora("Pao", "https://replicate.delivery/pao.tar", "a person named Pao", 1.0, "qwen-image"))
+        val t = LoraTrainingRecord("t1", "Pao", "a person named Pao", "qwen-image", 1000, 64, LoraBases.QWEN.model, "c".repeat(64), "anna/lora-qwen-pao", "sending", created = 5)
+        store.saveTraining(t)
+        store.recoverTrainings()
+        assertEquals(2, store.list().size)
+        assertEquals("uncertain", store.trainings().single().state)
+        store.close()
+    }
 }

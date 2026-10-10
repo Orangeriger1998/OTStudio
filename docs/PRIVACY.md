@@ -20,6 +20,10 @@ Save chat history is on by default. When it is off, new chat messages live only 
 
 When an Image or Video model from OpenRouter is chosen, the prompt, the model's listed settings, and any picture chosen for it go to openrouter.ai with the OpenRouter key saved for Chat. A picture is redrawn as a new JPEG before it leaves, so its location and camera details stay behind. Nothing is uploaded to Replicate for these models. Finished pictures arrive inside OpenRouter's answer, and finished videos download from openrouter.ai; both are stored like any other result.
 
+## LoRA training
+
+Training starts only from the Train a LoRA form, after the agreement box and a second confirmation. The phone redraws each chosen photo as an upright JPEG, which leaves out its location and camera details, and packs the photos into one ZIP in memory. The ZIP goes to Replicate's Files API with the Replicate key saved for Image, and the training runs in a private model in that Replicate account. Nothing else receives the photos, and the phone keeps no copy of the ZIP. The phone keeps each training's name, trigger word, settings, state, and result; the training log is read for numbers and known stage words, and it is never stored or shown.
+
 ## SpicyAPI
 
 When an Image or Video model from SpicyAPI is chosen, the prompt and that model's listed settings go to api.spicyapi.com with the SpicyAPI key. No photo, saved picture, or LoRA is ever sent there; the app offers only SpicyAPI's text-only models. Finished pictures and videos come back from cdn.spicyapi.com and are stored like any other result. The SpicyAPI key has its own encrypted slot, bound to SpicyAPI's address.

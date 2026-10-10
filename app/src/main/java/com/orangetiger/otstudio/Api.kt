@@ -68,8 +68,10 @@ class ProviderApi(private val transport: Transport) {
     private var binary: BinaryTransport? = transport as? BinaryTransport
     /** For tests and alternative transports: a separate sender for photo uploads. */
     constructor(transport: Transport, binary: BinaryTransport) : this(transport) { this.binary = binary }
-    /** Sends requests whose answer carries the pictures themselves (OpenRouter pictures). */
+    /** Sends requests whose answer carries the pictures themselves (OpenRouter pictures), and training checks with long logs. */
     var large: Transport = transport
+    /** Sends large uploads, such as a LoRA training archive. */
+    var largeBinary: BinaryTransport? = null
     /** Turns a photo kept on this phone ("phone:<file>") into a data: address for OpenRouter. Set by the app. */
     var phonePicture: (String) -> String = { throw UserError("Photos kept on this phone cannot be sent from here.") }
 
@@ -83,10 +85,21 @@ class ProviderApi(private val transport: Transport) {
         if (bytes.isEmpty() || bytes.size > Rules.MAX_UPLOAD_BYTES) throw UserError("Photos must be smaller than 20 MB.")
         val extension = mapOf("image/jpeg" to "jpg", "image/png" to "png", "image/webp" to "webp").getValue(mime)
         val safeName = fileName.substringBeforeLast('.').filter { it.isLetterOrDigit() || it in "-_" }.take(60).ifBlank { "photo" } + ".$extension"
+        return upload(base, key, safeName, mime, bytes, binary)
+    }
+
+    /** Uploads a LoRA training archive (a ZIP of photos) to Replicate's Files API, through the slower [largeBinary] sender. */
+    fun uploadArchive(base: String, key: String, bytes: ByteArray): String {
+        if (Rules.origin(base) != "https://api.replicate.com:443") throw UserError("Training photos go only to Replicate's Files API.")
+        if (bytes.isEmpty() || bytes.size > LoraTraining.MAX_ZIP) throw UserError("The photos are larger than 95 MB together. Remove a few.")
+        return upload(base, key, "photos.zip", "application/zip", bytes, largeBinary ?: binary)
+    }
+
+    private fun upload(base: String, key: String, safeName: String, mime: String, bytes: ByteArray, via: BinaryTransport?): String {
         val boundary = "OTStudio" + java.util.UUID.randomUUID().toString().replace("-", "")
         val head = "--$boundary\r\nContent-Disposition: form-data; name=\"content\"; filename=\"$safeName\"\r\nContent-Type: $mime\r\n\r\n".toByteArray(Charsets.UTF_8)
         val tail = "\r\n--$boundary--\r\n".toByteArray(Charsets.UTF_8)
-        val sender = binary ?: throw UserError("Photo upload is not available in this build.")
+        val sender = via ?: throw UserError("Photo upload is not available in this build.")
         val root = checked(sender.post("${base.trimEnd('/')}/files", key, "multipart/form-data; boundary=$boundary", head + bytes + tail))
         val id = root.optString("id")
         // Describe the reply's shape (field names and ID form, never values) so a provider change is diagnosable.
@@ -144,10 +157,13 @@ class ProviderApi(private val transport: Transport) {
     fun create(model: ResolvedModel, prompt: String?): Prediction {
         val s = model.settings
         Rules.validate(s)
-        // A LoRA trained into the user's own (private) Replicate model cannot be downloaded by the public FLUX dev LoRA
-        // model, so that model's own version runs instead. It already carries the LoRA.
-        val reference = s.options.firstOrNull { it.name == "lora_weights" }?.value?.let { OWN_LORA.matchEntire(it) }
-        if (s.model == LoraCodec.MODEL && reference != null) return createOnVersion(model, prompt, reference.groupValues[1], reference.groupValues[2], reference.groupValues[3])
+        // A LoRA trained into the user's own (private) Replicate model cannot be downloaded by the public LoRA model, so
+        // that model's own version runs instead. It already carries the LoRA.
+        val base = LoraBases.forModel(s.model)
+        val weights = base?.let { b -> s.options.firstOrNull { it.name == b.field }?.value?.trim() }.orEmpty()
+        val reference = OWN_LORA.matchEntire(weights)
+        if (base != null && reference != null) return createOnVersion(model, prompt, reference.groupValues[1], reference.groupValues[2], reference.groupValues[3], base.field)
+        if (base == LoraBases.QWEN) return createQwen(model, prompt ?: throw UserError("Qwen Image needs a prompt."), weights)
         if (ModelCatalog.spicy(s.model)) return createSpicy(model, prompt ?: throw UserError("SpicyAPI needs a prompt."))
         if (OpenRouterMedia.isModel(s.model)) return createOpenRouter(model, prompt ?: throw UserError("OpenRouter needs a prompt."))
         val input = JSONObject()
@@ -163,13 +179,13 @@ class ProviderApi(private val transport: Transport) {
      * Runs a trained model's [version] with the user's settings. The version's own input list decides what is sent:
      * settings it does not take are left out, and FLUX dev LoRA's guidance becomes its guidance_scale.
      */
-    private fun createOnVersion(model: ResolvedModel, prompt: String?, owner: String, name: String, version: String): Prediction {
+    private fun createOnVersion(model: ResolvedModel, prompt: String?, owner: String, name: String, version: String, field: String): Prediction {
         val s = model.settings
         val base = s.baseUrl.trimEnd('/')
         val root = checked(transport.request("GET", "$base/models/$owner/$name/versions/$version", model.key, null))
         val schema = SchemaCodec.parse(root.optJSONObject("openapi_schema") ?: throw UserError("Your trained model has no readable input list."))
         val names = schema.fields.map { it.name }.toSet()
-        val options = s.options.filter { it.name != "lora_weights" }.mapNotNull { v ->
+        val options = s.options.filter { it.name != field }.mapNotNull { v ->
             when {
                 v.name in names -> v
                 v.name == "guidance" && "guidance_scale" in names -> v.copy(name = "guidance_scale")
@@ -182,6 +198,69 @@ class ProviderApi(private val transport: Transport) {
         SchemaCodec.append(input, schema, options)
         val body = JSONObject().put("version", version).put("input", input)
         return prediction(checked(transport.request("POST", "$base/predictions", model.key, body.toString())))
+    }
+
+    /**
+     * Qwen Image with a LoRA from a weights file: the trainer's own picture model, run on its newest version. Qwen
+     * LoRAs never run through the model endpoint.
+     */
+    private fun createQwen(model: ResolvedModel, prompt: String, weights: String): Prediction {
+        val s = model.settings
+        if (!weights.startsWith("https://")) throw UserError("Qwen Image with a LoRA needs a saved Qwen LoRA. Choose one in API CALL, or train one in the LoRA library.")
+        val schema = s.schema ?: throw UserError("Load this model's inputs first.")
+        ModelOptions.validateForModel(s.model, schema, s.options)
+        val base = s.baseUrl.trimEnd('/')
+        val version = latestVersion(base, model.key, s.model)
+        val input = JSONObject().put("prompt", PictureRefs.rewrite(Rules.prompt(prompt), 0))
+        SchemaCodec.append(input, schema, s.options)
+        return prediction(checked(transport.request("POST", "$base/predictions", model.key, JSONObject().put("version", version).put("input", input).toString())))
+    }
+
+    /** The newest version of a Replicate model, as Replicate reports it. */
+    fun latestVersion(base: String, key: String, model: String): String {
+        val root = checked(transport.request("GET", "${base.trimEnd('/')}/models/$model", key, null))
+        return root.optJSONObject("latest_version")?.optString("id")?.takeIf { Regex("[a-f0-9]{64}").matches(it) } ?: throw UserError("Replicate did not report the version of $model.")
+    }
+
+    // ---- LoRA training (Replicate only) ----
+
+    /** The Replicate account name the key belongs to. */
+    fun account(base: String, key: String): String {
+        val root = checked(transport.request("GET", "${base.trimEnd('/')}/account", key, null))
+        return root.optString("username").takeIf { Regex("[A-Za-z0-9_-]{1,100}").matches(it) } ?: throw UserError("Replicate did not report your account name.")
+    }
+
+    /** The private model that will hold the LoRA: created when missing, refused when it exists but is public. */
+    fun ensureDestination(base: String, key: String, owner: String, slug: String, lora: LoraBase): String {
+        val b = base.trimEnd('/')
+        val found = transport.request("GET", "$b/models/$owner/$slug", key, null)
+        if (found.code == 404) {
+            val body = JSONObject().put("owner", owner).put("name", slug).put("visibility", "private").put("hardware", "cpu").put("description", "${lora.title} LoRA trained with OT Studio")
+            val made = checked(transport.request("POST", "$b/models", key, body.toString()))
+            if (made.optString("owner") != owner || made.optString("name") != slug) throw UserError("Replicate did not create the private model for this LoRA.")
+            return "$owner/$slug"
+        }
+        val root = checked(found)
+        if (root.optString("visibility") != "private") throw UserError("The model $owner/$slug exists but is not private. Choose another LoRA name.")
+        return "$owner/$slug"
+    }
+
+    /** Starts one training. Billed by Replicate; never repeated by the app. Returns the training's ID and state. */
+    fun startTraining(base: String, key: String, trainer: String, version: String, destination: String, input: JSONObject): Pair<String, String> {
+        val body = JSONObject().put("destination", destination).put("input", input)
+        val root = checked(transport.request("POST", "${base.trimEnd('/')}/models/$trainer/versions/$version/trainings", key, body.toString()))
+        return Rules.remoteId(root.optString("id")) to root.optString("status").ifEmpty { "starting" }
+    }
+
+    /** One look at a training: its state, its log (for progress only), its output, and its error. Logs can be long. */
+    fun training(base: String, key: String, id: String): JSONObject {
+        val root = checked(large.request("GET", "${base.trimEnd('/')}/trainings/${Rules.remoteId(id)}", key, null))
+        if (root.optString("id") != id) throw UserError("Replicate returned a different training.")
+        return root
+    }
+
+    fun cancelTraining(base: String, key: String, id: String) {
+        checked(transport.request("POST", "${base.trimEnd('/')}/trainings/${Rules.remoteId(id)}/cancel", key, "{}"))
     }
 
     fun loadSchema(model: ResolvedModel): InputSchema {

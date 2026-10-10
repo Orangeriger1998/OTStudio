@@ -19,13 +19,13 @@ The full guide lives in the **[OT Studio wiki](wiki/Home.md)**. It explains ever
 - **Create by chatting.** Ask for a picture, an edit, or a video in plain words. A job card shows the exact prompt, the model, and the likely cost before you tap Generate.
 - **Edit an image** from a plain instruction with Replicate editing models.
 - **Memory** for standing instructions, and **web search** on Wikipedia or with a free Tavily key.
-- **Images** with FLUX schnell, FLUX dev, FLUX 1.1 Pro, and FLUX dev with your own LoRA.
+- **Images** with FLUX schnell, FLUX dev, FLUX 1.1 Pro, FLUX dev with your own LoRA, and Qwen Image with your own LoRA.
 - **Video** with WAN 2.7 and WAN 2.2, from text or from starting and ending frames.
 - **Photos as inputs.** The photo button in the message bar adds a photo from the phone in any mode. The chat can edit or animate it, and Image and Video can use it as a reference or a frame. A finished image can become the next reference or frame in one tap.
 - **Expand** to give a picture a new shape, such as wide or tall, around the unchanged original.
 - **Upscale 2x** to bring a 1024 by 1024 image to about 2048 by 2048.
 - **API CALL**, a panel that shows each model's real inputs and filters models by feature.
-- **A LoRA library** for LoRAs trained with the **OT Studio LoRA Trainer**, a standalone Windows program on the Releases page, or with the included script.
+- **LoRA training and a LoRA library.** Train FLUX dev or Qwen Image LoRAs from the phone in your own Replicate account, or import LoRAs from OT Studio for Windows, the **OT Studio LoRA Trainer** (a standalone Windows program on the Releases page), or the included script.
 
 ## Requirements
 
@@ -61,7 +61,7 @@ These typical figures come from the providers' price pages in October 2026. Pric
 
 OT Studio makes one photo or one clip at a time. Make it longer extends a video part by part from its last frame and joins the parts on the phone. Music and titles need another app. Use a video editor for that final step, such as CapCut on a phone or any desktop video editor.
 
-LoRA training runs on a computer with `scripts/train_lora.py`, not on the phone. WAN video models cannot load a FLUX LoRA, so the wiki shows how to keep a face consistent with LoRA keyframes instead.
+LoRA training runs from the phone's LoRA library, or on a computer with the LoRA Trainer or `scripts/train_lora.py`. WAN video models cannot load a FLUX LoRA, so the wiki shows how to keep a face consistent with LoRA keyframes instead.
 
 Replicate deletes results made through its API after about an hour. OT Studio downloads each result as soon as it finishes, but save the ones you want to keep.
 

@@ -279,7 +279,7 @@ object PlainSummary {
         v("aspect_ratio")?.let { parts.add(shape(it)) }
         v("resolution")?.let { parts.add(it) }
         v("size")?.let { parts.add(it) }
-        if (v("lora_weights") != null) parts.add("with your LoRA")
+        if (v("lora_weights") != null || v("replicate_weights") != null) parts.add("with your LoRA")
         if (v("disable_safety_checker") == "true") parts.add("safety checker off")
         return parts.joinToString(", ").replaceFirstChar { it.uppercase() }
     }
@@ -299,6 +299,7 @@ object Prices {
         ModelCatalog.edit(model)?.let { return it.price }
         if (OpenRouterMedia.isModel(model)) return OpenRouterMedia.dollars(model, options)?.let(::cents) ?: "billed by OpenRouter; see the model's page at openrouter.ai"
         if (model == ModelCatalog.expander.model) return "about 4 cents"
+        if (model == LoraBases.QWEN.model) return "a few cents, billed by the second at Replicate"
         when (model) {
             "spicyapi/spicy-image-1" -> return cents(0.06 * (v("n")?.toIntOrNull() ?: 1))
             "spicyapi/spicy-image-1-pro" -> return cents(0.09 * (v("n")?.toIntOrNull() ?: 1))

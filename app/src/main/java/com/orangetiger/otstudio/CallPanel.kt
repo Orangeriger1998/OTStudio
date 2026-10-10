@@ -142,16 +142,17 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
         val schema = draft.schema
         if (schema == null) ui.card(content).addView(ui.text("Load this model's inputs before generation. No modifier names are guessed.", Ui.Type.BODY))
         else {
-            if (mode == Mode.IMAGE && draft.model == "black-forest-labs/flux-dev-lora") {
+            val loraBase = LoraBases.forModel(draft.model)
+            if (mode == Mode.IMAGE && loraBase != null) {
                 val loraCard = ui.card(content)
-                ui.sectionTitle(loraCard, "Saved FLUX dev LoRAs", "Import the training script's .otstudio-lora.json file using the LoRA library. FLUX LoRAs cannot be used as WAN video LoRAs.")
-                val library = app.loras.list()
+                ui.sectionTitle(loraCard, "Saved ${loraBase.title} LoRAs", "Train one or import a .otstudio-lora.json file in the LoRA library. A ${loraBase.title} LoRA runs only on this model, never on another picture or video model.")
+                val library = app.loras.list().filter { it.baseModel == loraBase.id }
                 val labels = listOf("Choose saved LoRA") + library.mapIndexed { i, it -> "${i + 1}. ${it.name} | trigger: ${it.trigger.ifBlank { "none" }}" }
                 ui.dropdown(loraCard, "LoRA", labels, labels.first()) { selected ->
                     val index = labels.indexOf(selected) - 1
                     if (index >= 0) safely {
                         remember(); val lora = library[index]
-                        draft = draft.copy(options = draft.options.filter { it.name !in listOf("lora_weights", "lora_scale") } + listOf(InputValue("lora_weights", InputKind.TEXT, lora.reference), InputValue("lora_scale", InputKind.NUMBER, lora.scale.toString())))
+                        draft = LoraCodec.apply(draft, lora)
                         notice = "LoRA selected: ${lora.name}. Include ${lora.trigger.ifBlank { "your description" }} in your image prompt. Apply to save."; render()
                     }
                 }

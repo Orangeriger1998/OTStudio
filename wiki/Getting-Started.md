@@ -58,7 +58,7 @@ Each provider charges per request. These figures come from the providers' own pr
 | Edit of an image | $0.01 to $0.04 each, FLUX Kontext dev $0.025 | [Replicate](https://replicate.com/black-forest-labs/flux-kontext-dev) |
 | Web search | Free on Wikipedia; Tavily's free plan covers 1,000 searches a month | [Tavily](https://www.tavily.com/pricing) |
 | Upscale 2x (Real-ESRGAN) | $0.002 each | [Replicate](https://replicate.com/nightmareai/real-esrgan) |
-| LoRA training run | about $1.50 to $2 | [Replicate](https://replicate.com/ostris/flux-dev-lora-trainer) |
+| LoRA training run | about $1.50 to $2 (FLUX dev), about $1.40 to $2.75 (Qwen Image) | [Replicate](https://replicate.com/ostris/flux-dev-lora-trainer) |
 | WAN 2.7 video from an image | $0.10 per second at 720p, $0.15 at 1080p | [Replicate](https://replicate.com/wan-video/wan-2.7-i2v) |
 | WAN 2.2 fast video | $0.05 per clip at 480p, $0.11 at 720p | [Replicate](https://replicate.com/wan-video/wan-2.2-i2v-fast) |
 
@@ -72,7 +72,7 @@ The chat prices count tokens, which are pieces of words, so the "words" in the t
 
 OT Studio makes one photo or one clip at a time. Make it longer extends a video about 5 seconds at a time and joins the parts on the phone. Music and titles need another app. CapCut handles both on a phone. On a computer, any desktop video editor does the same job.
 
-LoRA training runs on a Windows computer with the OT Studio LoRA Trainer from the Releases page, or anywhere with the `train_lora.py` script. A phone cannot train a LoRA.
+LoRA training starts from the phone's LoRA library, or from a Windows computer with the OT Studio LoRA Trainer from the Releases page. Either way it runs in your own Replicate account.
 
 Replicate deletes results made through its API after about an hour. OT Studio downloads each result the moment it finishes, so this rarely matters. Still, save anything you want to keep.
 

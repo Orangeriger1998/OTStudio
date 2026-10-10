@@ -13,15 +13,23 @@ object LoraCodec {
         l.trigger.length >= 3 && Regex("(?i)(^|[^A-Za-z0-9_])" + Regex.escape(l.trigger) + "($|[^A-Za-z0-9_])").containsMatchIn(text)
     }
 
-    /** [settings] for FLUX dev LoRA with [lora] filled in; other inputs stay as they were. */
-    fun apply(settings: ModelSettings, lora: SavedLora): ModelSettings = settings.copy(options = settings.options.filter { it.name !in listOf("lora_weights", "lora_scale") } +
-        InputValue("lora_weights", InputKind.TEXT, lora.reference) + InputValue("lora_scale", InputKind.NUMBER, lora.scale.toString()))
+    /** The base model a saved LoRA runs on. */
+    fun base(lora: SavedLora): LoraBase = LoraBases.of(lora.baseModel) ?: throw UserError("This LoRA has an unknown base model.")
+
+    /** [settings] for the LoRA's own picture model with [lora] filled in; other inputs stay as they were. */
+    fun apply(settings: ModelSettings, lora: SavedLora): ModelSettings {
+        val b = base(lora)
+        if (settings.model != b.model) throw UserError("${lora.name} is a ${b.title} LoRA. It runs only on ${b.title} with a LoRA.")
+        return settings.copy(options = settings.options.filter { it.name !in listOf(b.field, "lora_scale") } +
+            InputValue(b.field, InputKind.TEXT, lora.reference) + InputValue("lora_scale", InputKind.NUMBER, lora.scale.toString()))
+    }
 
     const val MAX_BYTES = 16384
     fun validate(item: SavedLora): SavedLora {
         if (item.name.isBlank() || item.name.length > 80 || item.name.any { it.isISOControl() }) throw UserError("Give the LoRA a name of up to 80 characters.")
         if (item.trigger.length > 120 || item.trigger.any { it.isISOControl() }) throw UserError("Keep the trigger word below 120 characters on one line.")
-        if (item.baseModel != "flux-dev") throw UserError("This library accepts FLUX dev LoRAs. WAN LoRAs are not interchangeable.")
+        if (LoraBases.of(item.baseModel) == null) throw UserError("This library takes FLUX dev and Qwen Image LoRAs. Video LoRAs are not interchangeable.")
+        if (item.baseModel == LoraBases.QWEN.id && item.scale < 0) throw UserError("A Qwen LoRA's strength runs from 0 to 3.")
         if (!item.scale.isFinite() || item.scale !in -1.0..3.0) throw UserError("LoRA scale must be between -1 and 3.")
         val reference = item.reference
         if (reference.length > 4000) throw UserError("LoRA reference is too long.")

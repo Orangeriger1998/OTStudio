@@ -30,6 +30,7 @@ import androidx.core.content.FileProvider
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.imageview.ShapeableImageView
@@ -88,6 +89,8 @@ class MainActivity : AppCompatActivity() {
     private var pendingFolder: ((Uri?) -> Unit)? = null
     private val folderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> pendingFolder?.invoke(uri); pendingFolder = null }
     private val loraPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(::importLora) }
+    private var pendingPhotos: ((List<Uri>) -> Unit)? = null
+    private val photosPicker = registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(LoraTraining.MAX_PHOTOS)) { uris -> pendingPhotos?.invoke(uris); pendingPhotos = null }
 
     private var pollTick = 0
     private val poll = object : Runnable {
@@ -97,6 +100,8 @@ class MainActivity : AppCompatActivity() {
             pollTick++
             if (!settingsOpen && !app.isBusy() && app.lastError.isEmpty()) {
                 app.history.list(pendingOnly = true).firstOrNull { it.state == "processing" && it.remoteId.isNotBlank() && (pollTick % 5 == 0 || runCatching { Rules.origin(it.baseUrl) }.getOrNull() != openRouter) }?.let { app.refresh(it) }
+                // Trainings are checked about every 30 seconds; each check is a free request.
+                app.checkTrainings()
             }
             handler.postDelayed(this, 6000)
         }
@@ -137,7 +142,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        app.listener = { if (!settingsOpen) renderFeed() }
+        app.listener = { if (!settingsOpen) renderFeed(); libraryContent?.let(::fillLibrary) }
         app.modelsListener = { models?.render() }
         app.streamListener = { id, raw -> if (id == streamId) streamView?.let {
             val thought = ReplyText.thinking(raw)
@@ -287,9 +292,10 @@ class MainActivity : AppCompatActivity() {
                 val value = prompt.text.toString()
                 val lora = if (mode == Mode.IMAGE) LoraCodec.matching(app.loras.list(), value) else null
                 val s = app.settings.get(Mode.IMAGE)
-                if (lora != null && (s.model != LoraCodec.MODEL || s.options.none { it.name == "lora_weights" && it.value == lora.reference })) {
+                val loraBase = lora?.let { LoraBases.of(it.baseModel) }
+                if (lora != null && loraBase != null && (s.model != loraBase.model || s.options.none { it.name == loraBase.field && it.value == lora.reference })) {
                     MaterialAlertDialogBuilder(this).setTitle("Use your LoRA?")
-                        .setMessage("This prompt names ${lora.trigger}, but Image is set to ${s.model}, which does not use that LoRA. Switch Image to FLUX dev LoRA with ${lora.name} and generate?")
+                        .setMessage("This prompt names ${lora.trigger}, but Image is set to ${s.model}, which does not use that LoRA. Switch Image to ${loraBase.title} with ${lora.name} and generate?")
                         .setPositiveButton("Switch and generate") { _, _ ->
                             try { app.useLora(lora); if (app.send(mode, value)) { lastSent = value.trim(); renderFeed() } } catch (e: UserError) { showError(e.message.orEmpty()) }
                         }
@@ -852,25 +858,143 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showLoraLibrary() {
-        val entries = app.loras.list()
         val content = ui.column(20)
-        content.addView(ui.text("Train on your computer with the included script, then import its .otstudio-lora.json file. The weights backup stays on your computer; this library keeps the provider reference used for generation.", Ui.Type.SMALL, ui.muted))
+        libraryContent = content
+        fillLibrary(content)
+        library = MaterialAlertDialogBuilder(this).setTitle("LoRA library").setView(ScrollView(this).apply { addView(content) })
+            .setPositiveButton("Import file") { _, _ -> try { loraPicker.launch(arrayOf("*/*")) } catch (_: Exception) { showError("No Android file picker is available.") } }
+            .setNeutralButton("Add manually") { _, _ -> editLora(null) }.setNegativeButton("Close", null)
+            .setOnDismissListener { if (libraryContent === content) libraryContent = null }.show()
+        app.checkTrainings(now = true)
+    }
+    private var library: androidx.appcompat.app.AlertDialog? = null
+    /** The open LoRA library's content, redrawn when a training changes. */
+    private var libraryContent: LinearLayout? = null
+
+    private fun fillLibrary(content: LinearLayout) {
+        content.removeAllViews()
+        val entries = app.loras.list()
+        val trainings = app.loras.trainings()
+        content.addView(ui.text("Train a LoRA from your photos here, or import a .otstudio-lora.json file from OT Studio for Windows or the LoRA Trainer. Each LoRA runs only on its own base model: FLUX dev or Qwen Image.", Ui.Type.SMALL, ui.muted))
+        content.addView(ui.tonal("Train a LoRA", R.drawable.ic_auto_awesome) { library?.dismiss(); trainLoraDialog() }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
+        if (trainings.isNotEmpty()) {
+            ui.gap(content, 12)
+            content.addView(ui.bold(ui.text("Trainings", Ui.Type.SUBTITLE)))
+            trainings.forEach { trainingCard(content, it) }
+        }
         ui.gap(content, 12)
+        content.addView(ui.bold(ui.text("Saved LoRAs (${entries.size})", Ui.Type.SUBTITLE)))
         if (entries.isEmpty()) content.addView(ui.text("No saved LoRAs yet.", Ui.Type.BODY))
         entries.forEach { lora ->
             val c = ui.card(content, 12, R.color.ot_surface_high, 8)
             c.addView(ui.bold(ui.text(lora.name, Ui.Type.SUBTITLE)))
-            c.addView(ui.text("Trigger: ${lora.trigger.ifBlank { "none" }}  |  scale ${lora.scale}", Ui.Type.SMALL, ui.muted))
+            c.addView(ui.text("${LoraBases.of(lora.baseModel)?.title ?: lora.baseModel}  |  ${if (lora.baseModel == LoraBases.QWEN.id) "words" else "trigger"}: ${lora.trigger.ifBlank { "none" }}  |  strength ${lora.scale}", Ui.Type.SMALL, ui.muted))
             c.addView(ui.text(lora.reference, Ui.Type.CAPTION, ui.muted).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.MIDDLE })
-            c.addView(ui.tonal("Use for pictures", R.drawable.ic_image) { library?.dismiss(); useLora(lora) }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
+            c.addView(actionRow(
+                ui.tonal("Use for pictures", R.drawable.ic_image) { library?.dismiss(); useLora(lora) },
+                ui.danger("Remove", R.drawable.ic_delete) {
+                    MaterialAlertDialogBuilder(this).setTitle("Remove ${lora.name}?").setMessage("This removes the LoRA from this library only. Its model stays in your Replicate account, and you can add it again with its reference.")
+                        .setPositiveButton("Remove") { _, _ -> app.loras.remove(lora.reference); fillLibrary(content) }.setNegativeButton("Keep", null).show()
+                }.apply { contentDescription = "Remove ${lora.name} from the library" }
+            ))
         }
-        library = MaterialAlertDialogBuilder(this).setTitle("LoRA library (${entries.size})").setView(ScrollView(this).apply { addView(content) })
-            .setPositiveButton("Import file") { _, _ -> try { loraPicker.launch(arrayOf("*/*")) } catch (_: Exception) { showError("No Android file picker is available.") } }
-            .setNeutralButton("Add manually") { _, _ -> editLora(null) }.setNegativeButton("Close", null).show()
     }
-    private var library: androidx.appcompat.app.AlertDialog? = null
 
-    /** Switches Image to FLUX dev LoRA with [lora] and starts the prompt with its trigger word. */
+    /** One training: its stage, progress, and time left while it runs; its result or reason when it ends. */
+    private fun trainingCard(parent: LinearLayout, t: LoraTrainingRecord) {
+        val c = ui.card(parent, 12, R.color.ot_surface_high, 8)
+        c.addView(ui.bold(ui.text(t.name, Ui.Type.SUBTITLE)))
+        c.addView(ui.text("${LoraBases.of(t.base)?.title ?: t.base} trainer  |  ${t.steps} steps", Ui.Type.SMALL, ui.muted))
+        if (t.running || t.state == "sending") c.addView(ui.progress().apply {
+            t.progress?.let { isIndeterminate = false; max = 100; progress = (it * 100).toInt() }
+        }, ui.matchWrap(4).apply { topMargin = dp(8) })
+        val status = when (t.state) {
+            "sending" -> "Sending the photos to Replicate..."
+            "starting", "processing" -> listOfNotNull(LoraTraining.phaseText(t.phase), t.progress?.let { "${(it * 100).toInt()}%" },
+                t.minutesLeft?.let { "about $it minute${if (it == 1) "" else "s"} left" }).joinToString("  |  ")
+            "succeeded" -> "Ready. It is in your saved LoRAs."
+            "failed" -> "Failed: ${t.error}"
+            "canceled" -> "Canceled. Replicate bills the time it ran."
+            else -> t.error.ifEmpty { "The outcome is unknown. Check replicate.com/trainings." }
+        }
+        c.addView(ui.text(status, Ui.Type.BODY, if (t.state in listOf("failed", "uncertain")) ui.orange else ui.onSurface))
+        if (t.running) c.addView(actionRow(
+            ui.textButton("Check now", R.drawable.ic_refresh) { app.checkTrainings(now = true) },
+            ui.danger("Cancel training") {
+                MaterialAlertDialogBuilder(this).setTitle("Stop this training?").setMessage("Replicate stops the training and bills the time it already ran. No LoRA is made.")
+                    .setPositiveButton("Stop training") { _, _ -> try { app.cancelTraining(t) } catch (e: UserError) { showError(e.message.orEmpty()) } }.setNegativeButton("Keep training", null).show()
+            }
+        )) else if (t.state != "sending") c.addView(ui.textButton("Remove from list") { try { app.forgetTraining(t) } catch (e: UserError) { showError(e.message.orEmpty()) } }, LinearLayout.LayoutParams(-2, -2))
+    }
+
+    /**
+     * Train a LoRA: a name, a trainer, the trigger word (or plain words for Qwen), steps, and 1 to 20 photos. The Train
+     * tap, after a cost confirmation, starts one billed training at Replicate.
+     */
+    private fun trainLoraDialog() {
+        val content = ui.column(20)
+        var base = LoraBases.FLUX
+        var triggerEdited = false
+        val chosen = ArrayList<Uri>()
+        fun trainerTitle(b: LoraBase) = if (b == LoraBases.QWEN) "Qwen Image (alternate)" else "FLUX dev (standard)"
+        val name = ui.field(content, "LoRA name", "", helper = "For example: Anna face")
+        var refreshAll: () -> Unit = {}
+        ui.dropdown(content, "Trainer", LoraBases.all.map(::trainerTitle), trainerTitle(base)) { title -> base = LoraBases.all.first { trainerTitle(it) == title }; triggerEdited = false; refreshAll() }
+        val trigger = ui.field(content, "Trigger word", "")
+        var settingTrigger = false
+        fun setTrigger(value: String) { settingTrigger = true; trigger.setText(value); settingTrigger = false }
+        // Nothing is suggested until the LoRA has a name.
+        fun suggestion() = name.text.toString().trim().let { if (it.isEmpty()) "" else LoraTraining.suggest(base, it) }
+        val steps = ui.field(content, "Steps", "1000", numeric = true)
+        val note = ui.text("", Ui.Type.SMALL, ui.muted)
+        val photoCount = ui.text("", Ui.Type.BODY)
+        fun refresh() {
+            val qwen = base == LoraBases.QWEN
+            ui.layoutOf(trigger)?.hint = if (qwen) "How the photos describe the subject" else "Trigger word"
+            ui.layoutOf(trigger)?.helperText = if (qwen) "Plain words, not a made-up word: Qwen learns from familiar words. Every photo gets the caption \"A photo of\" these words, and you use them in your prompts."
+                else "A made-up word you put in prompts to call up the LoRA."
+            ui.layoutOf(steps)?.helperText = if (qwen) "100 to 6000. 1000 to 2000 suit most faces." else "3 to 6000. 1000 suits most faces."
+            note.text = if (qwen) "Training runs on Replicate with qwen/qwen-image-lora-trainer, billed by the second (about 9 cents a minute). A run usually takes 15 to 30 minutes, so about \$1.40 to \$2.75. The LoRA runs only on Qwen Image with a LoRA."
+                else "Training runs on Replicate with ostris/flux-dev-lora-trainer. 1,000 steps cost about \$1.50 to \$2 and take about 20 to 30 minutes. The LoRA runs on FLUX dev with a LoRA, here and in OT Studio for Windows."
+            photoCount.text = if (chosen.isEmpty()) "No photos chosen. Choose 1 to 20; 10 or more work best, each at least 512 pixels on its short side." else "${chosen.size} photo${if (chosen.size == 1) "" else "s"} chosen."
+            if (!triggerEdited) setTrigger(suggestion())
+        }
+        refreshAll = ::refresh
+        name.doAfterTextChanged { if (!triggerEdited) setTrigger(suggestion()) }
+        trigger.doAfterTextChanged { if (!settingTrigger) triggerEdited = true }
+        content.addView(photoCount, ui.matchWrap(4).apply { topMargin = dp(8) })
+        content.addView(ui.tonal("Choose photos", R.drawable.ic_add_photo_alternate) {
+            pickPhotos { uris -> chosen.clear(); chosen.addAll(uris.take(LoraTraining.MAX_PHOTOS)); refresh() }
+        }, LinearLayout.LayoutParams(-2, -2))
+        val agree = ui.checkbox("I agree to upload these photos to my Replicate account and pay for the training there.", false)
+        content.addView(agree, ui.matchWrap(4).apply { topMargin = dp(8) })
+        content.addView(note)
+        content.addView(ui.text("Use photos of yourself, or of someone who agreed to be trained.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(8), 0, 0) })
+        refresh()
+        val dialog = MaterialAlertDialogBuilder(this).setTitle("Train a LoRA").setView(ScrollView(this).apply { addView(content) })
+            .setPositiveButton("Train", null).setNegativeButton("Cancel", null).create()
+        dialog.setOnShowListener { dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            try {
+                val n = name.text.toString().trim(); val t = trigger.text.toString().trim()
+                val s = steps.text.toString().trim().toIntOrNull() ?: throw UserError("Enter the number of steps.")
+                LoraTraining.check(n, t, base, s, LoraTraining.defaultRank(base), chosen.size)
+                if (!agree.isChecked) throw UserError("Tick the box to agree to the upload and the charge first.")
+                val cost = if (base == LoraBases.QWEN) "about \$1.40 to \$2.75, billed by the second" else "about \$1.50 to \$2 for 1,000 steps"
+                MaterialAlertDialogBuilder(this).setTitle("Start this training?")
+                    .setMessage("$n: ${chosen.size} photos, $s steps, on the ${base.title} trainer. Replicate bills $cost. The photos go to your Replicate account, and the LoRA is kept in a private model there.")
+                    .setPositiveButton("Start training") { _, _ ->
+                        try {
+                            val photos = chosen.map { uri -> { readPhoto(uri) } }
+                            if (app.trainLora(n, t, base, s, photos)) { dialog.dismiss(); snack("Training is starting. The LoRA library shows its progress.", "Open") { showLoraLibrary() } }
+                            else showError("Wait for the current request to finish.")
+                        } catch (e: UserError) { showError(e.message.orEmpty()) }
+                    }.setNegativeButton("Not yet", null).show()
+            } catch (e: UserError) { showError(e.message.orEmpty()) }
+        } }
+        dialog.show()
+    }
+
+    /** Switches Image to the LoRA's own model with [lora] and starts the prompt with its trigger word. */
     private fun useLora(lora: SavedLora) {
         try {
             app.useLora(lora)
@@ -880,7 +1004,7 @@ class MainActivity : AppCompatActivity() {
             if (LoraCodec.matching(listOf(lora), draft) == null) drafts[Mode.IMAGE] = "${lora.trigger} " + draft
             showChat()
             prompt.setSelection(prompt.text?.length ?: 0); prompt.requestFocus()
-            snack("Image now uses FLUX dev LoRA with ${lora.name}. Describe the picture after ${lora.trigger}, then tap Generate.")
+            snack("Image now uses ${LoraCodec.base(lora).title} with ${lora.name}. Describe the picture after ${lora.trigger}, then tap Generate.")
         } catch (e: UserError) { showError(e.message.orEmpty()) }
     }
 
@@ -890,16 +1014,18 @@ class MainActivity : AppCompatActivity() {
         val reference = ui.field(content, "Replicate owner/model/version or HTTPS weights URL", imported?.reference.orEmpty())
         val trigger = ui.field(content, "Trigger word to use in your prompt", imported?.trigger.orEmpty())
         val scale = ui.field(content, "Default scale (-1 to 3)", (imported?.scale ?: 1.0).toString(), numeric = true, decimal = true)
-        content.addView(ui.text("For FLUX dev models. Saving an existing reference updates its name, trigger, and scale. No provider call is made here.", Ui.Type.SMALL, ui.muted))
+        var base = LoraBases.of(imported?.baseModel ?: "") ?: LoraBases.FLUX
+        ui.dropdown(content, "Base model", LoraBases.all.map { it.title }, base.title) { title -> base = LoraBases.all.first { it.title == title } }
+        content.addView(ui.text("FLUX dev LoRAs run on FLUX dev with a LoRA; Qwen Image LoRAs run on Qwen Image with a LoRA. Saving an existing reference updates its name, trigger, and scale. No provider call is made here.", Ui.Type.SMALL, ui.muted))
         val dialog = MaterialAlertDialogBuilder(this).setTitle(if (imported == null) "Add LoRA" else "Review LoRA import").setView(ScrollView(this).apply { addView(content) })
             .setPositiveButton("Save", null).setNegativeButton("Cancel", null).create()
         dialog.setOnShowListener { dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             try {
                 val parsed = scale.text.toString().replace(',', '.').toDoubleOrNull() ?: throw UserError("Enter a numeric scale.")
-                val saved = SavedLora(name.text.toString().trim(), reference.text.toString().trim(), trigger.text.toString().trim(), parsed)
+                val saved = SavedLora(name.text.toString().trim(), reference.text.toString().trim(), trigger.text.toString().trim(), parsed, base.id)
                 app.loras.save(saved)
                 dialog.dismiss()
-                MaterialAlertDialogBuilder(this).setTitle("LoRA saved").setMessage("Use ${saved.name} for pictures now? Image switches to FLUX dev LoRA, and your prompt starts with ${saved.trigger.ifBlank { "its trigger word" }}.")
+                MaterialAlertDialogBuilder(this).setTitle("LoRA saved").setMessage("Use ${saved.name} for pictures now? Image switches to ${base.title} with a LoRA, and your prompt starts with ${saved.trigger.ifBlank { "its trigger word" }}.")
                     .setPositiveButton("Use for pictures") { _, _ -> useLora(saved) }.setNegativeButton("Not now") { _, _ -> showLoraLibrary() }.show()
             } catch (e: Exception) { showError((e as? UserError)?.message ?: "Could not save the library. Check device storage.") }
         } }
@@ -922,6 +1048,13 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread { if (!isFinishing && !isDestroyed) editLora(item) }
             } catch (e: Exception) { runOnUiThread { if (!isFinishing && !isDestroyed) showError((e as? UserError)?.message ?: "Could not import this LoRA library file.") } }
         }
+    }
+
+    /** Opens Android's photo picker for up to 20 photos; [done] receives them, or an empty list. */
+    private fun pickPhotos(done: (List<Uri>) -> Unit) {
+        pendingPhotos = done
+        try { photosPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+        catch (_: Exception) { pendingPhotos = null; showError("No Android photo picker is available.") }
     }
 
     /** Opens Android's photo picker; [done] receives the chosen photo or null. */

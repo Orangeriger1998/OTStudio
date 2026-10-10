@@ -70,7 +70,7 @@ One minute of video takes about 12 clips, because video models make clips of 5 t
 
 OT Studio makes one photo or one clip at a time. Make it longer on a finished video adds about 5 seconds that start from its last frame, and the phone joins the parts into one video; tap it again for more. Music and titles need another app. Use a video editor for that final step. CapCut works on a phone. Any desktop video editor works on a computer.
 
-LoRA training runs on a Windows computer with the OT Studio LoRA Trainer from the GitHub Releases page. The phone cannot train a LoRA.
+Train a LoRA from the LoRA library: give it a name, choose the FLUX dev or Qwen Image trainer, and choose 10 to 20 photos. Training runs in your own Replicate account and costs about $1.50 to $2.75. A card shows its stage and the minutes left, and the finished LoRA joins the library. The OT Studio LoRA Trainer for Windows still works too.
 
 Replicate deletes results made through its API after about an hour. OT Studio downloads each result the moment it finishes. Save anything you want to keep.
 

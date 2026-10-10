@@ -56,7 +56,7 @@ class StudioApp : Application() {
     private val transport = HttpsTransport()
     /** OpenRouter returns pictures inside its answer: up to 64 MB, with up to 5 minutes for the model to draw them. */
     private val largeTransport = HttpsTransport(64 * 1024 * 1024, 300, 240_000)
-    private val api = ProviderApi(transport).also { it.large = largeTransport; it.phonePicture = ::phonePicture }
+    private val api = ProviderApi(transport).also { it.large = largeTransport; it.largeBinary = largeTransport; it.phonePicture = ::phonePicture }
     private val executor = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private val busy = AtomicBoolean(false)
@@ -74,6 +74,7 @@ class StudioApp : Application() {
         history.saveChat = saveChatHistory
         try { NativeEngine.prepare(this) } catch (_: Exception) { }
         history.recover()
+        loras.recoverTrainings()
         // Free the model's memory when the app stays in the background for five minutes.
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) { startedActivities++; main.removeCallbacks(unloadLater) }
@@ -233,13 +234,23 @@ class StudioApp : Application() {
         val folder = File(filesDir, "media")
         val file = File(folder, ref.removePrefix("phone:"))
         if (file.parentFile?.canonicalPath != folder.canonicalPath || !file.isFile) throw UserError("A picture chosen for this model is gone from the phone. Choose it again in API CALL.")
+        if (file.length() > Rules.MAX_MEDIA_BYTES) throw UserError("A chosen picture is too large to send.")
+        return "data:image/jpeg;base64," + Base64.encodeToString(uprightJpeg(file.readBytes(), 90), Base64.NO_WRAP)
+    }
+
+    /**
+     * A new upright JPEG of [bytes], at most 2048 pixels on its long side. It carries no photo details such as the
+     * place. [minSide] refuses pictures that are too small, for LoRA training.
+     */
+    private fun uprightJpeg(bytes: ByteArray, quality: Int, minSide: Int = 0): ByteArray {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.path, bounds)
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw UserError("A chosen picture could not be read.")
+        if (minOf(bounds.outWidth, bounds.outHeight) < minSide) throw UserError("it is too small (${bounds.outWidth} by ${bounds.outHeight} pixels). Training needs at least $minSide pixels on each side.")
         var sample = 1
         while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 2048) sample *= 2
-        val decoded = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: throw UserError("A chosen picture could not be read.")
-        val turn = try { when (ExifInterface(file.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+        val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: throw UserError("A chosen picture could not be read.")
+        val turn = try { when (ExifInterface(bytes.inputStream()).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
             ExifInterface.ORIENTATION_ROTATE_90 -> 90f; ExifInterface.ORIENTATION_ROTATE_180 -> 180f; ExifInterface.ORIENTATION_ROTATE_270 -> 270f; else -> 0f
         } } catch (_: Exception) { 0f }
         val long = maxOf(decoded.width, decoded.height)
@@ -247,8 +258,8 @@ class StudioApp : Application() {
         val matrix = Matrix().apply { postScale(scale, scale); postRotate(turn) }
         val ready = if (scale == 1f && turn == 0f) decoded else Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
         val out = ByteArrayOutputStream()
-        try { ready.compress(Bitmap.CompressFormat.JPEG, 90, out) } finally { if (ready !== decoded) ready.recycle(); decoded.recycle() }
-        return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        try { ready.compress(Bitmap.CompressFormat.JPEG, quality, out) } finally { if (ready !== decoded) ready.recycle(); decoded.recycle() }
+        return out.toByteArray()
     }
 
     /**
@@ -523,7 +534,7 @@ class StudioApp : Application() {
     fun defaultPlanModel(plan: JobPlan): String {
         val allowed = planModels(plan)
         // A new picture whose prompt names a saved LoRA starts on the model that can use it.
-        if (plan.action == "image" && LoraCodec.matching(loras.list(), plan.prompt) != null && LoraCodec.MODEL in allowed) return LoraCodec.MODEL
+        LoraCodec.matching(loras.list(), plan.prompt)?.let { LoraCodec.base(it).model }?.let { if (plan.action == "image" && it in allowed) return it }
         val current = when (plan.action) { "edit" -> settings.editModel; "video" -> settings.get(Mode.VIDEO).model; else -> settings.get(Mode.IMAGE).model }
         return current.takeIf { it in allowed } ?: allowed.firstOrNull() ?: current
     }
@@ -542,7 +553,7 @@ class StudioApp : Application() {
         val withPicture = when {
             plan.action == "edit" -> ModelCatalog.edit(modelId)?.let { e -> keepShape(chosen).let { k -> k.copy(options = k.options.filter { it.name != e.imageField } + InputValue(e.imageField, InputKind.TEXT, uploadCheck)) } } ?: chosen
             plan.action == "video" && plan.reference != null -> MediaRole.START_FRAME.apply(chosen, uploadCheck) { withoutPictures(settings.forModel(chosen, it)) }
-            plan.action == "image" && modelId == LoraCodec.MODEL -> LoraCodec.matching(loras.list(), plan.prompt)?.let { LoraCodec.apply(chosen, it) } ?: chosen
+            plan.action == "image" && LoraBases.forModel(modelId) != null -> LoraCodec.matching(loras.list().filter { LoraCodec.base(it).model == modelId }, plan.prompt)?.let { LoraCodec.apply(chosen, it) } ?: chosen
             else -> chosen
         }
         return JobBuilder.apply(safetyOff(withPicture), plan, words)
@@ -704,7 +715,7 @@ class StudioApp : Application() {
     /** Picture inputs saved with [mode]'s model, such as a reference or a starting frame. Each goes with every request. */
     fun attachedPictures(mode: Mode): List<String> {
         val s = settings.get(mode)
-        val pictures = s.schema?.fields.orEmpty().filter { it.uri && it.name != "lora_weights" }.map { it.name }.toSet()
+        val pictures = s.schema?.fields.orEmpty().filter { it.uri && it.name != "lora_weights" && it.name != "replicate_weights" }.map { it.name }.toSet()
         return s.options.filter { it.name in pictures && it.value.isNotBlank() }.map { it.name }
     }
 
@@ -717,11 +728,109 @@ class StudioApp : Application() {
         changed()
     }
 
-    /** Sets Image to FLUX dev LoRA with [lora], keeping the model's other saved inputs. */
+    /** Sets Image to the LoRA's own model (FLUX dev or Qwen Image with a LoRA) with [lora], keeping its other saved inputs. */
     fun useLora(lora: SavedLora) {
+        val model = LoraCodec.base(lora).model
         val current = settings.get(Mode.IMAGE)
-        val base = if (current.model == LoraCodec.MODEL) current else settings.forModel(current, LoraCodec.MODEL)
+        val base = if (current.model == model) current else settings.forModel(current, model)
         settings.save(safetyOff(LoraCodec.apply(base, lora)), null)
+        changed()
+    }
+
+    // ---- LoRA training on Replicate ----
+
+    /** The Replicate address and key for training: the Image mode's own, which must be Replicate's. */
+    private fun replicateKey(): ResolvedModel {
+        val image = Rules.resolve(Mode.IMAGE, settings::get, settings::key)
+        if (Rules.origin(image.settings.baseUrl) != "https://api.replicate.com:443") throw UserError("LoRA training runs on Replicate. In Settings, set Image to Replicate and save its key.")
+        return image
+    }
+
+    /**
+     * Trains a LoRA from [photos] in the user's own Replicate account: the photos become upright JPEG copies on the
+     * phone, go up as one ZIP, and train into a private model. One billed request, never repeated by the app.
+     * Returns false while another request runs.
+     */
+    fun trainLora(name: String, trigger: String, base: LoraBase, steps: Int, photos: List<() -> Triple<ByteArray, String, String>>): Boolean {
+        if (busy.get()) return false
+        val n = name.trim(); val t = trigger.trim(); val rank = LoraTraining.defaultRank(base)
+        LoraTraining.check(n, t, base, steps, rank, photos.size)
+        if (loras.trainings().any { it.state == "sending" }) throw UserError("A training is still being sent. Wait for it first.")
+        val image = replicateKey()
+        run {
+            val jpegs = photos.mapIndexed { i, read -> try { uprightJpeg(read().first, 95, LoraTraining.MIN_SIDE) } catch (e: UserError) { throw UserError("Photo ${i + 1}: ${e.message}") } }
+            val archive = LoraTraining.zip(jpegs)
+            val b = image.settings.baseUrl; val k = image.key
+            val owner = api.account(b, k)
+            // The Qwen trainer runs on its newest version; the FLUX trainer stays on its checked version.
+            val (trainer, version) = if (base == LoraBases.QWEN) base.model to api.latestVersion(b, k, base.model) else LoraTraining.TRAINER to LoraTraining.TRAINER_VERSION
+            val destination = api.ensureDestination(b, k, owner, LoraTraining.destinationSlug(n, base), base)
+            val fileUrl = api.uploadArchive(b, k, archive)
+            val now = System.currentTimeMillis()
+            val record = LoraTrainingRecord(UUID.randomUUID().toString(), n, t, base.id, steps, rank, trainer, version, destination, "sending", created = now)
+            loras.saveTraining(record)
+            changed()
+            val result = try {
+                val (id, status) = api.startTraining(b, k, trainer, version, destination, LoraTraining.input(base, fileUrl, t, steps, rank))
+                record.copy(trainingId = id, state = if (status == "processing") "processing" else "starting", nextCheck = System.currentTimeMillis() + LoraTraining.CHECK_MS)
+            } catch (e: ProviderRejected) { record.copy(state = "failed", error = "${e.message} No training was started.", finished = System.currentTimeMillis()) }
+            catch (e: Exception) { record.copy(state = "uncertain", error = "${friendly(e)} The training may have started. Check replicate.com/trainings before you start another.") }
+            loras.saveTraining(result)
+        }
+        return true
+    }
+
+    /** Checks running trainings that are due, about every 30 seconds ([now] checks them at once). Free requests. */
+    fun checkTrainings(now: Boolean = false) {
+        val due = loras.trainings().filter { it.running && it.trainingId.isNotEmpty() && (now || it.nextCheck <= System.currentTimeMillis()) }
+        if (due.isEmpty() || busy.get()) return
+        // Without a Replicate key, nothing is checked and no error is shown; the cards keep their last state.
+        val image = try { replicateKey() } catch (_: UserError) { return }
+        run {
+            due.forEach { t -> loras.saveTraining(checkTraining(image, t)) }
+        }
+    }
+
+    private fun checkTraining(image: ResolvedModel, t: LoraTrainingRecord): LoraTrainingRecord {
+        val now = System.currentTimeMillis()
+        val root = try { api.training(image.settings.baseUrl, image.key, t.trainingId) } catch (_: Exception) { return t.copy(nextCheck = now + LoraTraining.CHECK_MS) }
+        val logs = root.optString("logs")
+        val progress = LoraTraining.progress(logs, t.steps) ?: t.progress
+        val first = t.firstAt == 0L && progress != null
+        val firstAt = if (first) now else t.firstAt
+        val firstProgress = if (first) progress ?: 0.0 else t.firstProgress
+        val seen = t.copy(progress = progress, phase = LoraTraining.phase(logs, progress) ?: t.phase, firstAt = firstAt, firstProgress = firstProgress,
+            minutesLeft = LoraTraining.minutesLeft(firstAt, firstProgress, now, progress), nextCheck = now + LoraTraining.CHECK_MS)
+        return when (root.optString("status")) {
+            "succeeded" -> {
+                val base = LoraBases.of(t.base) ?: LoraBases.FLUX
+                val reference = LoraTraining.reference(root.optJSONObject("output"), t.destination, base)
+                if (reference == null) seen.copy(state = "failed", error = "The finished training did not return a LoRA OT Studio can use. Check replicate.com/trainings.", finished = now)
+                else {
+                    loras.save(SavedLora(t.name.take(80), reference, t.trigger, 1.0, base.id))
+                    seen.copy(state = "succeeded", progress = 1.0, reference = reference, finished = now)
+                }
+            }
+            "failed" -> seen.copy(state = "failed", finished = now, error = (root.opt("error") as? String).orEmpty().replace(Regex("[\\p{Cntrl}]+"), " ").trim().take(300).ifEmpty { "The training failed at Replicate." })
+            "canceled" -> seen.copy(state = "canceled", finished = now)
+            "processing" -> seen.copy(state = "processing")
+            else -> seen.copy(state = "starting")
+        }
+    }
+
+    fun cancelTraining(t: LoraTrainingRecord) {
+        if (!t.running || t.trainingId.isEmpty()) throw UserError("This training is not running.")
+        val image = replicateKey()
+        run {
+            api.cancelTraining(image.settings.baseUrl, image.key, t.trainingId)
+            loras.saveTraining(t.copy(state = "canceled", finished = System.currentTimeMillis()))
+        }
+    }
+
+    /** Removes a finished training from the list. Its LoRA, if any, stays in the library. */
+    fun forgetTraining(t: LoraTrainingRecord) {
+        if (t.running || t.state == "sending") throw UserError("A running training stays in the list until it ends.")
+        loras.removeTraining(t.id)
         changed()
     }
 
