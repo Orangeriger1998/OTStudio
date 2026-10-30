@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OT Studio</title>
+<meta name="description" content="OT Studio makes pictures, videos, and chat from your own API keys, on Android, Windows, and Linux. No server, no account, no analytics.">
+<link rel="icon" href="images/otstudio-avatar.jpg">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="images/otstudio-avatar.jpg" alt=""> OT Studio</a>
+    <nav>
+      <a href="./" aria-current="page">Home</a>
+      <a href="download.html">Download</a>
+      <a href="desktop.html">Desktop</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio/wiki">Wiki</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="hero">
+    <div>
+      <h1>Pictures, videos, and chat from your own API keys.</h1>
+      <p class="lead">OT Studio runs on Android, Windows, and Linux. You bring your own keys for Replicate, OpenRouter, and other providers, and each provider bills you directly for what you use. OT Studio has no server, no account, and no analytics.</p>
+      <div class="buttons">
+        <a class="btn" data-button="android" href="https://github.com/Orangeriger1998/OTStudio/releases">Android<span class="sub">APK from the Releases page</span></a>
+        <a class="btn alt" data-button="windows" href="https://github.com/Orangeriger1998/OTStudio-PC/releases">Windows<span class="sub">Installer from the Releases page</span></a>
+        <a class="btn alt" data-button="linux" href="https://github.com/Orangeriger1998/OTStudio-PC/releases">Linux<span class="sub">AppImage or .deb from the Releases page</span></a>
+      </div>
+      <p class="small muted" style="margin-top:12px">Free software under the GNU General Public License, version 3. <a href="download.html">Install steps and checksums</a>.</p>
+    </div>
+    <div class="art"><img src="images/otstudio-banner.jpg" alt="OT Studio: a tiger in glasses holding a phone"></div>
+  </div>
+
+  <section>
+    <h2>One app, three platforms</h2>
+    <div class="grid three">
+      <div class="card">
+        <h3>Android <span class="tag">phone</span></h3>
+        <p>Chat, images, and video on the phone. Chat runs on the phone with a free downloaded model, or through OpenRouter. Images, edits, and video come from Replicate. Ask for a picture or a clip in plain words, and the chat prepares the job for you.</p>
+        <ul>
+          <li>Needs Android 10 or later.</li>
+          <li>Train a LoRA from your own photos without leaving the phone.</li>
+          <li>Memory for standing instructions, and web search on Wikipedia or Tavily.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Windows <span class="tag">desktop</span></h3>
+        <p>The desktop version. Pictures and videos from Replicate, SpicyAPI, and OpenRouter, each with its own key. A Chat tab plans jobs with a private model in Ollama on your PC, or with a model on OpenRouter, and nothing is billed until you click Go.</p>
+        <ul>
+          <li>Windows 10 or 11. One installer, and updates install over the old version.</li>
+          <li>LoRA files shared with the Android app.</li>
+          <li>Add any other picture or video service by pasting its example request.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Linux <span class="tag">desktop</span></h3>
+        <p>The same desktop app as an AppImage that runs where it is, or a .deb package that installs with your package manager and appears in your menu. Tested on Linux Mint 22.</p>
+        <ul>
+          <li>Keys live in your desktop keyring, through the same libsecret that your browser uses.</li>
+          <li>Picture and video work happens on your computer with the bundled sharp and ffmpeg.</li>
+          <li>Same files, same settings, same history layout as on Windows.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What it does</h2>
+    <ul class="features">
+      <li><b>Create by chatting.</b> Ask for a picture, an edit, or a video in plain words. A job card shows the exact prompt, the model, and the likely cost before you confirm. The chat model only plans; the app picks the service, the model, and the settings, and starts a paid job only when you tap Generate or click Go.</li>
+      <li><b>Images.</b> FLUX schnell, FLUX dev, FLUX 1.1 Pro, FLUX dev with your own LoRA, and Qwen Image with your own LoRA. The desktop adds Seedream 4.5, FLUX.2 dev, and Qwen Image Edit Plus for editing with several reference pictures.</li>
+      <li><b>Video.</b> WAN 2.7 and WAN 2.2, from text or from starting and ending frames. Make it longer continues a finished video from its last frame and joins the parts for you.</li>
+      <li><b>Photos as inputs.</b> Add a photo in any mode. Pictures carry labels such as @img1 and @img2, so a description can say which picture is which.</li>
+      <li><b>Edit, Expand, Upscale.</b> Edit a picture from a plain instruction, give it a new shape around the unchanged original, or make it two or four times larger with Real-ESRGAN.</li>
+      <li><b>LoRAs for faces and styles.</b> Train on 1 to 20 photos in your own Replicate account, in a private model. Use, import, and export LoRA files between the phone and the desktop.</li>
+      <li><b>Any other service.</b> On the desktop, paste a provider's curl, Python, or Node example, say what each field is, and save it as a service. OT Studio reads the example as text and never runs it. A shared service file never contains a key.</li>
+      <li><b>Private chat.</b> On the phone, a downloaded model answers offline and free per message. On the desktop, a model in Ollama answers at 127.0.0.1 and your messages never leave the computer.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>On the phone</h2>
+    <div class="shots">
+      <figure><img src="images/screen-main.png" alt="The main screen with a chat that plans a wide picture of a lighthouse"><figcaption>Chat plans a picture before anything is billed</figcaption></figure>
+      <figure><img src="images/screen-api-call.png" alt="The API CALL panel with a model and its inputs"><figcaption>API CALL: the model and its inputs</figcaption></figure>
+      <figure><img src="images/screen-settings.png" alt="Settings for the video provider and its key"><figcaption>Settings: one key per provider</figcaption></figure>
+      <figure><img src="images/screen-help.png" alt="The Help screen with a quick start"><figcaption>Help, with a quick start</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="grid two">
+      <div>
+        <h2>Your keys stay yours</h2>
+        <p>OT Studio encrypts each key on your device: in the Android Keystore on the phone, for your Windows account on Windows, and in your desktop keyring on Linux. A key goes only to the provider it belongs to, in the request header that provider expects, and never to a host that stores results.</p>
+        <p>Every paid request is sent once. If the connection breaks after sending, the job says Outcome unknown instead of trying again, because the provider may have done the work. Chat on the phone, and chat with Ollama on the desktop, never leave the device.</p>
+        <p><a href="privacy.html">Read the privacy page</a>, or the full notes for <a href="https://github.com/Orangeriger1998/OTStudio/blob/main/docs/PRIVACY.md">Android</a> and the <a href="https://github.com/Orangeriger1998/OTStudio-PC/wiki/Privacy">desktop</a>.</p>
+      </div>
+      <div>
+        <h2>What it costs</h2>
+        <p class="muted small">Each provider charges per request. These figures come from the providers' own price pages in October 2026 and can change.</p>
+        <table>
+          <tr><th>Item</th><th>Typical price</th></tr>
+          <tr><td>Chat on the phone</td><td>Free after the model download</td></tr>
+          <tr><td>FLUX schnell image</td><td>$0.003 each</td></tr>
+          <tr><td>FLUX dev image</td><td>$0.025 each</td></tr>
+          <tr><td>LoRA training run</td><td>About $1.50 to $2</td></tr>
+          <tr><td>WAN 2.7 video from an image</td><td>$0.10 per second at 720p</td></tr>
+          <tr><td>Upscale 2x</td><td>$0.002 each</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Documentation</h2>
+    <div class="links">
+      <a href="https://github.com/Orangeriger1998/OTStudio/wiki">Android wiki<span>Every screen box by box, and nine procedures from a first photo to a consistent face in video</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio/wiki/Getting-Started">Getting Started<span>From an empty phone to a first image in about fifteen minutes</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC/wiki">Desktop wiki<span>Keys, pictures, videos, chat, LoRAs, adding a service, and privacy on Windows and Linux</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio/blob/main/docs/LORA-TRAINING.md">LoRA training<span>How a training set is built and what the trainer does with it</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio/blob/main/docs/PROVIDERS.md">Provider contracts<span>The models, inputs, and defaults the app relies on</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio/wiki/Revision-Log">Revision logs<span>What changed in each version of the <a href="https://github.com/Orangeriger1998/OTStudio-PC/wiki/Revision-Log">desktop</a> and the phone app</span></a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>OT Studio by OrangeTiger. Free software under the GNU General Public License, version 3, with no warranty. The license covers the code; the OT Studio name and artwork stay with OrangeTiger.</p>
+    <nav>
+      <a href="https://github.com/Orangeriger1998/OTStudio">Android repository</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC">Desktop repository</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio/issues">Issues</a>
+    </nav>
+  </div>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>

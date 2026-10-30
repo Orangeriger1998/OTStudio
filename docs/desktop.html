@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OT Studio for Windows and Linux</title>
+<meta name="description" content="The desktop version of OT Studio: pictures and videos from Replicate, SpicyAPI, and OpenRouter with your own keys, a Chat tab that plans jobs, and LoRAs shared with the Android app.">
+<link rel="icon" href="images/otstudio-avatar.jpg">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="images/otstudio-avatar.jpg" alt=""> OT Studio</a>
+    <nav>
+      <a href="./">Home</a>
+      <a href="download.html">Download</a>
+      <a href="desktop.html" aria-current="page">Desktop</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio/wiki">Wiki</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="plain">
+    <h1>OT Studio for Windows and Linux</h1>
+    <p class="lead muted">The desktop version of the OT Studio Android app. It keeps its own version numbers and its own <a href="https://github.com/Orangeriger1998/OTStudio-PC">repository</a>, and it shares LoRA files and the same way of thinking about keys with the phone app.</p>
+    <div class="buttons">
+      <a class="btn" data-button="windows" href="https://github.com/Orangeriger1998/OTStudio-PC/releases">Windows<span class="sub">Installer from the Releases page</span></a>
+      <a class="btn alt" data-button="linux" href="https://github.com/Orangeriger1998/OTStudio-PC/releases">Linux<span class="sub">AppImage or .deb from the Releases page</span></a>
+      <a class="btn alt" href="https://github.com/Orangeriger1998/OTStudio-PC/wiki">Desktop wiki<span class="sub">Getting started, Chat, LoRAs, services</span></a>
+    </div>
+  </section>
+
+  <section>
+    <h2>Three tabs</h2>
+    <div class="grid three">
+      <div class="card">
+        <h3>Chat</h3>
+        <p>Ask for pictures and videos in plain words. A private model in Ollama on your PC, or a model on OpenRouter, reads the messages and writes a plan: the action, the shape, the length, and the prompt words. The app picks the media, the service, the model, and the settings, and nothing is billed until you click Go.</p>
+      </div>
+      <div class="card">
+        <h3>Pictures</h3>
+        <p>Choose a service and a model, describe the picture, change any setting you care about, and click Make the picture. The simple view shows the main settings for each model; Show all settings shows the rest. Each finished picture has Edit, Expand, Upscale, and Make a video.</p>
+      </div>
+      <div class="card">
+        <h3>Videos</h3>
+        <p>The same steps, with a starting picture, an ending picture, or both. OpenRouter videos can take several minutes, and OT Studio checks on them every 30 seconds, even after you close the app. Make it longer continues a finished video from its last frame and joins the parts.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What it does</h2>
+    <ul class="features">
+      <li><b>Three services, three keys.</b> Pictures and videos from Replicate, SpicyAPI, and OpenRouter. You only need keys for the services you plan to use.</li>
+      <li><b>Pictures as references.</b> Editing models such as Seedream 4.5, Qwen Image Edit Plus, and FLUX Kontext take pictures. Seedream 4.5 takes up to 14. Every picture gets a label, @img1, @img2, and so on, that you can use in the description.</li>
+      <li><b>Edit, Expand, Upscale.</b> Edit a picture from a plain instruction. Expand gives it a new shape, such as wide or tall, with FLUX Fill dev painting the new area and OT Studio rebuilding the picture at full size on your PC. Upscale makes it two or four times larger with Real-ESRGAN.</li>
+      <li><b>History.</b> Save, Open folder, Repeat, and Delete on every card. Repeat fills the form with the same model, prompt, settings, and pictures.</li>
+      <li><b>LoRAs.</b> Use, import, export, and train FLUX dev LoRAs for faces and styles, or Qwen Image LoRAs with the alternate trainer. The files are shared with the Android app.</li>
+      <li><b>Any other service.</b> Paste the provider's curl, Python, or Node example, say what each field is, and save it. OT Studio reads the example as text and never runs it. Exported services can be shared and never contain a key.</li>
+      <li><b>One request, sent once.</b> A paid request is never repeated on its own. If the connection breaks after sending, the job says Outcome unknown, because the service may have done the work.</li>
+      <li><b>Approved hosts only.</b> Only the main process reaches the network, over https, to the services' own hosts and the addresses you allowed in a dialog. The window never talks to the internet.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="grid two">
+      <div>
+        <h2>On Windows</h2>
+        <p>One installer, <code>OTStudio-PC-Setup-x.y.z.exe</code>. Install it over an earlier version and your keys, history, chat, and LoRAs stay. Windows encrypts the keys for your account. Data lives in <code>%APPDATA%\OT Studio</code>, and saved results go to your Pictures or Videos folder, in an OT Studio folder.</p>
+      </div>
+      <div>
+        <h2>On Linux</h2>
+        <p>An AppImage that runs where it is, or a .deb package that installs to <code>/opt/OT Studio</code> and adds a menu entry under Graphics. Your keys are stored in the desktop keyring through libsecret, the same place your browser keeps its passwords. Data lives in <code>~/.config/OT Studio</code>. Tested on Linux Mint 22 with Cinnamon.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Build from source</h2>
+    <p>You need Node.js 24 or later. The tests cover the parts with no Electron types.</p>
+<pre><code>git clone https://github.com/Orangeriger1998/OTStudio-PC.git
+cd OTStudio-PC
+npm install
+npm test
+npm start            # run it
+npm run dist         # Windows installer, in dist/
+npm run dist:linux   # AppImage and .deb, in dist/</code></pre>
+    <p class="muted small">Picture work uses sharp and video work uses the bundled ffmpeg, both unpacked from the application archive at build time. The app is Electron; the window is plain HTML, CSS, and JavaScript with no framework, sandboxed, with a strict Content Security Policy.</p>
+  </section>
+
+  <section>
+    <h2>Read more</h2>
+    <div class="links">
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC/wiki/Getting-Started">Getting started<span>Keys, your first picture, videos, references, and saving</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC/wiki/Chat">Chat<span>Ask for pictures and videos in plain words, with a model on your PC</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC/wiki/LoRAs">LoRAs<span>Use, import, and train LoRAs for faces and styles</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC/wiki/Adding-a-Service">Adding a service<span>Use any picture or video provider by pasting its example request</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC/wiki/Privacy">Privacy and security<span>What leaves your PC, and what never does</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC/wiki/Revision-Log">Revision log<span>Changes in each version</span></a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>OT Studio by OrangeTiger. Free software under the GNU General Public License, version 3, with no warranty.</p>
+    <nav>
+      <a href="https://github.com/Orangeriger1998/OTStudio">Android repository</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC">Desktop repository</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC/issues">Issues</a>
+    </nav>
+  </div>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>

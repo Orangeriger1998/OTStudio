@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OT Studio privacy</title>
+<meta name="description" content="What OT Studio sends, where your keys live, and what stays on your device, on Android, Windows, and Linux.">
+<link rel="icon" href="images/otstudio-avatar.jpg">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="images/otstudio-avatar.jpg" alt=""> OT Studio</a>
+    <nav>
+      <a href="./">Home</a>
+      <a href="download.html">Download</a>
+      <a href="desktop.html">Desktop</a>
+      <a href="privacy.html" aria-current="page">Privacy</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio/wiki">Wiki</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="plain">
+    <h1>Privacy</h1>
+    <p class="lead muted">OT Studio has no server of its own. It shows no ads and collects no analytics. Every request goes straight from your device to the provider you configured, and that provider's terms, billing, logging, and retention rules apply. This page is a summary; the full notes are in the <a href="https://github.com/Orangeriger1998/OTStudio/blob/main/docs/PRIVACY.md">Android privacy document</a> and the <a href="https://github.com/Orangeriger1998/OTStudio-PC/wiki/Privacy">desktop privacy page</a>.</p>
+  </section>
+
+  <section>
+    <h2>What leaves your device</h2>
+    <ul class="features">
+      <li><b>A chat message</b> goes to the chat provider with a limited amount of recent history. With chat on the phone, or with Ollama on the desktop, nothing leaves the device.</li>
+      <li><b>A picture or video prompt</b> goes to the media provider with the inputs you chose. A photo you add is redrawn as a new JPEG before it leaves, which drops its location and camera details.</li>
+      <li><b>Web search</b> on the phone sends only the search words to Wikipedia, or to Tavily when you saved a Tavily key, never the conversation.</li>
+      <li><b>LoRA training</b> sends JPEG copies of the photos you chose to Replicate, in one ZIP, and creates a private model in your own Replicate account. Your originals stay where they are.</li>
+      <li><b>Nothing</b> goes to OrangeTiger, to an analytics service, or to a storage host with a key attached.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Where your keys live</h2>
+    <div class="grid three">
+      <div class="card"><h3>Android</h3><p>Each key is encrypted with AES-GCM under a key held in the Android Keystore. Keys never appear in the source code, the APK, the logs, or Android backups. Release builds block screenshots of Settings.</p></div>
+      <div class="card"><h3>Windows</h3><p>Windows encrypts the keys for your Windows account. Updates keep them. The key file name and format are pinned by a test that is never edited to make a change pass.</p></div>
+      <div class="card"><h3>Linux</h3><p>Keys are stored in your desktop keyring, GNOME Keyring or KWallet, through libsecret, the same place your browser keeps its passwords.</p></div>
+    </div>
+    <p style="margin-top:18px">On every platform a key goes only to the provider it belongs to, only in the request header that provider expects, never in a body or an address, and never to a host that stores results. A redirect to another origin drops the key.</p>
+  </section>
+
+  <section>
+    <h2>Paid requests</h2>
+    <p>A paid request is sent once and never repeated on its own. If the connection breaks after sending, the job says Outcome unknown, because the provider may have done the work and billed for it. Free status checks may repeat. In the chat, the model only writes a plan; the app validates it and starts a paid job only when you tap Generate or click Go.</p>
+  </section>
+
+  <section>
+    <h2>What stays on your device</h2>
+    <p>Prompts, answers, job details, chosen inputs, model profiles, LoRA references, and media details live in the app's private storage: the app's private databases on Android, <code>%APPDATA%\OT Studio</code> on Windows, and <code>~/.config/OT Studio</code> on Linux. Generated files download there the moment they finish. Save copies a file into a folder you chose, and that copy belongs to you.</p>
+    <p>Removing the app, or clearing its storage, deletes the history, the settings, the keys, and every unsaved file. The app keeps no cloud backup. Android cloud backup and device transfer are switched off for this app.</p>
+  </section>
+
+  <section>
+    <h2>What the desktop app may reach</h2>
+    <p>Only the main process reaches the network, over https, to these hosts: api.replicate.com and replicate.delivery for Replicate, api.spicyapi.com and cdn.spicyapi.com for SpicyAPI, openrouter.ai for OpenRouter, and the addresses you allowed in a dialog. Ollama is reached at 127.0.0.1 on your own PC, the only address without https. A pasted example is read as text and never run. A shared service file is data and holds no key.</p>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>OT Studio by OrangeTiger. Free software under the GNU General Public License, version 3, with no warranty.</p>
+    <nav>
+      <a href="https://github.com/Orangeriger1998/OTStudio">Android repository</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC">Desktop repository</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio/issues">Issues</a>
+    </nav>
+  </div>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>

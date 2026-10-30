@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download OT Studio</title>
+<meta name="description" content="Download OT Studio for Android, Windows, or Linux, with install steps and SHA-256 checksums.">
+<link rel="icon" href="images/otstudio-avatar.jpg">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="images/otstudio-avatar.jpg" alt=""> OT Studio</a>
+    <nav>
+      <a href="./">Home</a>
+      <a href="download.html" aria-current="page">Download</a>
+      <a href="desktop.html">Desktop</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio/wiki">Wiki</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="plain">
+    <h1>Download</h1>
+    <p class="lead muted">Every file comes from the GitHub Releases pages of the two repositories. The version and size below are read from GitHub when this page opens; the links on the right of each file lead to its SHA-256 checksum.</p>
+    <div class="toc">
+      <a href="#android">Android</a>
+      <a href="#windows">Windows</a>
+      <a href="#linux">Linux</a>
+      <a href="#trainer">LoRA Trainer</a>
+      <a href="#checksums">Checking a download</a>
+    </div>
+  </section>
+
+  <section id="android">
+    <div class="card" data-platform="android">
+      <h3>Android <span class="tag">phone</span></h3>
+      <div class="release"><span class="version">Latest release</span><span class="date"></span><a class="notes-link" href="https://github.com/Orangeriger1998/OTStudio/releases">Release notes</a></div>
+      <ul class="files"><li><a class="name" href="https://github.com/Orangeriger1998/OTStudio/releases">OT-Studio-x.y.z.apk on the Releases page</a></li></ul>
+      <p style="margin-top:16px"><b>Requirements.</b> Android 10 or later and an internet connection. Chat on the phone works best with 8 GB of memory and needs about 2.4 GB of space for the model.</p>
+      <ol class="steps">
+        <li>On your phone, download the newest <code>OT-Studio-x.y.z.apk</code>.</li>
+        <li>Open the downloaded file. Android asks whether your browser or file app may install apps. Allow it for this one install.</li>
+        <li>Tap Install, then Open.</li>
+      </ol>
+      <p class="muted small">The Play Store does not list OT Studio, so updates also come from the Releases page. A newer APK installs over the old one and keeps your history, your LoRA library, and your keys. Every release is signed with the same key; a build signed with another key cannot update the app.</p>
+    </div>
+  </section>
+
+  <section id="windows">
+    <div class="card" data-platform="windows">
+      <h3>Windows <span class="tag">desktop</span></h3>
+      <div class="release"><span class="version">Latest release</span><span class="date"></span><a class="notes-link" href="https://github.com/Orangeriger1998/OTStudio-PC/releases">Release notes</a></div>
+      <ul class="files"><li><a class="name" href="https://github.com/Orangeriger1998/OTStudio-PC/releases">OTStudio-PC-Setup-x.y.z.exe on the Releases page</a></li></ul>
+      <p style="margin-top:16px"><b>Requirements.</b> Windows 10 or 11, 64-bit. For the Chat tab with a private model, <a href="https://ollama.com">Ollama</a> on the same PC.</p>
+      <ol class="steps">
+        <li>Download <code>OTStudio-PC-Setup-x.y.z.exe</code> and run it.</li>
+        <li>If Windows SmartScreen warns about an unrecognized app, compare the file's checksum with the <code>.sha256</code> file first, then choose More info and Run anyway.</li>
+        <li>Install over an earlier version. Your keys, history, chat, and LoRAs stay.</li>
+      </ol>
+      <p class="muted small">Keys are encrypted for your Windows account. Data lives in <code>%APPDATA%\OT Studio</code>.</p>
+    </div>
+  </section>
+
+  <section id="linux">
+    <div class="card" data-platform="linux">
+      <h3>Linux <span class="tag">desktop</span></h3>
+      <div class="release"><span class="version">Latest release</span><span class="date"></span><a class="notes-link" href="https://github.com/Orangeriger1998/OTStudio-PC/releases">Release notes</a></div>
+      <ul class="files"><li><a class="name" href="https://github.com/Orangeriger1998/OTStudio-PC/releases">OTStudio-PC-x.y.z-x86_64.AppImage and OTStudio-PC-x.y.z-amd64.deb on the Releases page</a></li></ul>
+      <p style="margin-top:16px"><b>Requirements.</b> A 64-bit desktop Linux with GTK 3 and a keyring service (GNOME Keyring or KWallet, which Linux Mint, Ubuntu, Fedora, and KDE desktops run by default). Tested on Linux Mint 22.</p>
+      <p><b>AppImage.</b> One file that runs where it is.</p>
+<pre><code>chmod +x OTStudio-PC-x.y.z-x86_64.AppImage
+./OTStudio-PC-x.y.z-x86_64.AppImage</code></pre>
+      <p class="muted small">An AppImage needs FUSE 2. Linux Mint has it; on Ubuntu 22.04 and later install it with <code>sudo apt install libfuse2t64</code> (or <code>libfuse2</code> on older releases).</p>
+      <p><b>Debian package.</b> Installs to <code>/opt/OT Studio</code> and adds OT Studio to your menu under Graphics.</p>
+<pre><code>sudo apt install ./OTStudio-PC-x.y.z-amd64.deb</code></pre>
+      <p class="muted small">The first start may ask the keyring to unlock, so OT Studio can store your keys there. Data lives in <code>~/.config/OT Studio</code>. A line or two about GLib in the terminal is harmless.</p>
+    </div>
+  </section>
+
+  <section id="trainer">
+    <div class="card" data-platform="trainer">
+      <h3>OT Studio LoRA Trainer <span class="tag">Windows tool</span></h3>
+      <div class="release"><span class="version">Latest release</span><span class="date"></span><a class="notes-link" href="https://github.com/Orangeriger1998/OTStudio/releases">Release notes</a></div>
+      <ul class="files"><li><a class="name" href="https://github.com/Orangeriger1998/OTStudio/releases">OT-Studio-LoRA-Trainer.exe on the Releases page</a></li></ul>
+      <p style="margin-top:16px">A small Windows program that builds a photo set on your computer and starts a LoRA training run in your own Replicate account. The phone app and the desktop app can also train from their LoRA libraries, so most people never need it. It reads your Replicate token from hidden input or an environment variable and never saves it.</p>
+    </div>
+  </section>
+
+  <section id="checksums">
+    <h2>Checking a download</h2>
+    <p>Each file has a companion <code>.sha256</code> file with its checksum. The checksum confirms that the file on your disk is the one that was published.</p>
+    <div class="grid two">
+      <div>
+        <p><b>Windows</b> (PowerShell or Command Prompt)</p>
+<pre><code>certutil -hashfile OTStudio-PC-Setup-x.y.z.exe SHA256</code></pre>
+      </div>
+      <div>
+        <p><b>Linux</b> (in the folder with both files)</p>
+<pre><code>sha256sum -c OTStudio-PC-x.y.z-amd64.deb.sha256</code></pre>
+      </div>
+    </div>
+    <p class="muted small">On Android, a file manager with a checksum feature, or a desktop computer, can check the APK the same way.</p>
+  </section>
+
+  <section>
+    <h2>All versions</h2>
+    <div class="links">
+      <a href="https://github.com/Orangeriger1998/OTStudio/releases">Android releases<span>Every APK, with notes</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC/releases">Windows and Linux releases<span>Every installer and package, with notes</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio/wiki/Revision-Log">Android revision log<span>The main changes in each phone version</span></a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC/wiki/Revision-Log">Desktop revision log<span>The main changes in each desktop version</span></a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>OT Studio by OrangeTiger. Free software under the GNU General Public License, version 3, with no warranty.</p>
+    <nav>
+      <a href="https://github.com/Orangeriger1998/OTStudio">Android repository</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio-PC">Desktop repository</a>
+      <a href="https://github.com/Orangeriger1998/OTStudio/issues">Issues</a>
+    </nav>
+  </div>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>

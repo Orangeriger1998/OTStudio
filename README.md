@@ -4,6 +4,8 @@
 
 OT Studio is an Android app for chat, images, and video. Chat runs on the phone with a free downloaded model, or through OpenRouter. Images, edits, and video come from Replicate. You bring your own keys. Each provider bills you directly, so you pay only for what you make.
 
+OT Studio also runs on Windows and Linux as a [desktop app](https://github.com/Orangeriger1998/OTStudio-PC) that shares its LoRA files with the phone. The [OT Studio website](https://orangeriger1998.github.io/OTStudio/) has the downloads for all three platforms.
+
 <p align="center">
 <img src="docs/images/screen-main.png" width="200" alt="Main screen">
 <img src="docs/images/screen-api-call.png" width="200" alt="API CALL panel">
@@ -11,7 +13,7 @@ OT Studio is an Android app for chat, images, and video. Chat runs on the phone 
 <img src="docs/images/screen-help.png" width="200" alt="Help screen">
 </p>
 
-The full guide lives in the **[OT Studio wiki](wiki/Home.md)**. It explains every screen box by box and walks through each workflow, from a first photo to a video that keeps one face from start to finish.
+The full guide lives in the **[OT Studio wiki](https://github.com/Orangeriger1998/OTStudio/wiki)**. It explains every screen box by box and walks through each workflow, from a first photo to a video that keeps one face from start to finish.
 
 ## What it does
 
@@ -49,7 +51,7 @@ In OT Studio, tap the gear to open Settings. Paste the OpenRouter key under Chat
 
 ## What it costs
 
-These typical figures come from the providers' price pages in October 2026. Prices change, so check the providers before a large project. The wiki's [Getting Started](wiki/Getting-Started.md) page lists every price with its source.
+These typical figures come from the providers' price pages in October 2026. Prices change, so check the providers before a large project. The wiki's [Getting Started](https://github.com/Orangeriger1998/OTStudio/wiki/Getting-Started) page lists every price with its source.
 
 **A chat message** costs nothing on the phone, and well under a hundredth of a cent with Mistral Nemo through OpenRouter. **An edit** costs 1 to 4 cents.
 

@@ -44,7 +44,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val REPO = "github.com/Orangeriger1998/OTStudio"
         // While the repository is private, the wiki lives in its wiki folder. Point this at /wiki when it goes public.
-        const val WIKI = "https://github.com/Orangeriger1998/OTStudio/tree/main/wiki"
+        const val WIKI = "https://github.com/Orangeriger1998/OTStudio/wiki"
         const val OPENROUTER_KEYS = "https://openrouter.ai/settings/keys"
         const val REPLICATE_TOKENS = "https://replicate.com/account/api-tokens"
         const val TAVILY_SIGNUP = "https://app.tavily.com/home"
