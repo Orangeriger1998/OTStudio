@@ -293,7 +293,8 @@ class StudioApp : Application() {
 
     fun send(mode: Mode, prompt: String): Boolean {
         if (busy.get()) return false
-        val p = Rules.prompt(prompt)
+        // SpicyAPI's picture-only models take no prompt; the card still carries a line of words for the history.
+        val p = if (mode != Mode.CHAT && prompt.isBlank() && ModelCatalog.spicyPromptless(settings.get(mode).model)) "From the picture" else Rules.prompt(prompt)
         // Reset here, before the task is queued, so a Stop tapped while it waits is kept.
         stopRequested = false
         if (mode == Mode.CHAT && local.engine == ChatEngine.LOCAL) return sendLocal(p)
@@ -482,14 +483,18 @@ class StudioApp : Application() {
         val listInput = chosen.schema?.fields?.firstOrNull { it.name == preset.imageField }?.list == true
         if (extras.isNotEmpty() && !listInput) throw UserError("This editing model takes one picture. Choose Seedream 4.5, Qwen Image Edit Plus, FLUX.2, or P-Image Edit for reference photos.")
         if (1 + extras.size > PictureList.max(preset.model)) throw UserError("This editing model takes at most ${PictureList.max(preset.model)} pictures in all.")
-        ModelOptions.validateForModel(preset.model, chosen.schema ?: throw UserError("This editing model has no input list."), chosen.options.filter { it.name != preset.imageField } + InputValue(preset.imageField, InputKind.TEXT, "https://api.replicate.com/v1/files/check"))
+        // SpicyAPI edits only a picture it made, by that picture's own address; nothing is uploaded for it.
+        val spicy = ModelCatalog.spicy(preset.model)
+        if (spicy && extras.isNotEmpty()) throw UserError("Spicy Image Edit 1 takes reference pictures only from your SpicyAPI pictures. Add them in API CALL.")
+        val spicySource = if (spicy) spicyPicture(mediaFile(source)) ?: throw UserError("SpicyAPI edits only pictures made with SpicyAPI. Choose another editing model for this picture.") else null
+        ModelOptions.validateForModel(preset.model, chosen.schema ?: throw UserError("This editing model has no input list."), chosen.options.filter { it.name != preset.imageField } + InputValue(preset.imageField, InputKind.TEXT, spicySource ?: uploadCheck))
         settings.editModel = preset.model
         run {
-            val (bytes, mime, name) = read()
-            val url = api.uploadFile(image.settings.baseUrl, image.key, name, mime, bytes)
+            val url = spicySource ?: read().let { (bytes, mime, name) -> api.uploadFile(image.settings.baseUrl, image.key, name, mime, bytes) }
             // The picture being edited is image 1; reference photos follow as image 2, image 3, and so on.
             val more = extras.map { extra -> extra().let { (b, m, n) -> api.uploadFile(image.settings.baseUrl, image.key, n, m, b) } }
-            val model = image.copy(settings = chosen.copy(options = chosen.options.filter { it.name != preset.imageField } + InputValue(preset.imageField, InputKind.TEXT, PictureList.join(listOf(url) + more))))
+            val withPicture = chosen.copy(options = chosen.options.filter { it.name != preset.imageField } + InputValue(preset.imageField, InputKind.TEXT, PictureList.join(listOf(url) + more)))
+            val model = if (spicy) withSpicy(image.copy(settings = withPicture)) else image.copy(settings = withPicture)
             val id = history.insert(Mode.IMAGE, text, model, parentId = source.id)
             if (chatId != 0L) history.setJob(chatId, id)
             changed()
@@ -512,6 +517,17 @@ class StudioApp : Application() {
 
     /** A placeholder that passes URL checks, for validating settings before the real upload exists. */
     private val uploadCheck = "https://api.replicate.com/v1/files/check"
+
+    /**
+     * The SpicyAPI address of a finished picture in [file], when SpicyAPI made it. Those addresses are the only pictures
+     * SpicyAPI takes as inputs, so a picture from Replicate, OpenRouter, or the phone returns null.
+     */
+    fun spicyPicture(file: File): String? {
+        val done = history.list(Mode.IMAGE).filter { it.state == "succeeded" }
+        val outputs = done.map { it.id }.chunked(100).flatMap { ids -> history.outputs(ids).values.flatten() }
+        val links = outputs.filter { it.localFile == file.name }.map { it.url } + done.filter { it.localFile == file.name }.map { it.outputUrl }
+        return links.firstOrNull { Rules.spicyPicture(it) }
+    }
 
     /** Reads a finished image's first output from private storage: bytes, MIME type, and file name. */
     fun mediaBytes(entry: Entry): Triple<ByteArray, String, String> {
@@ -580,9 +596,12 @@ class StudioApp : Application() {
         run {
             var model = resolved
             if (mode == Mode.VIDEO && source != null) {
-                // An OpenRouter model takes the picture from the phone, inside the request; other models need an upload.
-                val url = if (OpenRouterMedia.isModel(resolved.settings.model)) "phone:${mediaFile(source).name}".also { if (!OpenRouterMedia.PHONE_PICTURE.matches(it)) throw UserError("This picture's file cannot be sent to OpenRouter.") }
-                    else mediaBytes(source).let { (bytes, mime, name) -> api.uploadFile(resolved.settings.baseUrl, resolved.key, name, mime, bytes) }
+                // An OpenRouter model takes the picture from the phone, inside the request; SpicyAPI takes a picture it made, by its address; other models need an upload.
+                val url = when {
+                    OpenRouterMedia.isModel(resolved.settings.model) -> "phone:${mediaFile(source).name}".also { if (!OpenRouterMedia.PHONE_PICTURE.matches(it)) throw UserError("This picture's file cannot be sent to OpenRouter.") }
+                    ModelCatalog.spicy(resolved.settings.model) -> spicyPicture(mediaFile(source)) ?: throw UserError("SpicyAPI animates only pictures made with SpicyAPI. Choose another video model for this picture.")
+                    else -> mediaBytes(source).let { (bytes, mime, name) -> api.uploadFile(resolved.settings.baseUrl, resolved.key, name, mime, bytes) }
+                }
                 model = resolved.copy(settings = MediaRole.START_FRAME.apply(resolved.settings, url) { error("The planned model already starts from a picture.") })
             }
             val id = history.insert(mode, text, model, parentId = source?.id ?: 0)
@@ -626,12 +645,21 @@ class StudioApp : Application() {
         if (busy.get()) return false
         if (history.list(pendingOnly = true).any { it.mode != Mode.CHAT }) throw UserError("Finish or cancel the pending media job before starting another.")
         val image = settings.resolve(Mode.IMAGE)
+        // A picture SpicyAPI made is upscaled at SpicyAPI, by its own address; every other picture is uploaded to Replicate.
+        val spicySource = spicyPicture(mediaFile(source))
         run {
-            val (bytes, mime, name) = read()
-            val url = api.uploadFile(image.settings.baseUrl, image.key, name, mime, bytes)
-            val preset = ModelCatalog.upscaler
-            val model = image.copy(settings = image.settings.copy(model = preset.model, schema = preset.schema,
-                options = listOf(InputValue("image", InputKind.TEXT, url), InputValue("scale", InputKind.NUMBER, "2"))))
+            val model = if (spicySource != null) {
+                val preset = ModelCatalog.spicyUpscaler
+                withSpicy(image.copy(settings = image.settings.copy(model = preset.model, schema = preset.schema,
+                    options = listOf(InputValue("image_url", InputKind.TEXT, spicySource), InputValue("scale", InputKind.INTEGER, "2")))))
+            } else {
+                val (bytes, mime, name) = read()
+                val url = api.uploadFile(image.settings.baseUrl, image.key, name, mime, bytes)
+                val preset = ModelCatalog.upscaler
+                image.copy(settings = image.settings.copy(model = preset.model, schema = preset.schema,
+                    options = listOf(InputValue("image", InputKind.TEXT, url), InputValue("upscale_mode", InputKind.TEXT, "factor"),
+                        InputValue("factor", InputKind.NUMBER, "2"), InputValue("disable_safety_checker", InputKind.BOOLEAN, "true"))))
+            }
             val id = history.insert(Mode.IMAGE, Rules.prompt("Upscale 2x: ${source.prompt}".take(Rules.MAX_PROMPT)), model)
             changed()
             try { applyPrediction(id, Mode.IMAGE, api.create(model, null)) }
@@ -855,13 +883,17 @@ class StudioApp : Application() {
      */
     fun uploadPhoto(mode: Mode, read: () -> Triple<ByteArray, String, String>, model: String? = null, existing: File? = null, complete: (String?, String?) -> Unit) {
         if (isBusy()) { complete(null, "Wait for the current operation to finish."); return }
-        if (model != null && OpenRouterMedia.isModel(model)) {
+        if (model != null && (OpenRouterMedia.isModel(model) || ModelCatalog.spicy(model))) {
             run {
                 try {
-                    val folder = File(filesDir, "media")
-                    val name = existing?.takeIf { it.isFile && it.parentFile?.canonicalPath == folder.canonicalPath && OpenRouterMedia.PHONE_PICTURE.matches("phone:${it.name}") }?.name
-                        ?: read().let { (bytes, mime, _) -> history.entry(importPhoto(bytes, mime))?.localFile } ?: throw UserError("The photo could not be kept on the phone.")
-                    main.post { complete("phone:$name", null) }
+                    val url = when {
+                        OpenRouterMedia.isModel(model) -> keptOnPhone(read, existing)
+                        // SpicyAPI takes a picture it made, by that picture's address; its reference model also takes a photo kept on this phone.
+                        existing != null && spicyPicture(existing) != null -> spicyPicture(existing)!!
+                        ModelCatalog.spicyPhonePhotos(model) -> keptOnPhone(read, existing)
+                        else -> throw UserError("SpicyAPI takes only pictures it made. Use a finished SpicyAPI picture, or choose Spicy Image Reference 1 for a photo from this phone.")
+                    }
+                    main.post { complete(url, null) }
                 } catch (e: Exception) { main.post { complete(null, friendly(e)) } }
             }
             return
@@ -874,6 +906,14 @@ class StudioApp : Application() {
                 main.post { complete(url, null) }
             } catch (e: Exception) { main.post { complete(null, friendly(e)) } }
         }
+    }
+
+    /** A photo kept on this phone as "phone:<file>": [existing] when it already sits in the media folder, else a copy imported into the Image feed. */
+    private fun keptOnPhone(read: () -> Triple<ByteArray, String, String>, existing: File?): String {
+        val folder = File(filesDir, "media")
+        val name = existing?.takeIf { it.isFile && it.parentFile?.canonicalPath == folder.canonicalPath && OpenRouterMedia.PHONE_PICTURE.matches("phone:${it.name}") }?.name
+            ?: read().let { (bytes, mime, _) -> history.entry(importPhoto(bytes, mime))?.localFile } ?: throw UserError("The photo could not be kept on the phone.")
+        return "phone:$name"
     }
 
     fun refresh(entry: Entry, cancel: Boolean = false) {

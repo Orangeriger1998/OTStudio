@@ -36,7 +36,6 @@ The panel fills the screen, because a model can have dozens of inputs. It rememb
 | Saved models | A dropdown of the preloaded models plus any the user added. It becomes "Matching models (n)" while filters are on. | One list for every model on this provider |
 | Mismatch warning | A red line when the current model fails a selected filter | Stops a user from applying a model that cannot do what they asked for |
 | Add a model | A field for any `owner/model` ID, with an Add button | Any Replicate model with a compatible input schema can join the list. The app remembers it. |
-| WAN 2.1 resolution | A dropdown that appears only for the WAN 2.1 models | On WAN 2.1, 480p and 720p are separate models. Choosing a resolution switches the model, which is how that provider works. |
 
 ## LoRA card
 
@@ -53,6 +52,8 @@ The panel opens in a simple view. It shows the model by a plain name and price, 
 Some settings count only together with another. The panel reads this from the model's own description of a setting ("only used when size='custom'"), or, for Width and Height, from a list beside them that offers "custom". For Seedream 4.5, Width and Height appear only when Size is custom, and Shape only when it is not; changing Size redraws the panel. A setting that does not apply is never sent.
 
 For an OpenRouter model, Choose photo keeps the photo on the phone instead of uploading it to Replicate. The notice reads "Keeping the photo on this phone. It goes to OpenRouter with each request.", the photo joins the Image feed, and the input holds it until it is removed. A photo uploaded to Replicate for another model cannot go to OpenRouter, and a photo kept for OpenRouter cannot go to a Replicate model; the panel says so before anything is sent. Refresh model inputs keeps the app's own list for OpenRouter and SpicyAPI models.
+
+SpicyAPI takes only pictures it made, so for a SpicyAPI model the Choose photo button gives way to a note: "SpicyAPI takes only pictures it made. On a Spicy picture's card, tap Use as... to put it here." The exception is Spicy Image Reference 1, where Choose photo keeps the photo on the phone, like OpenRouter, and the notice says that SpicyAPI keeps its look and draws new people.
 
 Pictures in a list input are labeled @img1, @img2, and so on, in the order they are sent. A description can name them that way, and the model receives "image 1", "image 2".
 

@@ -19,9 +19,9 @@ The full guide lives in the **[OT Studio wiki](https://github.com/Orangeriger199
 
 - **Chat on the phone** with a downloaded model, offline and free per message, or with OpenRouter models such as Mistral Nemo.
 - **Create by chatting.** Ask for a picture, an edit, or a video in plain words. A job card shows the exact prompt, the model, and the likely cost before you tap Generate.
-- **Edit an image** from a plain instruction with Replicate editing models.
+- **Edit an image** from a plain instruction with Replicate editing models, or turn the camera around a subject with Qwen Edit Multi-angle.
 - **Memory** for standing instructions, and **web search** on Wikipedia or with a free Tavily key.
-- **Images** with FLUX schnell, FLUX dev, FLUX 1.1 Pro, FLUX dev with your own LoRA, and Qwen Image with your own LoRA.
+- **Images** with FLUX schnell, FLUX dev, FLUX Krea dev, Qwen Image 2512, Z-Image Turbo, P-Image, FLUX 1.1 Pro, FLUX dev with your own LoRA, and Qwen Image with your own LoRA.
 - **Video** with WAN 2.7 and WAN 2.2, from text or from starting and ending frames.
 - **Photos as inputs.** The photo button in the message bar adds a photo from the phone in any mode. The chat can edit or animate it, and Image and Video can use it as a reference or a frame. A finished image can become the next reference or frame in one tap.
 - **Expand** to give a picture a new shape, such as wide or tall, around the unchanged original.
@@ -55,7 +55,7 @@ These typical figures come from the providers' price pages in October 2026. Pric
 
 **A chat message** costs nothing on the phone, and well under a hundredth of a cent with Mistral Nemo through OpenRouter. **An edit** costs 1 to 4 cents.
 
-**Ten matching photos at about 2K.** Matching photos need a LoRA, a small add-on model trained on your own pictures. One training run costs about $1.50 to $2. Each LoRA photo then costs about three cents at 1024 by 1024, and upscaling it to 2048 by 2048 adds a fifth of a cent. The first set of ten comes to about $2.20. After that, a new set of ten costs about 35 cents.
+**Ten matching photos at about 2K.** Matching photos need a LoRA, a small add-on model trained on your own pictures. One training run costs about $1.50 to $2. Each LoRA photo then costs about three cents at 1024 by 1024, and upscaling it to 2048 by 2048 adds about half a cent. The first set of ten comes to about $2.20. After that, a new set of ten costs about 35 cents.
 
 **One minute of video.** Video models make clips of 2 to 15 seconds, so a minute takes about twelve five-second clips. WAN 2.7 at 720p costs about $6 for the minute. At 1080p the same minute costs about $9. The faster WAN 2.2 model costs about 60 cents at 480p, with visibly lower quality. Making a LoRA starting frame for each clip adds about 40 cents.
 

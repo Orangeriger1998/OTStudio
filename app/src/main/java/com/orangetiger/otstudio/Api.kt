@@ -164,7 +164,7 @@ class ProviderApi(private val transport: Transport) {
         val reference = OWN_LORA.matchEntire(weights)
         if (base != null && reference != null) return createOnVersion(model, prompt, reference.groupValues[1], reference.groupValues[2], reference.groupValues[3], base.field)
         if (base == LoraBases.QWEN) return createQwen(model, prompt ?: throw UserError("Qwen Image needs a prompt."), weights)
-        if (ModelCatalog.spicy(s.model)) return createSpicy(model, prompt ?: throw UserError("SpicyAPI needs a prompt."))
+        if (ModelCatalog.spicy(s.model)) return createSpicy(model, prompt)
         if (OpenRouterMedia.isModel(s.model)) return createOpenRouter(model, prompt ?: throw UserError("OpenRouter needs a prompt."))
         val input = JSONObject()
         if (prompt != null) input.put("prompt", PictureRefs.rewrite(Rules.prompt(prompt), s.schema?.let { PictureRefs.count(it, s.options) } ?: 0))
@@ -279,25 +279,45 @@ class ProviderApi(private val transport: Transport) {
     }
 
     /**
-     * A SpicyAPI request. Only the model, the prompt, and the model's own listed settings are sent: never a picture.
-     * A picture comes back at once; a video comes back as a task to check.
+     * A SpicyAPI request: the model, the prompt (unless the model takes none), the model's own listed settings, and its
+     * pictures. SpicyAPI accepts only pictures its own account made, by their cdn.spicyapi.com addresses; its reference
+     * model also takes a photo kept on this phone, sent inside the request as a data: address. A picture comes back at
+     * once; a video comes back as a task to check.
      */
-    private fun createSpicy(model: ResolvedModel, prompt: String): Prediction {
+    private fun createSpicy(model: ResolvedModel, prompt: String?): Prediction {
         val s = model.settings
-        val text = Rules.prompt(prompt)
-        if (text.length > 2000) throw UserError("SpicyAPI takes prompts of up to 2000 characters.")
         val schema = s.schema ?: throw UserError("Load this model's inputs first.")
-        if (schema.fields.any { it.uri }) throw UserError("SpicyAPI models in OT Studio take words only.")
-        ModelOptions.validate(schema, s.options, true)
-        val body = JSONObject().put("model", s.model.removePrefix("spicyapi/")).put("prompt", PictureRefs.rewrite(text, 0))
+        ModelOptions.validateForModel(s.model, schema, s.options)
+        val body = JSONObject().put("model", s.model.removePrefix("spicyapi/"))
+        if (!ModelCatalog.spicyPromptless(s.model)) {
+            val text = Rules.prompt(prompt ?: throw UserError("SpicyAPI needs a prompt."))
+            if (s.model == "spicyapi/spicy-motion-draft-1" && text.length > 1500) throw UserError("Spicy Motion Draft 1 takes prompts of up to 1500 characters.")
+            body.put("prompt", PictureRefs.rewrite(text, PictureRefs.count(schema, s.options)))
+        }
         SchemaCodec.append(body, schema, s.options)
+        // Pictures again, checked against SpicyAPI's rule and, for the reference model, read from the phone.
+        schema.fields.filter { it.uri }.forEach { d ->
+            val links = s.options.firstOrNull { it.name == d.name }?.value?.let(PictureList::split).orEmpty().map { spicyPicture(s.model, d.name, it) }
+            if (links.isNotEmpty()) body.put(d.name, if (d.list) JSONArray(links) else links.single())
+        }
         val base = Rules.SPICY_BASE
         return if (s.mode == Mode.IMAGE) {
-            val root = checked(transport.request("POST", "$base/images/generations", model.key, body.toString()))
+            val endpoint = if (ModelCatalog.spicyEdits(s.model)) "$base/images/edits" else "$base/images/generations"
+            val root = checked(transport.request("POST", endpoint, model.key, body.toString()))
             val urls = root.optJSONArray("data")?.let { a -> (0 until minOf(a.length(), 4)).mapNotNull { a.optJSONObject(it)?.optString("url")?.takeIf(String::isNotEmpty)?.let(Rules::outputUrl) } }.orEmpty()
             if (urls.isEmpty()) throw UserError("SpicyAPI returned no picture.")
             Prediction(Rules.remoteId(root.optString("id")), "succeeded", urls, false)
         } else spicyTask(checked(transport.request("POST", "$base/videos/generations", model.key, body.toString())))
+    }
+
+    /** A picture for a SpicyAPI input: one SpicyAPI made, by its address, or, for the reference model, a photo from this phone as a data: address. */
+    private fun spicyPicture(model: String, field: String, link: String): String {
+        if (OpenRouterMedia.PHONE_PICTURE.matches(link)) {
+            if (!ModelCatalog.spicyPhonePhotos(model)) throw UserError("SpicyAPI takes only pictures it made. Use a finished SpicyAPI picture, or choose Spicy Image Reference 1 for a photo from this phone.")
+            return phonePicture(link)
+        }
+        if (!Rules.spicyPicture(link)) throw UserError("SpicyAPI takes only pictures it made. Choose a finished SpicyAPI picture for $field.")
+        return link
     }
 
     /** A SpicyAPI video task as a job state: queued and processing wait, succeeded carries the video, failed its reason. */

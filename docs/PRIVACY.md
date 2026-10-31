@@ -4,7 +4,7 @@ OT Studio has no server of its own. It shows no ads and collects no analytics. E
 
 ## What leaves the phone
 
-A chat message goes to the chat provider together with a limited amount of recent chat history. An image or video prompt goes to the media provider with the inputs you chose in API CALL. A photo you pick with Choose photo, or an image you send with Use as... or Upscale, uploads to your own Replicate account through Replicate's Files API. Suggest setup sends your prompt and the matching models' input lists to your chat provider, and only when you tap it.
+A chat message goes to the chat provider together with a limited amount of recent chat history. An image or video prompt goes to the media provider with the inputs you chose in API CALL. A photo you pick with Choose photo, or an image you send with Use as... or Upscale, uploads to your own Replicate account through Replicate's Files API. A picture SpicyAPI made is not uploaded anywhere; the app sends its SpicyAPI address instead. Suggest setup sends your prompt and the matching models' input lists to your chat provider, and only when you tap it.
 
 ## Chat on the phone, memory, and history
 
@@ -26,7 +26,7 @@ Training starts only from the Train a LoRA form, after the agreement box and a s
 
 ## SpicyAPI
 
-When an Image or Video model from SpicyAPI is chosen, the prompt and that model's listed settings go to api.spicyapi.com with the SpicyAPI key. No photo, saved picture, or LoRA is ever sent there; the app offers only SpicyAPI's text-only models. Finished pictures and videos come back from cdn.spicyapi.com and are stored like any other result. The SpicyAPI key has its own encrypted slot, bound to SpicyAPI's address.
+When an Image or Video model from SpicyAPI is chosen, the prompt, that model's listed settings, and the addresses of any SpicyAPI pictures chosen for it go to api.spicyapi.com with the SpicyAPI key. SpicyAPI accepts only pictures it made, so no photo from the phone, no Replicate upload, and no LoRA goes there. The one exception is Spicy Image Reference 1, which takes a photo from the phone: the photo is redrawn as a JPEG of at most 2048 pixels, without its location and camera details, and SpicyAPI keeps only its look and draws new people. Finished pictures and videos come back from cdn.spicyapi.com and are stored like any other result. The SpicyAPI key has its own encrypted slot, bound to SpicyAPI's address.
 
 ## Keys
 

@@ -99,7 +99,7 @@ The card refuses to reuse a key across different provider addresses, because eac
 
 ## SpicyAPI card
 
-On the Image and Video pages. It holds the optional SpicyAPI key, which starts with `sk-spicy-`, with Save key and Remove key. The key has its own encrypted slot, so it never replaces the Replicate key, and it goes only to api.spicyapi.com. With a key saved, SpicyAPI's four text-only models in the model lists can generate: Adult picture from words (Spicy Image 1 and Spicy Image 1 Pro) and Adult video from words (Spicy Video 1 and Spicy Cinema 1). They take no photo.
+On the Image and Video pages. It holds the optional SpicyAPI key, which starts with `sk-spicy-`, with Save key and Remove key. The key has its own encrypted slot, so it never replaces the Replicate key, and it goes only to api.spicyapi.com. With a key saved, SpicyAPI's models in the model lists can generate. The Image list has Spicy Image 1, Spicy Image 1 Pro, and Spicy Image Photo 1 from words, and Spicy Image Edit 1, Spicy Image Action 1, and Spicy Image Reference 1 from a picture. The Video list has Spicy Video 1 and Spicy Cinema 1 from words, and Spicy Motion 3, Spicy Motion Draft 1, Spicy Cinema 1 Image, and Spicy Cinema 1 Character from pictures. The card explains that SpicyAPI works with pictures it made itself, and that only Spicy Image Reference 1 takes a photo from the phone, keeping its look and drawing new people.
 
 ## OpenRouter card
 

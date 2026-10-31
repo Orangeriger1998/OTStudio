@@ -29,7 +29,8 @@ class EditModelsTest {
     }
 
     @Test fun everyEditModelStartsWithTheSafetyCheckerOffAndTheInputShape() {
-        ModelCatalog.edits.forEach { e ->
+        // SpicyAPI's editor runs at SpicyAPI and is covered in ProviderApiTest.
+        ModelCatalog.edits.filter { !ModelCatalog.spicy(it.model) }.forEach { e ->
             val input = submitted(e.model)
             assertEquals(e.model, true, input.getBoolean("disable_safety_checker"))
             assertEquals(e.model, "match_input_image", input.getString("aspect_ratio"))
@@ -37,11 +38,13 @@ class EditModelsTest {
             assertTrue(ModelOptions.supports(ModelCatalog.find(Mode.IMAGE, e.model)!!, setOf("Editing")))
         }
         assertFalse(ModelOptions.supports(ModelCatalog.find(Mode.IMAGE, "black-forest-labs/flux-dev")!!, setOf("Editing")))
+        assertTrue(ModelOptions.supports(ModelCatalog.find(Mode.IMAGE, "spicyapi/spicy-image-edit-1")!!, setOf("Editing")))
+        assertNull(ModelCatalog.find(Mode.IMAGE, "qwen/qwen-image-edit")); assertNull(ModelCatalog.find(Mode.VIDEO, "wavespeedai/wan-2.1-t2v-480p"))
     }
 
     @Test fun singleImageModelsSendAStringAndListModelsSendAnArray() {
         assertEquals(photo, submitted("black-forest-labs/flux-kontext-dev").getString("input_image"))
-        assertEquals(photo, submitted("qwen/qwen-image-edit").getString("image"))
+        assertEquals(photo, submitted("qwen/qwen-edit-multiangle").getString("image"))
         val plus = submitted("qwen/qwen-image-edit-plus").get("image")
         assertTrue(plus is JSONArray); assertEquals(photo, (plus as JSONArray).getString(0)); assertEquals(1, plus.length())
         assertEquals(photo, submitted("black-forest-labs/flux-2-dev").getJSONArray("input_images").getString(0))

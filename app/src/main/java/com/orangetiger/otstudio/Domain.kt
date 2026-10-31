@@ -141,6 +141,12 @@ object Rules {
     private const val OPENROUTER_HOST = "openrouter.ai"
     private const val REPLICATE_R2_OUTPUTS = "ai-gateway-outputs.0d37909e38d3e99c29fa2cd343ac421a.r2.cloudflarestorage.com"
 
+    /** True for a picture SpicyAPI made, by its address on SpicyAPI's own host: the only pictures SpicyAPI accepts as inputs. */
+    fun spicyPicture(url: String): Boolean {
+        val uri = try { URI(url) } catch (_: Exception) { return false }
+        return uri.scheme == "https" && uri.host?.lowercase() == SPICY_CDN && uri.userInfo == null && (uri.port == -1 || uri.port == 443)
+    }
+
     fun outputUrl(url: String): String {
         val uri = try { URI(url) } catch (_: Exception) { throw UserError("The provider returned an invalid media URL.") }
         val host = uri.host?.lowercase().orEmpty()

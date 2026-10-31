@@ -37,8 +37,14 @@ Test results on 2026-10-03 (26 requests in `OTStudio-private/tools/planner-bench
 | [FLUX dev](https://replicate.com/black-forest-labs/flux-dev/api/schema) | Similar controls; 1-50 steps, guidance, image URL, prompt_strength |
 | [FLUX 1.1 pro](https://replicate.com/black-forest-labs/flux-1.1-pro/api/schema) | Aspect/custom width and height, seed, image_prompt, format/quality, safety_tolerance, prompt_upsampling. No disable_safety_checker |
 | [FLUX dev LoRA](https://replicate.com/black-forest-labs/flux-dev-lora/api/schema) | Dev-style controls, guidance default 3, lora_weights/scale, extra_lora/scale. Scale -1 to 3; go_fast applies a 1.5 multiplier per provider description |
+| [FLUX Krea dev](https://replicate.com/black-forest-labs/flux-krea-dev/api/schema) (added 2026-10-30) | FLUX dev's inputs with guidance default 4.5; image URL and prompt_strength for image to image. $0.025 per image |
+| [Qwen Image 2512](https://replicate.com/qwen/qwen-image-2512/api/schema) (added 2026-10-30) | Aspect with custom width/height 256-2048, image URL with strength, guidance 0-10, 20-50 steps, go_fast, seed, negative prompt, format/quality, disable_safety_checker. $0.02 per image. No LoRA input |
+| [Z-Image Turbo](https://replicate.com/prunaai/z-image-turbo/api/schema) (added 2026-10-30) | Width and height 64-2048, 1-50 steps (8 default), guidance_scale (0 for this turbo model), seed, format/quality, enable_safety_filter. $0.0025 per output megapixel. The endpoint's disable_safety_checker, aspect_ratio, megapixels, num_outputs, negative_prompt, and go_fast are compatibility inputs it ignores, so they stay out |
+| [P-Image](https://replicate.com/prunaai/p-image/api/schema) (added 2026-10-30) | Aspect with custom width/height 256-1440, prompt_upsampling, seed, disable_safety_checker, enable_copyright_filter. $0.005 per image. Its lora_weights and lora_scale stay out: Pruna does not name the base model, so no saved LoRA is known to fit |
 
 Credential inputs such as hf_api_token and civitai_api_token are excluded. The schema loader also excludes credential-named, password-format, and write-only inputs. Required unsupported inputs block calls.
+
+Image-to-image on FLUX dev, FLUX Krea dev, and Qwen Image 2512 starts from the picture's colors and layout at the given strength. It does not keep a person's identity; the editing models and the multi-reference models do that.
 
 ## Video models and starting frames
 
@@ -48,10 +54,9 @@ Credential inputs such as hf_api_token and civitai_api_token are excluded. The s
 | [WAN 2.7 I2V](https://replicate.com/wan-video/wan-2.7-i2v/api/schema) | 720p/1080p | first_frame | last_frame | 2-15 seconds, audio, seed, negative prompt, prompt expansion, first_clip continuation |
 | [WAN 2.2 T2V Fast](https://replicate.com/wan-video/wan-2.2-t2v-fast/api/schema) | 480p/720p | No | No | 81-121 frames, frames_per_second 5-30, interpolation, go_fast, sample_shift, seed, optimize_prompt, safety toggle, two transformer LoRAs |
 | [WAN 2.2 I2V Fast](https://replicate.com/wan-video/wan-2.2-i2v-fast/api/schema) | 480p/720p | image, required | last_image | Same frame/rate/fast/shift/seed/LoRA controls; no aspect_ratio or optimize_prompt |
-| [WaveSpeed WAN 2.1 480p](https://replicate.com/wavespeedai/wan-2.1-t2v-480p/api/schema) / [720p](https://replicate.com/wavespeedai/wan-2.1-t2v-720p/api/schema) | Model ID chooses resolution | No | No | fast_mode Off/Balanced/Fast, sample_shift/steps/guide_scale, seed, negative prompt, LoRA, safety toggle |
 | [WAN 2.1 1.3B](https://replicate.com/wan-video/wan-2.1-1.3b/api/schema) | 480p | No | No | frame_num 17/33/49/65/81 at fixed 16 fps, seed, sample_shift/steps/guide_scale |
 
-For WaveSpeed WAN 2.1, the resolution selector changes the actual model endpoint. No unsupported resolution, duration, or FPS body field is added. fast_mode is an enum, not a Boolean.
+The WaveSpeed WAN 2.1 text-to-video models (480p and 720p as separate model IDs) left the list on 2026-10-30. WAN 2.2 fast is better and costs about a tenth as much per clip; WaveSpeed bills $0.07 to $0.25 per second. A saved profile for one of them still runs after Refresh model inputs.
 
 WAN 2.2 uses **frames_per_second**, plural. Interpolation can produce 30 fps output. T2V defaults interpolation on; I2V defaults it off. Provider pricing uses duration at 16 fps, so playback FPS is not a billing-duration guarantee.
 
@@ -94,15 +99,16 @@ Edit on an image card uploads the image through the Files API, then starts one p
 |---|---|---|
 | [black-forest-labs/flux-kontext-dev](https://replicate.com/black-forest-labs/flux-kontext-dev/api/schema) (default) | `input_image`, one URL, required | $0.025 per image |
 | [qwen/qwen-image-edit-plus](https://replicate.com/qwen/qwen-image-edit-plus/api/schema) | `image`, list, required | $0.03 per image |
-| [qwen/qwen-image-edit](https://replicate.com/qwen/qwen-image-edit/api/schema) | `image`, one URL, required | $0.03 per image |
 | [qwen/qwen-image-edit-2511](https://replicate.com/qwen/qwen-image-edit-2511/api/schema) | `image`, list, required | $0.03 per image |
+| [qwen/qwen-edit-multiangle](https://replicate.com/qwen/qwen-edit-multiangle/api/schema) (added 2026-10-30) | `image`, one URL, required; `rotate_degrees` -90 to 90, `move_forward` 0 to 10, `vertical_tilt` -1 to 1, `use_wide_angle`, `true_guidance_scale`, 1-40 steps or the go_fast presets | $0.03 per image |
+| `spicyapi/spicy-image-edit-1` (added 2026-10-30, see SpicyAPI below) | `image_urls`, list of SpicyAPI pictures, required; `mask_url` | $0.09 per image at SpicyAPI |
 | [black-forest-labs/flux-2-dev](https://replicate.com/black-forest-labs/flux-2-dev/api/schema) | `input_images`, list | $0.012 to $0.014 per megapixel in and out |
 | [black-forest-labs/flux-2-klein-9b](https://replicate.com/black-forest-labs/flux-2-klein-9b/api/schema) | `images`, list | $0.015 per output megapixel |
 | [black-forest-labs/flux-2-klein-4b](https://replicate.com/black-forest-labs/flux-2-klein-4b/api/schema) | `images`, list | $1 per 1,000 megapixels in and out |
 | [bytedance/seedream-4.5](https://replicate.com/bytedance/seedream-4.5/api/schema) | `image_input`, list | $0.04 per image |
 | [prunaai/p-image-edit](https://replicate.com/prunaai/p-image-edit/api/schema) | `images`, list | $0.01 per image |
 
-A list input receives a one-item JSON array. The schema loader now reads arrays of URL strings as one URL field sent that way. Arrays of other types stay unsupported. The LoRA versions of Kontext and Qwen wait until a test shows whether FLUX dev LoRAs work on Kontext. Qwen 2511 is listed without its LoRA inputs.
+A list input receives a one-item JSON array. The schema loader now reads arrays of URL strings as one URL field sent that way. Arrays of other types stay unsupported. The LoRA versions of Kontext and Qwen wait until a test shows whether FLUX dev LoRAs work on Kontext. Qwen 2511 is listed without its LoRA inputs, and Qwen Edit Multi-angle without its LoRA override: its multi-angle LoRA is part of the model. `qwen/qwen-image-edit`, the August 2025 single-picture model, left the list on 2026-10-30; 2511 does the same work with better consistency at the same price.
 
 Excluded because they lack `disable_safety_checker`: FLUX Kontext pro and max, FLUX.2 pro, max, and flex, the nano-banana family, gpt-image, Seedream 4 and 5 lite, WAN 2.7 image, Grok Imagine image, and Bria FIBO edit.
 
@@ -112,7 +118,7 @@ Live test on 2026-10-03 (owner-approved, about $0.07): one watercolor image, one
 
 Choose photo, Use as..., and Upscale 2x upload an image to POST `/v1/files` as multipart form data. The app accepts only a reply whose `urls.get` equals `https://api.replicate.com/v1/files/{id}` for the returned ID, then passes that URL as the model input. File IDs may contain letters, digits, dots, hyphens, and underscores. Replicate began issuing dotted IDs of about 53 characters in October 2026. An ID that starts with a dot, ends with a dot, or contains two dots in a row is refused, so it can never act as a path step. Uploads require the Replicate origin, a JPG, PNG, or WebP image, and at most 20 MB.
 
-Upscale 2x runs `nightmareai/real-esrgan` with `scale` 2 and no prompt. That model stays out of the model lists because it takes an image instead of a prompt.
+Upscale 2x runs [`prunaai/p-image-upscale`](https://replicate.com/prunaai/p-image-upscale/api/schema) with `upscale_mode` factor, `factor` 2, `disable_safety_checker` true, and no prompt (since 2026-10-30; it replaced `nightmareai/real-esrgan`). Replicate bills $0.005 per output up to 4 megapixels and $0.01 up to 8. The model also offers `target` megapixels, `enhance_details`, and `enhance_realism`, which the action leaves at their defaults so the picture stays as it is. It stays out of the model lists because it takes an image instead of a prompt. A picture SpicyAPI made is upscaled at SpicyAPI instead, by `spicy-upscale-1` (see below), since SpicyAPI pictures stay at SpicyAPI.
 
 ## LoRA training and Qwen Image with a LoRA
 
@@ -144,18 +150,27 @@ Pictures: `POST /images` with `model`, `prompt`, the settings, and `input_refere
 
 Photos go inside the request as `data:image/jpeg;base64,` addresses, redrawn upright at up to 2048 pixels. OpenRouter cannot open Replicate's private upload links, so a Replicate upload is refused for these models.
 
-## SpicyAPI (text only)
+## SpicyAPI
 
-Owner decision, 2026-10-05: four SpicyAPI models are offered, all working from words alone. They appear in the Image and Video model lists under the `spicyapi/` prefix.
+Owner decision, 2026-10-05: four SpicyAPI models were offered, all working from words alone, because the app could not check who is in a photo or whether they agreed. Owner decision, 2026-10-30, replacing it: the photo-based models are offered too. SpicyAPI itself only accepts, as a picture input, a picture the same account generated there (its docs, checked 2026-10-30), and it refuses a real person's likeness even with consent. The app therefore sends a SpicyAPI picture by its own `cdn.spicyapi.com` address and never uploads a phone photo or passes a Replicate upload link; `Rules.spicyPicture` checks every picture before a request, and a test checks the rule. The one exception is `spicy-image-reference-1`, which takes any picture, describes it with the faces left out, and draws new people in its look; for it, a photo from the phone travels inside the request as a `data:` address, redrawn upright at up to 2048 pixels. All models appear under the `spicyapi/` prefix. Prices are SpicyAPI's list prices of 2026-10-30.
 
-| Model | Mode | Settings the app sends | Price |
-|---|---|---|---|
-| `spicy-image-1` | Image | `size` (eleven sizes), `n` 1 to 4, `style`, `negative_prompt`, `seed`, `enhance_prompt` | $0.06 per picture |
-| `spicy-image-1-pro` | Image | the same | $0.09 per picture |
-| `spicy-video-1` | Video | `aspect_ratio` | from $0.20 per second |
-| `spicy-cinema-1` | Video | `duration` 3 to 15, `resolution` 480P/720P/1080P, `aspect_ratio` | from $0.14 per second |
+| Model | Mode | Endpoint | Pictures | Other settings the app sends | Price |
+|---|---|---|---|---|---|
+| `spicy-image-1` | Image | `/v1/images/generations` | none | `size` (eleven sizes), `n` 1 to 4, `style`, `negative_prompt`, `seed`, `enhance_prompt` | $0.06 per picture |
+| `spicy-image-1-pro` | Image | generations | none | the same | $0.09 per picture |
+| `spicy-image-photo-1` | Image | generations | none | the same; candid, natural-light photos | $0.08 per picture |
+| `spicy-image-action-1` | Image | generations | `image_url`, a SpicyAPI picture of the woman, required | `action`, a scene id from `GET /v1/images/actions`, required; `n`, `style`, `seed`. No prompt | $0.15 per picture |
+| `spicy-image-reference-1` | Image | generations | `reference_image`, a phone photo or a SpicyAPI picture, required | none. No prompt; one output | $0.12 per picture |
+| `spicy-image-edit-1` | Image | `/v1/images/edits` | `image_urls`, 1 to 3 SpicyAPI pictures, the one to edit first, required; `mask_url` with one picture | `n` 1 to 4, `negative_prompt`, `seed`, `enhance_prompt` | $0.09 per picture |
+| `spicy-upscale-1` | Image, Upscale action only | edits | `image_url`, a SpicyAPI picture, required | `scale` 2 or 4. No prompt | $0.02, or $0.04 at 4x |
+| `spicy-video-1` | Video | `/v1/videos/generations` | none | `aspect_ratio` | from $0.20 per second |
+| `spicy-cinema-1` | Video | generations | none | `duration` 3 to 15, `resolution` 480P/720P/1080P, `aspect_ratio` (nine shapes) | $0.14, $0.28, $0.36 per second by resolution |
+| `spicy-motion-draft-1` | Video | generations | `image_url`, first frame, required | `duration` 2 to 15, `resolution` 720P/1080P, `seed`, `enhance_prompt`. Silent; prompt up to 1500 characters | $0.05, $0.075 per second |
+| `spicy-motion-3` | Video | generations | `image_url` first frame, `last_frame_url` last frame (needs the first), `reference_image_urls` up to 10 (not with a first frame), all optional | `duration` 2 to 30, `resolution` 480P/720P/1080P, `aspect_ratio` only without a first frame, `seed`, `enhance_prompt`. Native audio | $0.10, $0.20, $0.40 per second |
+| `spicy-cinema-1-image` | Video | generations | `image_url`, first frame, required | `duration` 3 to 15, `resolution`, `seed`, `enhance_prompt`. Keeps the picture's shape | $0.14, $0.28, $0.36 per second |
+| `spicy-cinema-1-character` | Video | generations | `reference_image_urls`, up to 9 SpicyAPI pictures, required; the prompt names them Image 1, Image 2 | `duration` 3 to 15, `resolution`, `aspect_ratio` (nine shapes), `seed`, `enhance_prompt` | $0.14, $0.28, $0.36 per second |
 
-Pictures: `POST https://api.spicyapi.com/v1/images/generations`, answered at once with `data[].url`. Videos: `POST /v1/videos/generations` returns a task; the app checks `GET /v1/videos/tasks/{id}` (`queued`, `processing`, `succeeded` with `output.video_url`, `failed` with `error` and `error_code`). Tasks cannot be canceled. Results download from `cdn.spicyapi.com` only.
+Pictures are answered at once with `data[].url`. Videos return a task; the app checks `GET /v1/videos/tasks/{id}` (`queued`, `processing`, `succeeded` with `output.video_url`, `failed` with `error` and `error_code`). Tasks cannot be canceled. Results download from `cdn.spicyapi.com` only. The models that take no prompt still get a line of words on their card ("From the picture" when the box is empty), but nothing of it is sent. SpicyAPI's `character` ids, `video_url` clips, audio inputs, ready-made video actions, and 60 fps rendering are not offered.
 
-SpicyAPI's photo-based models (actions, edits, image-to-video, motion transfer, character and reference video, voice cloning) are deliberately not offered: OT Studio works with photos of real people, and it cannot check who is in a photo or whether they agreed. The schemas of the four offered models have no picture inputs, and a test checks that.
+In the app, a SpicyAPI picture reaches another SpicyAPI model through Use as... on its card, through Edit... with Spicy Image Edit 1, or through a chat plan; API CALL's Choose photo button gives way to a note on these models, except on the reference model, where it keeps the photo on the phone as it does for OpenRouter. Upscale 2x on a SpicyAPI picture runs `spicy-upscale-1`. Make it longer on a SpicyAPI video takes the clip's last frame to WAN 2.2 fast at Replicate, as it does for any video whose model does not start from a picture.
 

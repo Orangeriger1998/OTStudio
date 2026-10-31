@@ -54,10 +54,16 @@ Each provider charges per request. These figures come from the providers' own pr
 | Chat on the phone | Free after the model download | Hugging Face |
 | FLUX schnell image | $0.003 each | [Replicate](https://replicate.com/black-forest-labs/flux-schnell) |
 | FLUX dev image | $0.025 each | [Replicate](https://replicate.com/black-forest-labs/flux-dev) |
+| FLUX Krea dev image | $0.025 each | [Replicate](https://replicate.com/black-forest-labs/flux-krea-dev) |
+| Qwen Image 2512 image | $0.02 each | [Replicate](https://replicate.com/qwen/qwen-image-2512) |
+| Z-Image Turbo image | $0.0025 each at 1 megapixel | [Replicate](https://replicate.com/prunaai/z-image-turbo) |
+| P-Image image | $0.005 each | [Replicate](https://replicate.com/prunaai/p-image) |
 | FLUX dev LoRA image | $0.032 each | [Replicate](https://replicate.com/black-forest-labs/flux-dev-lora) |
 | Edit of an image | $0.01 to $0.04 each, FLUX Kontext dev $0.025 | [Replicate](https://replicate.com/black-forest-labs/flux-kontext-dev) |
 | Web search | Free on Wikipedia; Tavily's free plan covers 1,000 searches a month | [Tavily](https://www.tavily.com/pricing) |
-| Upscale 2x (Real-ESRGAN) | $0.002 each | [Replicate](https://replicate.com/nightmareai/real-esrgan) |
+| Upscale 2x (P-Image Upscale) | $0.005 each up to 4 megapixels, $0.01 up to 8 | [Replicate](https://replicate.com/prunaai/p-image-upscale) |
+| SpicyAPI picture | $0.06 to $0.15 each by model; upscale $0.02 | [SpicyAPI](https://spicyapi.com/docs) |
+| SpicyAPI video | $0.05 to $0.40 per second by model and resolution | [SpicyAPI](https://spicyapi.com/docs) |
 | LoRA training run | about $1.50 to $2 (FLUX dev), about $1.40 to $2.75 (Qwen Image) | [Replicate](https://replicate.com/ostris/flux-dev-lora-trainer) |
 | WAN 2.7 video from an image | $0.10 per second at 720p, $0.15 at 1080p | [Replicate](https://replicate.com/wan-video/wan-2.7-i2v) |
 | WAN 2.2 fast video | $0.05 per clip at 480p, $0.11 at 720p | [Replicate](https://replicate.com/wan-video/wan-2.2-i2v-fast) |

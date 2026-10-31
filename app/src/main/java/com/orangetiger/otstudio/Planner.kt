@@ -266,14 +266,15 @@ object PlainSummary {
                 val seconds = v("duration")?.toIntOrNull() ?: v("num_frames")?.toIntOrNull()?.let { it / 16 }
                     ?: v("frame_num")?.toIntOrNull()?.let { it / 16 }
                 parts.add(if (seconds != null) "$seconds-second clip" else "Video clip")
-                if (v("first_frame") != null || v("image") != null) parts.add("from your picture")
-                if (v("last_frame") != null || v("last_image") != null) parts.add("ending on your picture")
+                if (v("first_frame") != null || v("image") != null || v("image_url") != null) parts.add("from your picture")
+                if (v("last_frame") != null || v("last_image") != null || v("last_frame_url") != null) parts.add("ending on your picture")
+                if (v("reference_image_urls") != null) parts.add("with the people from your pictures")
                 if (v("first_clip") != null) parts.add("continuing your clip")
             }
             else -> {
-                val count = v("num_outputs")?.toIntOrNull() ?: 1
+                val count = v("num_outputs")?.toIntOrNull() ?: v("n")?.toIntOrNull() ?: 1
                 parts.add(if (count > 1) "$count images" else "Image")
-                if (v("image") != null || v("image_prompt") != null) parts.add("guided by your picture")
+                if (v("image") != null || v("image_prompt") != null || v("image_url") != null || v("reference_image") != null) parts.add("guided by your picture")
             }
         }
         v("aspect_ratio")?.let { parts.add(shape(it)) }
@@ -300,15 +301,28 @@ object Prices {
         if (OpenRouterMedia.isModel(model)) return OpenRouterMedia.dollars(model, options)?.let(::cents) ?: "billed by OpenRouter; see the model's page at openrouter.ai"
         if (model == ModelCatalog.expander.model) return "about 4 cents"
         if (model == LoraBases.QWEN.model) return "a few cents, billed by the second at Replicate"
+        // SpicyAPI prices from its model list, 2026-10-30: pictures per output, videos per second by resolution.
+        val pictures = v("n")?.toIntOrNull() ?: 1
+        val seconds = v("duration")?.toDoubleOrNull() ?: 5.0
         when (model) {
-            "spicyapi/spicy-image-1" -> return cents(0.06 * (v("n")?.toIntOrNull() ?: 1))
-            "spicyapi/spicy-image-1-pro" -> return cents(0.09 * (v("n")?.toIntOrNull() ?: 1))
+            "spicyapi/spicy-image-1" -> return cents(0.06 * pictures)
+            "spicyapi/spicy-image-1-pro" -> return cents(0.09 * pictures)
+            "spicyapi/spicy-image-photo-1" -> return cents(0.08 * pictures)
+            "spicyapi/spicy-image-action-1" -> return cents(0.15 * pictures)
+            ModelCatalog.SPICY_REFERENCE -> return cents(0.12)
+            ModelCatalog.SPICY_UPSCALER -> return cents(if (v("scale") == "4") 0.04 else 0.02)
             "spicyapi/spicy-video-1" -> return "from 20 cents a second"
-            "spicyapi/spicy-cinema-1" -> return "from ${cents(0.14 * (v("duration")?.toDoubleOrNull() ?: 5.0))} at 480P; more at higher resolutions"
+            "spicyapi/spicy-cinema-1", "spicyapi/spicy-cinema-1-image", "spicyapi/spicy-cinema-1-character" -> return cents(seconds * when (v("resolution")) { "480P" -> 0.14; "1080P" -> 0.36; else -> 0.28 })
+            "spicyapi/spicy-motion-3" -> return cents(seconds * when (v("resolution")) { "480P" -> 0.10; "1080P" -> 0.40; else -> 0.20 })
+            "spicyapi/spicy-motion-draft-1" -> return cents(seconds * if (v("resolution") == "1080P") 0.075 else 0.05)
         }
         val dollars = when (model) {
             "black-forest-labs/flux-schnell" -> 0.003 * count
-            "black-forest-labs/flux-dev" -> 0.025 * count
+            "black-forest-labs/flux-dev", "black-forest-labs/flux-krea-dev" -> 0.025 * count
+            "qwen/qwen-image-2512" -> 0.02
+            "prunaai/z-image-turbo" -> 0.0025
+            "prunaai/p-image" -> 0.005
+            ModelCatalog.upscaler.model -> 0.005
             "black-forest-labs/flux-dev-lora" -> 0.032 * count
             "black-forest-labs/flux-1.1-pro" -> 0.04
             "wan-video/wan-2.7-t2v", "wan-video/wan-2.7-i2v" -> (v("duration")?.toDoubleOrNull() ?: 5.0) * (if (v("resolution") == "1080p") 0.15 else 0.10)

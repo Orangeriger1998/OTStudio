@@ -744,7 +744,7 @@ class MainActivity : AppCompatActivity() {
         content.addView(note, ui.matchWrap(12))
         if (selected != Mode.CHAT) {
             val spicy = ui.card(content)
-            ui.sectionTitle(spicy, "SpicyAPI", "Adult pictures and videos from words, with SpicyAPI's four text-only models in the model list. Its key is kept apart from your Replicate key and goes only to api.spicyapi.com. These models take no photo.")
+            ui.sectionTitle(spicy, "SpicyAPI", "Adult pictures and videos, with SpicyAPI's models in the model lists. Its key is kept apart from your Replicate key and goes only to api.spicyapi.com. SpicyAPI works with pictures it made itself; only Spicy Image Reference 1 takes a photo from this phone, and it draws new people in that photo's look.")
             val spicyHelper = { if (app.settings.hasSpicyKey()) "Saved securely. Leave blank to keep." else "Starts with sk-spicy-." }
             val spicyKey = ui.field(spicy, "SpicyAPI key", "", secret = true, helper = spicyHelper())
             val spicyNote = ui.text("", Ui.Type.BODY, ui.orange)
@@ -1145,7 +1145,7 @@ class MainActivity : AppCompatActivity() {
         val models = ModelCatalog.edits
         var chosen = models.firstOrNull { it.model == (model ?: app.settings.editModel) } ?: ModelCatalog.defaultEdit
         val cost = ui.text("", Ui.Type.SMALL, ui.muted)
-        fun showCost() { cost.text = "One edit with ${chosen.title} costs ${chosen.price} at Replicate. The edited image appears as a new card. Replicate's usage policy still applies, whatever the safety setting says." }
+        fun showCost() { val provider = if (ModelCatalog.spicy(chosen.model)) "SpicyAPI" else "Replicate"; cost.text = "One edit with ${chosen.title} costs ${chosen.price} at $provider. The edited image appears as a new card. $provider's usage policy still applies, whatever the safety setting says." }
         // Reference photos from the phone, such as an outfit or a place, follow the picture being edited.
         val references = ArrayList<Uri>()
         val referenceNote = ui.text("", Ui.Type.SMALL, ui.muted)
@@ -1155,7 +1155,10 @@ class MainActivity : AppCompatActivity() {
             val takes = PictureList.max(chosen.model) - 1
             val listInput = ModelCatalog.find(Mode.IMAGE, chosen.model)?.schema?.fields?.firstOrNull { it.name == chosen.imageField }?.list == true
             referenceButtons.removeAllViews()
-            if (!listInput) {
+            if (ModelCatalog.spicy(chosen.model)) {
+                // SpicyAPI takes reference pictures only from its own pictures, chosen in API CALL; a phone photo would be refused.
+                referenceNote.text = if (references.isEmpty()) "${chosen.title} edits a picture SpicyAPI made. Reference pictures come only from your SpicyAPI pictures, through API CALL." else "${chosen.title} takes no reference photos from the phone, so the ${references.size} reference photo(s) would be left out. Choose another model, or clear them."
+            } else if (!listInput) {
                 referenceNote.text = if (references.isEmpty()) "${chosen.title} edits one picture. Seedream 4.5, Qwen Image Edit Plus, FLUX.2, and P-Image Edit also take reference photos." else "${chosen.title} takes one picture, so the ${references.size} reference photo(s) would be left out. Choose another model, or clear them."
             } else {
                 referenceNote.text = if (references.isEmpty()) "You can add up to $takes reference photos, such as an outfit or a place. This picture is @img1, and they become @img2, @img3, and so on." else "This picture is @img1; ${references.indices.joinToString(" and ") { "@img${it + 2}" }} ${if (references.size == 1) "comes" else "come"} from your phone. Name them in your words, for example: dress her in the outfit from @img2. The model reads image 1, image 2."

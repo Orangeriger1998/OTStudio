@@ -25,9 +25,11 @@ object PictureList {
     fun add(value: String?, link: String): String = join(split(value.orEmpty()) + link)
     fun remove(value: String, index: Int): String = join(split(value).filterIndexed { i, _ -> i != index })
 
-    /** How many pictures a model's list input takes, from Replicate's model pages (2026-10-05). */
+    /** How many pictures a model's list input takes, from Replicate's model pages (2026-10-05) and SpicyAPI's docs (2026-10-30). */
     fun max(model: String): Int = OpenRouterMedia.maxPictures(model) ?: when (model) {
         "bytedance/seedream-4.5" -> 14
+        "spicyapi/spicy-motion-3" -> 10
+        "spicyapi/spicy-cinema-1-character" -> 9
         "black-forest-labs/flux-2-dev", "black-forest-labs/flux-2-klein-9b", "black-forest-labs/flux-2-klein-4b" -> 5
         else -> 3
     }
@@ -52,8 +54,8 @@ object ModelOptions {
     fun validateForModel(model: String, schema: InputSchema, values: List<InputValue>) {
         validate(schema, values, true)
         fun has(name: String) = values.any { it.name == name && it.value.isNotBlank() }
-        // A photo kept on the phone goes to OpenRouter inside the request. Replicate models need an uploaded copy.
-        if (!OpenRouterMedia.isModel(model) && values.any { v -> schema.fields.any { it.name == v.name && it.uri } && PictureList.split(v.value).any { it.startsWith("phone:") } })
+        // A photo kept on the phone goes to OpenRouter, or to SpicyAPI's reference model, inside the request. Replicate models need an uploaded copy.
+        if (!OpenRouterMedia.isModel(model) && !ModelCatalog.spicyPhonePhotos(model) && values.any { v -> schema.fields.any { it.name == v.name && it.uri } && PictureList.split(v.value).any { it.startsWith("phone:") } })
             throw UserError("A photo chosen for an OpenRouter model cannot go to this model. Choose the photo again in API CALL.")
         schema.fields.filter { it.list && it.uri }.forEach { d ->
             val count = values.firstOrNull { it.name == d.name }?.value?.let(PictureList::split)?.size ?: 0
@@ -64,6 +66,11 @@ object ModelOptions {
             if (has("last_frame") && !has("first_frame")) throw UserError("An ending frame requires a starting frame.")
         }
         if (model == "wan-video/wan-2.2-i2v-fast" && !has("image")) throw UserError("WAN 2.2 I2V needs a starting image URL.")
+        if (model == "spicyapi/spicy-motion-3") {
+            if (has("image_url") && has("reference_image_urls")) throw UserError("Spicy Motion 3 takes either a starting picture or reference pictures, not both.")
+            if (has("last_frame_url") && !has("image_url")) throw UserError("An ending picture requires a starting picture.")
+            if (has("image_url") && has("aspect_ratio")) throw UserError("With a starting picture, the clip keeps the picture's shape. Remove the shape setting.")
+        }
         ModelCatalog.edit(model)?.let { e -> if (!has(e.imageField)) throw UserError("This editing model needs the image to edit. Use Edit on an image card, or Choose photo in API CALL.") }
         if (model == "bytedance/seedream-4.5" && values.any { it.name == "size" && it.value == "custom" } && (!has("width") || !has("height"))) throw UserError("A custom size needs a width and a height.")
     }
@@ -125,26 +132,18 @@ object ModelOptions {
         if (resolution != null && preset.fixedResolution != resolution && preset.schema.fields.none { it.name == "resolution" && resolution in it.choices }) return false
         return features.all { feature -> when (feature) {
             "Editing" -> ModelCatalog.edit(preset.model) != null
-            "Starting frame" -> preset.mode == Mode.VIDEO && names.any { it in setOf("image", "first_frame", "start_image", "first_frame_image") }
-            "Ending frame" -> preset.mode == Mode.VIDEO && names.any { it in setOf("last_image", "last_frame", "end_image") }
+            "Starting frame" -> preset.mode == Mode.VIDEO && names.any { it in setOf("image", "image_url", "first_frame", "start_image", "first_frame_image") }
+            "Ending frame" -> preset.mode == Mode.VIDEO && names.any { it in setOf("last_image", "last_frame", "last_frame_url", "end_image") }
             "Frame rate" -> names.any { it in setOf("frames_per_second", "frame_per_second", "fps") }
             "Fast generation" -> "fast_mode" in names || "go_fast" in names
             "LoRA" -> names.any { it.startsWith("lora_weights") || it == "replicate_weights" }
-            "Image guidance" -> names.any { it in setOf("image", "image_prompt", "start_image", "first_frame_image", "first_frame", "input_image", "input_images", "images", "image_input", "input_references") }
+            "Image guidance" -> names.any { it in setOf("image", "image_url", "image_urls", "image_prompt", "start_image", "first_frame_image", "first_frame", "input_image", "input_images", "images", "image_input", "input_references", "reference_image", "reference_image_urls") }
             "Audio input" -> names.any { it in setOf("audio", "audio_url") }
             "Negative prompt" -> "negative_prompt" in names
             "Seed" -> "seed" in names
             "Safety controls" -> "disable_safety_checker" in names || "safety_tolerance" in names
             else -> false
         } }
-    }
-
-    fun routedModel(model: String, resolution: String): String {
-        if (model in listOf("wavespeedai/wan-2.1-t2v-480p", "wavespeedai/wan-2.1-t2v-720p")) {
-            if (resolution !in listOf("480p", "720p")) throw UserError("WAN 2.1 supports the 480p or 720p model route.")
-            return "wavespeedai/wan-2.1-t2v-$resolution"
-        }
-        return model
     }
 
     fun summary(model: String, values: List<InputValue>): String = buildString {
@@ -175,13 +174,38 @@ object ModelCatalog {
         choice("output_format", listOf("webp", "jpg", "png"), "webp"), number("output_quality", "80", 0.0, 100.0),
         bool("disable_safety_checker", false, "Requests the provider's exposed setting. Provider restrictions still apply.")
     ) + if (dev) listOf(number("guidance", "3.5", 0.0, 10.0, false), text("image", note = "HTTPS input image URL for image guidance. Provider fetches this URL.", uri = true), number("prompt_strength", "0.8", 0.0, 1.0, false)) else emptyList())
-    private val waveSchema = InputSchema(listOf(
-        choice("aspect_ratio", videoAspects, "16:9"), choice("fast_mode", listOf("Off", "Balanced", "Fast"), "Balanced", note = "Faster modes may reduce quality."),
-        number("seed"), number("sample_shift", "3", 0.0, 10.0), number("sample_steps", "30", 1.0, 40.0),
-        number("sample_guide_scale", "5", 1.0, 10.0, false), text("negative_prompt", ""),
-        text("lora_weights", note = "Provider-supported Hugging Face/CivitAI or HTTPS safetensors location."), number("lora_scale", "1", 0.0, 4.0, false),
-        bool("disable_safety_checker", false)
+    /** FLUX.1 Krea dev: FLUX dev's inputs with Krea's guidance default (schema checked 2026-10-30). */
+    private val kreaSchema = InputSchema(flux(true).fields.map { if (it.name == "guidance") it.copy(defaultValue = "4.5") else it })
+    private val safety = bool("disable_safety_checker", false, "Requests the provider's exposed setting. Provider restrictions still apply.")
+    private val customAspects = listOf("1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "custom")
+    /** Qwen Image 2512, the December 2025 release with more natural people (schema checked 2026-10-30). */
+    private val qwenImage2512 = InputSchema(listOf(
+        choice("aspect_ratio", customAspects, "16:9"),
+        number("width", min = 256.0, max = 2048.0, note = "Only used when aspect_ratio is custom. A multiple of 16."),
+        number("height", min = 256.0, max = 2048.0, note = "Only used when aspect_ratio is custom. A multiple of 16."),
+        text("image", note = "HTTPS starting picture for image to image. The result keeps its shape, not the person.", uri = true),
+        number("strength", "0.8", 0.0, 1.0, false, "How far from the starting picture. 1 ignores it."),
+        number("guidance", "4", 0.0, 10.0, false), number("num_inference_steps", "40", 20.0, 50.0), bool("go_fast", true),
+        number("seed"), text("negative_prompt", ""), choice("output_format", listOf("webp", "jpg", "png"), "webp"), number("output_quality", "95", 0.0, 100.0), safety
     ))
+    /**
+     * Z-Image Turbo at Pruna (schema checked 2026-10-30). The endpoint lists several compatibility inputs it ignores,
+     * among them disable_safety_checker; its only real content control is enable_safety_filter, off by default.
+     */
+    private val zImageSchema = InputSchema(listOf(
+        number("width", "1024", 64.0, 2048.0), number("height", "1024", 64.0, 2048.0),
+        number("num_inference_steps", "8", 1.0, 50.0), number("guidance_scale", "0", 0.0, 20.0, false, "Leave at 0 for this turbo model."),
+        number("seed"), choice("output_format", listOf("jpg", "png", "webp"), "jpg"), number("output_quality", "80", 0.0, 100.0),
+        bool("enable_safety_filter", false, "Checks the prompt against the provider's content policy. Off at the provider by default.")
+    ), listOf("num_outputs", "safety_tolerance", "model_version", "negative_prompt", "aspect_ratio", "megapixels", "go_fast", "disable_safety_checker", "enable_safety_checker"))
+    /** P-Image at Pruna (schema checked 2026-10-30). Its LoRA inputs stay out: the base model is undisclosed, so no saved LoRA is known to fit. */
+    private val pImageSchema = InputSchema(listOf(
+        choice("aspect_ratio", customAspects, "16:9"),
+        number("width", min = 256.0, max = 1440.0, note = "Only used when aspect_ratio is custom. A multiple of 16."),
+        number("height", min = 256.0, max = 1440.0, note = "Only used when aspect_ratio is custom. A multiple of 16."),
+        bool("prompt_upsampling", false, "Let a language model expand the prompt first."), number("seed"), safety,
+        bool("enable_copyright_filter", false, "Rejects prompts that ask for copyrighted characters, trademarks, logos, or a real person's likeness.")
+    ), listOf("lora_weights", "lora_scale", "hf_api_token"))
     private val loraSchema = InputSchema(flux(true).fields.map { if (it.name == "guidance") it.copy(defaultValue = "3") else it } + listOf(
         text("lora_weights", note = "Choose a saved FLUX dev LoRA below or enter an owner/model/version reference or HTTPS safetensors URL."),
         number("lora_scale", "1", -1.0, 3.0, false, "With go_fast, the provider applies a 1.5 scale multiplier."),
@@ -230,20 +254,23 @@ object ModelCatalog {
         choice("output_format", listOf("webp", "jpg", "png"), "jpg"), number("output_quality", "95", 0.0, 100.0), dsc))
 
     /**
-     * Editing models (Replicate list A, schemas checked 2026-10-03): each exposes disable_safety_checker, which OT Studio
-     * turns on by default. LoRA versions (flux-kontext-dev-lora, qwen-image-edit-plus-lora) wait until LoRA compatibility
-     * is tested, and Qwen 2511 is listed without its LoRA inputs.
+     * Editing models (Replicate list A, schemas checked 2026-10-03 and 2026-10-30): each Replicate model exposes
+     * disable_safety_checker, which OT Studio turns on by default. LoRA versions (flux-kontext-dev-lora,
+     * qwen-image-edit-plus-lora) wait until LoRA compatibility is tested, and Qwen 2511 is listed without its LoRA
+     * inputs. Qwen Image Edit (the August 2025 model) left the list on 2026-10-30; 2511 does the same work better.
+     * Spicy Image Edit 1 runs at SpicyAPI and edits only pictures made there.
      */
     val edits: List<EditModel> = listOf(
         EditModel("black-forest-labs/flux-kontext-dev", "FLUX Kontext dev", "input_image", "about 2.5 cents"),
         EditModel("qwen/qwen-image-edit-plus", "Qwen Image Edit Plus", "image", "about 3 cents"),
-        EditModel("qwen/qwen-image-edit", "Qwen Image Edit", "image", "about 3 cents"),
         EditModel("qwen/qwen-image-edit-2511", "Qwen Image Edit 2511", "image", "about 3 cents"),
+        EditModel("qwen/qwen-edit-multiangle", "Qwen Edit Multi-angle", "image", "about 3 cents"),
         EditModel("black-forest-labs/flux-2-dev", "FLUX.2 dev", "input_images", "about 3 cents at 1 megapixel"),
         EditModel("black-forest-labs/flux-2-klein-9b", "FLUX.2 klein 9B", "images", "about 1.5 cents at 1 megapixel"),
         EditModel("black-forest-labs/flux-2-klein-4b", "FLUX.2 klein 4B", "images", "a fraction of a cent"),
         EditModel("bytedance/seedream-4.5", "Seedream 4.5", "image_input", "about 4 cents"),
-        EditModel("prunaai/p-image-edit", "P-Image Edit", "images", "about 1 cent")
+        EditModel("prunaai/p-image-edit", "P-Image Edit", "images", "about 1 cent"),
+        EditModel("spicyapi/spicy-image-edit-1", "Spicy Image Edit 1", "image_urls", "9 cents")
     )
     fun edit(model: String): EditModel? = edits.firstOrNull { it.model == model }
     /** Video models that cannot run without a starting picture or clip (see validateForModel). */
@@ -255,8 +282,16 @@ object ModelCatalog {
             number("num_inference_steps", "28", 4.0, 50.0), number("guidance", "2.5", 0.0, 10.0, false), number("seed"),
             choice("output_format", listOf("webp", "jpg", "png"), "webp"), number("output_quality", "80", 0.0, 100.0), dsc, bool("go_fast", true)))),
         ModelPreset(Mode.IMAGE, "qwen/qwen-image-edit-plus", qwenEdit(true)),
-        ModelPreset(Mode.IMAGE, "qwen/qwen-image-edit", qwenEdit(false)),
         ModelPreset(Mode.IMAGE, "qwen/qwen-image-edit-2511", qwenEdit(true)),
+        // Camera moves on one picture (schema checked 2026-10-30). The preloaded multi-angle LoRA is part of the model, so its LoRA inputs stay out.
+        ModelPreset(Mode.IMAGE, "qwen/qwen-edit-multiangle", InputSchema(listOf(image("image", false, true),
+            number("rotate_degrees", "0", -90.0, 90.0, note = "Turns the camera. Positive turns left, negative turns right."),
+            number("move_forward", "0", 0.0, 10.0, note = "Moves the camera closer. 10 is a close-up."),
+            number("vertical_tilt", "0", -1.0, 1.0, note = "-1 looks down from above, 0 stays level, 1 looks up from below."),
+            bool("use_wide_angle", false, "Wide-angle lens."), aspects(listOf("match_input_image", "1:1", "16:9", "9:16", "4:3", "3:4")),
+            bool("go_fast", true, "4 steps when on, 40 when off, unless steps are set."), number("num_inference_steps", min = 1.0, max = 40.0),
+            number("true_guidance_scale", "1", 0.0, 10.0, false), number("seed"),
+            choice("output_format", listOf("webp", "jpg", "png"), "webp"), number("output_quality", "95", 0.0, 100.0), dsc), listOf("lora_weights", "lora_scale"))),
         ModelPreset(Mode.IMAGE, "black-forest-labs/flux-2-dev", InputSchema(listOf(image("input_images", true, false), bool("go_fast", true),
             choice("aspect_ratio", listOf("match_input_image", "custom", "1:1", "16:9", "3:2", "2:3", "4:5", "5:4", "9:16", "3:4", "4:3"), "match_input_image"),
             number("width", min = 256.0, max = 1440.0, note = "Use with custom aspect ratio."), number("height", min = 256.0, max = 1440.0, note = "Use with custom aspect ratio."),
@@ -276,6 +311,8 @@ object ModelCatalog {
         ModelPreset(Mode.CHAT, "mistralai/mistral-nemo", chatSchema), ModelPreset(Mode.CHAT, "qwen/qwen3-30b-a3b-instruct-2507", chatSchema),
         ModelPreset(Mode.CHAT, "gryphe/mythomax-l2-13b", chatSchema), ModelPreset(Mode.CHAT, "qwen/qwen3-8b", chatSchema),
         ModelPreset(Mode.IMAGE, "black-forest-labs/flux-schnell", flux(false)), ModelPreset(Mode.IMAGE, "black-forest-labs/flux-dev", flux(true)),
+        ModelPreset(Mode.IMAGE, "black-forest-labs/flux-krea-dev", kreaSchema), ModelPreset(Mode.IMAGE, "qwen/qwen-image-2512", qwenImage2512),
+        ModelPreset(Mode.IMAGE, "prunaai/z-image-turbo", zImageSchema), ModelPreset(Mode.IMAGE, "prunaai/p-image", pImageSchema),
         ModelPreset(Mode.IMAGE, "black-forest-labs/flux-dev-lora", loraSchema), ModelPreset(Mode.IMAGE, "qwen/qwen-image-lora-trainer", qwenLoraSchema),
         ModelPreset(Mode.VIDEO, "wan-video/wan-2.2-i2v-fast", i2v22), ModelPreset(Mode.VIDEO, "wan-video/wan-2.7-i2v", i2v27),
         ModelPreset(Mode.IMAGE, "black-forest-labs/flux-1.1-pro", InputSchema(listOf(
@@ -290,7 +327,6 @@ object ModelCatalog {
             number("duration", "5", 2.0, 15.0), number("seed", min = 0.0, max = 2147483647.0), text("negative_prompt", ""),
             bool("enable_prompt_expansion", true), text("audio", note = "HTTPS WAV/MP3 URL, 3-30 seconds and up to 15 MB. Otherwise the provider generates audio.", uri = true)
         ))),
-        ModelPreset(Mode.VIDEO, "wavespeedai/wan-2.1-t2v-480p", waveSchema, "480p"), ModelPreset(Mode.VIDEO, "wavespeedai/wan-2.1-t2v-720p", waveSchema, "720p"),
         ModelPreset(Mode.VIDEO, "wan-video/wan-2.1-1.3b", InputSchema(listOf(
             choice("resolution", listOf("480p"), "480p"), choice("aspect_ratio", videoAspects, "16:9"),
             choice("frame_num", listOf("17", "33", "49", "65", "81"), "81", InputKind.INTEGER, "Duration in frames at fixed 16 fps."),
@@ -306,32 +342,86 @@ object ModelCatalog {
         )))
     )
     /**
-     * SpicyAPI text-only models (owner decision, 2026-10-05). They are listed under the "spicyapi/" prefix and run
-     * against api.spicyapi.com with their own key. None of them has a picture input, and the app never sends one:
-     * models that take a photo of a person are deliberately not offered.
+     * SpicyAPI models, listed under the "spicyapi/" prefix and run against api.spicyapi.com with their own key. Owner
+     * decision, 2026-10-30, replacing the text-only rule of 2026-10-05: the photo-based models are offered too. SpicyAPI
+     * accepts as a picture input only a picture the same account made there (docs checked 2026-10-30), so the app sends
+     * the address of a finished SpicyAPI picture and never a phone photo or a Replicate upload. The one exception is the
+     * reference model, which takes any picture, describes it, and draws new people in its look.
      */
+    const val SPICY_REFERENCE = "spicyapi/spicy-image-reference-1"
+    const val SPICY_UPSCALER = "spicyapi/spicy-upscale-1"
     private val spicySizes = listOf("832*1216", "1216*832", "1024*1024", "1280*1280", "1440*1440", "1024*1536", "1536*1024", "1080*1920", "1920*1080", "1152*2048", "2048*1152")
-    private fun spicyImage() = InputSchema(listOf(choice("size", spicySizes, "832*1216", note = "Width by height in pixels."), number("n", "1", 1.0, 4.0, note = "Pictures per request, each billed."),
-        choice("style", listOf("photorealistic", "studio", "anime", "3d", "cartoon"), "photorealistic"), text("negative_prompt", note = "What to keep out of the picture."),
-        number("seed"), bool("enhance_prompt", false, "Let SpicyAPI plan the shot from your words first.")))
+    private val spicyStyles = listOf("photorealistic", "studio", "anime", "3d", "cartoon")
+    private val spicyResolutions = listOf("480P", "720P", "1080P")
+    private val spicyEnhance = bool("enhance_prompt", false, "Let SpicyAPI plan the shot from your words first.")
+    private val spicyCount = number("n", "1", 1.0, 4.0, note = "Pictures per request, each billed.")
+    private fun spicyImage() = InputSchema(listOf(choice("size", spicySizes, "832*1216", note = "Width by height in pixels."), spicyCount,
+        choice("style", spicyStyles, "photorealistic"), text("negative_prompt", note = "What to keep out of the picture."), number("seed"), spicyEnhance))
+    private fun spicyPicture(name: String, note: String, list: Boolean = false, required: Boolean = true) = text(name, note = note, uri = true).copy(required = required, list = list)
     val spicyPresets = listOf(
         ModelPreset(Mode.IMAGE, "spicyapi/spicy-image-1", spicyImage()),
         ModelPreset(Mode.IMAGE, "spicyapi/spicy-image-1-pro", spicyImage()),
+        ModelPreset(Mode.IMAGE, "spicyapi/spicy-image-photo-1", spicyImage()),
+        ModelPreset(Mode.IMAGE, "spicyapi/spicy-image-action-1", InputSchema(listOf(
+            spicyPicture("image_url", "A SpicyAPI picture of the woman. Her face, hair, and skin tone go into the scene; the scene supplies the rest."),
+            text("action", note = "The scene's id from SpicyAPI's image actions list (GET /v1/images/actions), such as pov-missionary.").copy(required = true),
+            spicyCount, choice("style", spicyStyles, "photorealistic"), number("seed")))),
+        ModelPreset(Mode.IMAGE, SPICY_REFERENCE, InputSchema(listOf(
+            spicyPicture("reference_image", "The picture to recreate: a photo from this phone or a SpicyAPI picture. Its look is kept; the faces are not.")))),
+        ModelPreset(Mode.IMAGE, "spicyapi/spicy-image-edit-1", InputSchema(listOf(
+            spicyPicture("image_urls", "SpicyAPI pictures: the one to edit first, then up to two references.", list = true),
+            spicyPicture("mask_url", "Optional black and white mask: white changes, black stays. Works with one picture only.", required = false),
+            spicyCount, text("negative_prompt", note = "What to keep out of the picture."), number("seed"), spicyEnhance))),
         ModelPreset(Mode.VIDEO, "spicyapi/spicy-video-1", InputSchema(listOf(choice("aspect_ratio", listOf("16:9", "9:16", "1:1", "4:3", "3:4"), "16:9")))),
         ModelPreset(Mode.VIDEO, "spicyapi/spicy-cinema-1", InputSchema(listOf(number("duration", "5", 3.0, 15.0, note = "3 to 15 seconds."),
-            choice("resolution", listOf("480P", "720P", "1080P"), "720P"), choice("aspect_ratio", listOf("16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21", "4:5"), "16:9"))))
+            choice("resolution", spicyResolutions, "720P"), choice("aspect_ratio", listOf("16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21", "4:5"), "16:9")))),
+        ModelPreset(Mode.VIDEO, "spicyapi/spicy-motion-draft-1", InputSchema(listOf(
+            spicyPicture("image_url", "Starting picture: a SpicyAPI picture. The clip is silent."),
+            number("duration", "5", 2.0, 15.0, note = "2 to 15 seconds."), choice("resolution", listOf("720P", "1080P"), "720P"), number("seed"), spicyEnhance))),
+        ModelPreset(Mode.VIDEO, "spicyapi/spicy-motion-3", InputSchema(listOf(
+            spicyPicture("image_url", "Optional starting picture: a SpicyAPI picture. Not together with reference pictures or a shape.", required = false),
+            spicyPicture("last_frame_url", "Optional ending picture: a SpicyAPI picture. Needs a starting picture.", required = false),
+            spicyPicture("reference_image_urls", "Up to 10 SpicyAPI pictures that set who is in the clip without fixing the first shot. Not together with a starting picture.", list = true, required = false),
+            number("duration", "5", 2.0, 30.0, note = "2 to 30 seconds."), choice("resolution", spicyResolutions, "720P"),
+            InputDefinition("aspect_ratio", InputKind.TEXT, null, listOf("16:9", "9:16", "1:1", "4:3", "3:4", "21:9"), description = "Shape of a clip from words only. Left out, the model picks one."),
+            number("seed"), spicyEnhance))),
+        ModelPreset(Mode.VIDEO, "spicyapi/spicy-cinema-1-image", InputSchema(listOf(
+            spicyPicture("image_url", "Starting picture: a SpicyAPI picture. The clip keeps its shape."),
+            number("duration", "5", 3.0, 15.0, note = "3 to 15 seconds."), choice("resolution", spicyResolutions, "720P"), number("seed"), spicyEnhance))),
+        ModelPreset(Mode.VIDEO, "spicyapi/spicy-cinema-1-character", InputSchema(listOf(
+            spicyPicture("reference_image_urls", "Up to 9 SpicyAPI pictures of the people, outfits, or props to keep. In your words, call them @img1, @img2, and so on.", list = true),
+            number("duration", "5", 3.0, 15.0, note = "3 to 15 seconds."), choice("resolution", spicyResolutions, "720P"),
+            choice("aspect_ratio", listOf("16:9", "9:16", "1:1", "4:3", "3:4", "4:5", "5:4", "9:21", "21:9"), "16:9"), number("seed"), spicyEnhance)))
     )
     fun spicy(model: String) = model.startsWith("spicyapi/")
+    /** The SpicyAPI model that takes a picture from this phone, sent inside the request as a data: address. */
+    fun spicyPhonePhotos(model: String) = model == SPICY_REFERENCE
+    /** SpicyAPI image models that run on the edits endpoint. */
+    fun spicyEdits(model: String) = model == "spicyapi/spicy-image-edit-1" || model == SPICY_UPSCALER
+    /** SpicyAPI models that take no prompt: the picture or the scene says everything. */
+    fun spicyPromptless(model: String) = model == "spicyapi/spicy-image-action-1" || model == SPICY_REFERENCE || model == SPICY_UPSCALER
 
     val presets: List<ModelPreset> = basePresets + editPresets + spicyPresets + OpenRouterMedia.presets
     fun find(mode: Mode, model: String): ModelPreset? = presets.firstOrNull { it.mode == mode && it.model == model }
-        ?: listOf(upscaler, expander).firstOrNull { mode == it.mode && model == it.model }
+        ?: listOf(upscaler, spicyUpscaler, expander).firstOrNull { mode == it.mode && model == it.model }
 
-    /** Real-ESRGAN upscaler, used only by the Upscale action (it takes an image, not a prompt), so it is not in the model lists. */
-    val upscaler = ModelPreset(Mode.IMAGE, "nightmareai/real-esrgan", InputSchema(listOf(
+    /**
+     * P-Image Upscale, used only by the Upscale action (it takes an image, not a prompt), so it is not in the model lists.
+     * It replaced Real-ESRGAN on 2026-10-30 (schema checked that day).
+     */
+    val upscaler = ModelPreset(Mode.IMAGE, "prunaai/p-image-upscale", InputSchema(listOf(
         text("image", note = "Image to upscale.", uri = true).copy(required = true),
-        number("scale", "4", 0.0, 10.0, false, "Factor to scale the image by."),
-        bool("face_enhance", false, "Run GFPGAN face enhancement.")
+        choice("upscale_mode", listOf("factor", "target"), "factor", note = "factor multiplies each side; target aims at a megapixel count."),
+        number("factor", "2", 1.0, 8.0, false, "Each side is multiplied by this, when upscale_mode is factor."),
+        number("target", "4", 1.0, 128.0, note = "Megapixels, when upscale_mode is target."),
+        bool("enhance_details", false, "Sharpens fine textures. May change small details."), bool("enhance_realism", false, "Improves the realism of AI pictures. May change details."),
+        choice("output_format", listOf("jpg", "png", "webp"), "jpg"), number("output_quality", "80", 0.0, 100.0), bool("disable_safety_checker", false)
+    )))
+
+    /** Spicy Upscale 1, used by the Upscale action for a picture SpicyAPI made (docs checked 2026-10-30). Not in the model lists. */
+    val spicyUpscaler = ModelPreset(Mode.IMAGE, SPICY_UPSCALER, InputSchema(listOf(
+        text("image_url", note = "The SpicyAPI picture to upscale.", uri = true).copy(required = true),
+        choice("scale", listOf("2", "4"), "2", InputKind.INTEGER, "4 takes pictures of about 1 megapixel at most.")
     )))
 
     /**
@@ -362,13 +452,19 @@ object InputLabels {
         "frames_per_second" to "Frames per second", "fps" to "Frames per second", "num_frames" to "Length in frames (81 is 5 s, 121 is 7.5 s)",
         "safety_tolerance" to "Safety tolerance", "size" to "Size", "width" to "Width", "height" to "Height",
         "n" to "Number of pictures", "style" to "Style", "enhance_prompt" to "Plan the shot first",
-        "input_references" to "Pictures", "generate_audio" to "Sound", "replicate_weights" to "LoRA", "image_size" to "Size"
+        "input_references" to "Pictures", "generate_audio" to "Sound", "replicate_weights" to "LoRA", "image_size" to "Size",
+        "image_url" to "Picture", "image_urls" to "Pictures", "reference_image" to "Picture to recreate", "reference_image_urls" to "Reference pictures",
+        "last_frame_url" to "Ending picture", "mask_url" to "Mask", "action" to "Scene", "scale" to "Scale factor", "strength" to "How far from your picture",
+        "rotate_degrees" to "Turn the camera (degrees)", "move_forward" to "Move the camera closer", "vertical_tilt" to "Tilt the camera", "use_wide_angle" to "Wide-angle lens",
+        "true_guidance_scale" to "Prompt strength", "upscale_mode" to "Upscale by", "factor" to "Factor", "target" to "Target megapixels",
+        "enhance_details" to "Sharpen details", "enhance_realism" to "Improve realism", "enable_safety_filter" to "Prompt safety filter",
+        "enable_copyright_filter" to "Copyright filter", "prompt_upsampling" to "Expand the prompt first"
     )
 
     fun title(name: String): String = names[name] ?: name.replace('_', ' ').trim().replaceFirstChar { it.uppercase() }
 
-    /** A video model's plain "image" input is its starting picture. */
-    fun title(name: String, mode: Mode): String = if (mode == Mode.VIDEO && name == "image") "Starting picture" else title(name)
+    /** A video model's plain "image" or "image_url" input is its starting picture. */
+    fun title(name: String, mode: Mode): String = if (mode == Mode.VIDEO && (name == "image" || name == "image_url")) "Starting picture" else title(name)
 
     /** True for the switch that reads the other way round: on means the checker is off. */
     fun invertedSafety(d: InputDefinition) = d.name == "disable_safety_checker" && d.kind == InputKind.BOOLEAN
@@ -384,6 +480,10 @@ object ModelNames {
         "gryphe/mythomax-l2-13b" to "MythoMax",
         "black-forest-labs/flux-schnell" to "Quick draft (FLUX schnell), under 1 cent",
         "black-forest-labs/flux-dev" to "Detailed picture (FLUX dev), 2.5 cents",
+        "black-forest-labs/flux-krea-dev" to "Natural photo look (FLUX Krea dev), 2.5 cents",
+        "qwen/qwen-image-2512" to "Realistic people (Qwen Image 2512), 2 cents",
+        "prunaai/z-image-turbo" to "Fast realistic picture (Z-Image Turbo), under 1 cent",
+        "prunaai/p-image" to "Fast picture (P-Image), under 1 cent",
         "black-forest-labs/flux-dev-lora" to "Your trained face or style (FLUX dev LoRA), 3 cents",
         "qwen/qwen-image-lora-trainer" to "Your Qwen LoRA (Qwen Image with a LoRA), a few cents",
         "black-forest-labs/flux-1.1-pro" to "Best quality (FLUX 1.1 pro), 4 cents",
@@ -393,19 +493,26 @@ object ModelNames {
         "bytedance/seedream-4.5" to "Seedream 4.5, about 4 cents",
         "black-forest-labs/flux-kontext-dev" to "Edit a picture (FLUX Kontext dev), 2.5 cents",
         "qwen/qwen-image-edit-plus" to "Edit a picture (Qwen Image Edit Plus), 3 cents",
-        "qwen/qwen-image-edit" to "Edit a picture (Qwen Image Edit), 3 cents",
         "qwen/qwen-image-edit-2511" to "Edit a picture (Qwen Image Edit 2511), 3 cents",
+        "qwen/qwen-edit-multiangle" to "New camera angle of a picture (Qwen Edit Multi-angle), 3 cents",
         "prunaai/p-image-edit" to "Edit a picture (P-Image Edit), 1 cent",
         "wan-video/wan-2.2-t2v-fast" to "Quick video from words (WAN 2.2 fast), 5 cents",
         "wan-video/wan-2.2-i2v-fast" to "Quick video from a picture (WAN 2.2 fast), 5 cents",
         "wan-video/wan-2.7-t2v" to "Video from words (WAN 2.7), about 50 cents",
         "wan-video/wan-2.7-i2v" to "Video from a picture (WAN 2.7), about 50 cents",
         "wan-video/wan-2.1-1.3b" to "Older small video model (WAN 2.1)",
-        "wavespeedai/wan-2.1-t2v-480p" to "Older video model (WAN 2.1, 480p)", "wavespeedai/wan-2.1-t2v-720p" to "Older video model (WAN 2.1, 720p)",
         "spicyapi/spicy-image-1" to "Adult picture from words (Spicy Image 1), 6 cents",
         "spicyapi/spicy-image-1-pro" to "Adult picture from words, best (Spicy Image 1 Pro), 9 cents",
+        "spicyapi/spicy-image-photo-1" to "Adult photo from words, natural light (Spicy Image Photo 1), 8 cents",
+        "spicyapi/spicy-image-action-1" to "Adult scene with the woman from your Spicy picture (Spicy Image Action 1), 15 cents",
+        "spicyapi/spicy-image-reference-1" to "Adult picture in the look of a picture, new people (Spicy Image Reference 1), 12 cents",
+        "spicyapi/spicy-image-edit-1" to "Edit a Spicy picture (Spicy Image Edit 1), 9 cents",
         "spicyapi/spicy-video-1" to "Adult video from words (Spicy Video 1), from 20 cents a second",
-        "spicyapi/spicy-cinema-1" to "Adult video from words, cinematic (Spicy Cinema 1), from 14 cents a second"
+        "spicyapi/spicy-cinema-1" to "Adult video from words, cinematic (Spicy Cinema 1), from 14 cents a second",
+        "spicyapi/spicy-motion-draft-1" to "Adult silent draft video from a Spicy picture (Spicy Motion Draft 1), from 5 cents a second",
+        "spicyapi/spicy-motion-3" to "Adult video with sound, best (Spicy Motion 3), from 10 cents a second",
+        "spicyapi/spicy-cinema-1-image" to "Adult video from a Spicy picture, cinematic (Spicy Cinema 1 Image), from 14 cents a second",
+        "spicyapi/spicy-cinema-1-character" to "Adult video with the people from your Spicy pictures (Spicy Cinema 1 Character), from 14 cents a second"
     )
     fun title(model: String): String = names[model] ?: OpenRouterMedia.titles[model] ?: model
 
@@ -468,9 +575,9 @@ data class EditModel(val model: String, val title: String, val imageField: Strin
 
 /** Where a photo can be used: the target mode, the model inputs that accept it, and a model to switch to if needed. */
 enum class MediaRole(val title: String, val mode: Mode, val fields: List<String>, val fallbackModel: String) {
-    REFERENCE("Reference for the next image", Mode.IMAGE, listOf("image", "image_prompt", "input_image", "input_images", "images", "image_input", "input_references"), "black-forest-labs/flux-dev"),
-    START_FRAME("Starting frame for a video", Mode.VIDEO, listOf("first_frame", "image", "start_image", "first_frame_image"), "wan-video/wan-2.7-i2v"),
-    END_FRAME("Ending frame for a video", Mode.VIDEO, listOf("last_frame", "last_image", "end_image"), "wan-video/wan-2.7-i2v");
+    REFERENCE("Reference for the next image", Mode.IMAGE, listOf("image", "image_prompt", "input_image", "input_images", "images", "image_input", "input_references", "image_url", "image_urls", "reference_image"), "black-forest-labs/flux-dev"),
+    START_FRAME("Starting frame for a video", Mode.VIDEO, listOf("first_frame", "image", "image_url", "start_image", "first_frame_image"), "wan-video/wan-2.7-i2v"),
+    END_FRAME("Ending frame for a video", Mode.VIDEO, listOf("last_frame", "last_image", "last_frame_url", "end_image"), "wan-video/wan-2.7-i2v");
 
     /**
      * Returns settings with [url] in this role's input. Keeps the current model when it has a matching input;

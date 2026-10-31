@@ -13,25 +13,7 @@ class ModelOptionsTest {
             ModelOptions.validate(p.schema, ModelOptions.initial(p.mode, p.model, p.schema))
         }
     }
-    @Test fun resolutionChangesTheWan21RouteWithoutAddingUnsupportedInputs() {
-        val id = ModelOptions.routedModel("wavespeedai/wan-2.1-t2v-480p", "720p")
-        assertEquals("wavespeedai/wan-2.1-t2v-720p", id)
-        val settings = ModelSettings(Mode.VIDEO, Protocol.REPLICATE, "https://api.replicate.com/v1", id)
-        var calls = 0
-        ProviderApi { _, url, _, body ->
-            calls++; assertTrue(url.endsWith("/wavespeedai/wan-2.1-t2v-720p/predictions"))
-            val input = JSONObject(body!!).getJSONObject("input")
-            assertFalse(input.has("resolution")); assertFalse(input.has("duration"))
-            HttpReply(201, """{"id":"test","status":"starting"}""")
-        }.create(ResolvedModel(settings, Mode.VIDEO, "synthetic"), "Test prompt")
-        assertEquals(1, calls)
-        rejects { ModelOptions.routedModel(id, "1080p") }
-    }
-    @Test fun wanFastModeIsEnumAndWan22UsesPluralFrameRate() {
-        val w21 = ModelCatalog.find(Mode.VIDEO, "wavespeedai/wan-2.1-t2v-480p")!!.schema
-        val fast = w21.fields.first { it.name == "fast_mode" }
-        assertEquals(InputKind.TEXT, fast.kind); assertEquals(listOf("Off", "Balanced", "Fast"), fast.choices)
-        rejects { ModelOptions.value(fast, "true") }
+    @Test fun wan22UsesPluralFrameRate() {
         val w22 = ModelCatalog.find(Mode.VIDEO, "wan-video/wan-2.2-t2v-fast")!!.schema
         val target = JSONObject()
         SchemaCodec.append(target, w22, listOf(InputValue("frames_per_second", InputKind.INTEGER, "24"), InputValue("disable_safety_checker", InputKind.BOOLEAN, "false")))

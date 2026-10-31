@@ -4,6 +4,18 @@
 
 This log lists the main changes from one version to the next. It records what a user would notice, not every code change.
 
+## 1.10.0 (October 2026)
+
+**Four new picture models.** The Image list adds FLUX Krea dev, which avoids the glossy AI look at FLUX dev's price; Qwen Image 2512, with more natural people; Z-Image Turbo, a fast and realistic model for a quarter of a cent; and P-Image, a fast model for half a cent.
+
+**A new camera angle.** Edit... offers Qwen Edit Multi-angle. Its settings turn the camera, move it closer, and tilt it, so one picture of a person or a product yields other views of the same subject.
+
+**Upscale with P-Image Upscale.** Upscale 2x now runs P-Image Upscale instead of Real-ESRGAN, for about half a cent. The result keeps the picture as it is, only larger.
+
+**SpicyAPI models that work from pictures.** The SpicyAPI card and the model lists now offer Spicy Image Photo 1, Spicy Image Edit 1, Spicy Image Action 1, Spicy Image Reference 1, Spicy Motion 3, Spicy Motion Draft 1, Spicy Cinema 1 Image, and Spicy Cinema 1 Character. SpicyAPI works only with pictures it made itself, so a Spicy picture goes into another Spicy model through Use as... on its card, and Upscale 2x on a Spicy picture runs at SpicyAPI. Spicy Image Reference 1 is the exception: it takes a photo from the phone, keeps its look, and draws new people. This replaces the words-only rule of 1.6.0.
+
+**Retired models.** Qwen Image Edit left the Edit... list, since Qwen Image Edit 2511 does the same work better. The two WaveSpeed WAN 2.1 video models left the Video list, since WAN 2.2 fast is better and about a tenth of the price. A saved profile for a retired model still works after Refresh model inputs.
+
 ## 1.9.0 (October 2026)
 
 **Train a LoRA on the phone.** The LoRA library has a Train a LoRA form: a name, a trainer, the trigger word, the steps, and 1 to 20 photos. The phone turns the photos upright, packs them, and starts the training in your own Replicate account, in a private model. A card follows each training with its stage (describing the photos, loading the base model, training, or saving), how far it is, and the minutes left. It is checked about every 30 seconds while the app is open, and the finished LoRA joins your library by itself. The Windows LoRA Trainer still works.

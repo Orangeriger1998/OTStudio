@@ -136,9 +136,6 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
         }.apply { isEnabled = !waiting; contentDescription = "Use and remember typed model"; layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) } })
         modelCard.addView(addRow)
         }
-        val fixed = ModelCatalog.find(mode, draft.model)?.fixedResolution
-        if (fixed != null) { ui.gap(modelCard, 8); ui.dropdown(modelCard, "Resolution selects the WAN 2.1 model", listOf("480p", "720p"), fixed) { r -> if (r != fixed) safely { remember(); draft = select(ModelOptions.routedModel(draft.model, r)); render() } } }
-
         val schema = draft.schema
         if (schema == null) ui.card(content).addView(ui.text("Load this model's inputs before generation. No modifier names are guessed.", Ui.Type.BODY))
         else {
@@ -296,22 +293,29 @@ class CallPanel(private val activity: MainActivity, private val app: StudioApp, 
         }
         if (help.isNotEmpty()) card.addView(ui.text(help, Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(4), 0, 0) })
         val full = d.list && (stored?.value?.let(PictureList::split)?.size ?: 0) >= PictureList.max(draft.model)
-        if (photoField(d) && !full) card.addView(ui.tonal(if (d.list && stored != null) "Add another photo" else "Choose photo", R.drawable.ic_add_photo_alternate) { choosePhoto(d) }.apply {
+        // SpicyAPI takes only pictures it made (its reference model aside), so those arrive through Use as... on a Spicy picture's card.
+        val ownOnly = ModelCatalog.spicy(draft.model) && !ModelCatalog.spicyPhonePhotos(draft.model)
+        if (photoField(d) && !full && ownOnly) card.addView(ui.text("SpicyAPI takes only pictures it made. On a Spicy picture's card, tap Use as... to put it here.", Ui.Type.SMALL, ui.muted).apply { setPadding(0, dp(8), 0, 0) })
+        else if (photoField(d) && !full) card.addView(ui.tonal(if (d.list && stored != null) "Add another photo" else "Choose photo", R.drawable.ic_add_photo_alternate) { choosePhoto(d) }.apply {
             isEnabled = !waiting; contentDescription = "Choose a photo for ${d.name}"; layoutParams = LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) }
         })
         readers.add(readValue)
     }
 
     /**
-     * Picks a photo, uploads it to Replicate, and fills this input with the returned file URL. For an OpenRouter model
-     * the photo stays on the phone (it joins the Image feed) and goes to OpenRouter inside each request.
+     * Picks a photo, uploads it to Replicate, and fills this input with the returned file URL. For an OpenRouter model,
+     * or SpicyAPI's reference model, the photo stays on the phone (it joins the Image feed) and travels inside each request.
      */
     private fun choosePhoto(d: InputDefinition) = safely {
         remember()
-        val onPhone = OpenRouterMedia.isModel(draft.model)
+        val onPhone = OpenRouterMedia.isModel(draft.model) || ModelCatalog.spicyPhonePhotos(draft.model)
         activity.pickPhoto { uri ->
             if (uri == null || gone()) return@pickPhoto
-            waiting = true; notice = if (onPhone) "Keeping the photo on this phone. It goes to OpenRouter with each request." else "Uploading the photo to your Replicate account..."; render()
+            waiting = true; notice = when {
+                onPhone && ModelCatalog.spicy(draft.model) -> "Keeping the photo on this phone. It goes to SpicyAPI with each request, which keeps its look and draws new people."
+                onPhone -> "Keeping the photo on this phone. It goes to OpenRouter with each request."
+                else -> "Uploading the photo to your Replicate account..."
+            }; render()
             app.uploadPhoto(mode, { activity.readPhoto(uri) }, draft.model) { url, error ->
                 if (gone()) return@uploadPhoto
                 waiting = false
